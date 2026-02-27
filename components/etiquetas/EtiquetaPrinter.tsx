@@ -1,63 +1,93 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Button, CircularProgress, Snackbar, Alert } from '@mui/material';
-import { Printer } from 'lucide-react';
-import { generateZPL, DadosEtiqueta } from '@/lib/iot/zplGenerator';
+import { useState } from 'react';
+import { Button, Snackbar, Alert } from '@mui/material';
+import { Printer, XCircle } from 'lucide-react';
+import { gerarZPL, DadosEtiqueta } from '@/lib/iot/zplGenerator';
 
-// --- AQUI ESTÁ A CORREÇÃO: export default ---
-export default function EtiquetaPrinter({ dados }: { dados: DadosEtiqueta }) {
-  const [printing, setPrinting] = useState(false);
-  const [status, setStatus] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
+// Declaração global para WebUSB
+declare global {
+  interface Navigator {
+    usb: any;
+  }
+}
+
+interface EtiquetaPrinterProps {
+  dados: DadosEtiqueta;
+  disabled?: boolean;
+}
+
+export default function EtiquetaPrinter({ dados, disabled }: EtiquetaPrinterProps) {
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<{tipo: 'success'|'error', text: string} | null>(null);
 
   const handlePrint = async () => {
-    setPrinting(true);
+    setLoading(true);
+    setMsg(null);
+
     try {
       if (!navigator.usb) {
-        throw new Error('Navegador sem suporte a WebUSB (Use Chrome/Edge).');
+        throw new Error('Navegador incompatível com impressão USB direta (Use Chrome/Edge).');
       }
 
-      // Conecta, gera ZPL e imprime...
+      // 1. Conexão com Hardware (Filtro para Zebra ou Genérico)
+      // O usuário terá que selecionar a impressora no popup do navegador na primeira vez
       const device = await navigator.usb.requestDevice({ filters: [] });
+      
       await device.open();
+      // Geralmente configuração 1 e interface 0 são padrão para impressoras térmicas
       await device.selectConfiguration(1);
       await device.claimInterface(0);
 
-      const zplCode = generateZPL(dados);
+      // 2. Geração do Payload ZPL
+      const zplCode = gerarZPL(dados);
       const encoder = new TextEncoder();
-      const data = encoder.encode(zplCode);
-      await device.transferOut(1, data);
+      const dataBuffer = encoder.encode(zplCode);
 
-      setStatus({ msg: 'Enviado para impressora!', type: 'success' });
+      // 3. Envio (TransferOut)
+      // Endpoint varia. Tentamos 1, 2 ou 3 (comuns em Zebra/Elgin)
+      let impresso = false;
+      for (const endpoint of [1, 2, 3]) {
+        try {
+            await device.transferOut(endpoint, dataBuffer);
+            impresso = true;
+            break; // Sucesso
+        } catch (e) {
+            console.log(`Endpoint ${endpoint} falhou, tentando próximo...`);
+        }
+      }
+
+      if (!impresso) throw new Error('Falha ao comunicar com endpoints da impressora.');
+
+      await device.close();
+      setMsg({ tipo: 'success', text: 'Etiqueta enviada para impressão!' });
+
     } catch (err: any) {
-      console.error('Print Error:', err);
-      setStatus({ msg: `Erro: ${err.message}`, type: 'error' });
+      console.error(err);
+      setMsg({ tipo: 'error', text: err.message || 'Erro de impressão' });
     } finally {
-      setPrinting(false);
+      setLoading(false);
     }
   };
 
   return (
     <>
-      <Button 
-        variant="contained" 
+      <Button
+        variant="contained"
+        color="secondary" // Cor de destaque para Ação Física
         size="large"
-        startIcon={printing ? <CircularProgress size={20} color="inherit"/> : <Printer />}
+        startIcon={loading ? null : <Printer />}
         onClick={handlePrint}
-        disabled={printing}
-        fullWidth
-        sx={{ fontWeight: 'bold', py: 1.5, mb: 1 }}
+        disabled={disabled || loading}
+        sx={{ fontWeight: 'bold', py: 1.5 }}
       >
-        {printing ? 'Enviando...' : 'IMPRIMIR ETIQUETA TÉRMICA'}
+        {loading ? 'Imprimindo...' : 'IMPRIMIR ETIQUETA'}
       </Button>
 
-      <Snackbar 
-        open={!!status} 
-        autoHideDuration={4000} 
-        onClose={() => setStatus(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={status?.type || 'info'} onClose={() => setStatus(null)}>{status?.msg}</Alert>
+      <Snackbar open={!!msg} autoHideDuration={6000} onClose={() => setMsg(null)}>
+        <Alert severity={msg?.tipo} onClose={() => setMsg(null)}>
+          {msg?.text}
+        </Alert>
       </Snackbar>
     </>
   );

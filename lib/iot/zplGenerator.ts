@@ -1,75 +1,88 @@
-// lib/iot/zplGenerator.ts
+import { format } from 'date-fns';
 
-// Interface compartilhada que garante que todos os arquivos falem a mesma língua
 export interface DadosEtiqueta {
   empresa: {
     razaoSocial: string;
     cnpj: string;
-    enderecoResumido?: string;
+    enderecoResumido: string;
   };
   produto: {
     nome: string;
     lote: string;
-    peso?: string;
-    tipoArmazenamento?: string;
+    peso: string;
+    tipoArmazenamento: string;
   };
   datas: {
-    manipulacao: Date | string;
-    validadeOriginal?: Date | string;
-    validadeFinal: Date | string;
+    fabricacao?: Date | string;
+    manipulacao: Date;
+    validadeOriginal: Date;
+    validadeFinal: Date;
   };
   rastreabilidade: {
     idInterno: string;
     responsavel: string;
-  };
+  }
 }
 
 /**
- * Gera código ZPL para impressoras térmicas (Zebra, Elgin, etc)
- * Configurado para etiquetas 60mm x 40mm (padrão cozinha)
+ * GERA O CÓDIGO ZPL PARA ETIQUETA QUADRADA 60mm x 60mm
+ * Densidade: 203dpi (8 dots/mm) -> Canvas aprox. 480x480 dots
  */
-export function generateZPL(data: DadosEtiqueta): string {
-  // Helpers de formatação
-  const fmtDate = (d: Date | string) => new Date(d).toLocaleDateString('pt-BR');
+export function gerarZPL(dados: DadosEtiqueta): string {
+  const fmt = (d?: Date | string) => {
+    if (!d) return "N/A";
+    const dateObj = typeof d === 'string' ? new Date(d) : d;
+    return format(dateObj, 'dd/MM/yyyy');
+  };
   
-  // Sanitização (Remove acentos pois algumas impressoras antigas não suportam UTF-8 direto)
-  const clean = (str: string) => str
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .substring(0, 30); // Limite de segurança
+  const fmtHora = (d: Date) => format(d, 'HH:mm');
 
-  const empresa = clean(data.empresa.razaoSocial);
-  const prod = clean(data.produto.nome);
-  const lote = clean(data.produto.lote);
-  const resp = clean(data.rastreabilidade.responsavel.split('@')[0]);
-  const fab = fmtDate(data.datas.manipulacao);
-  const val = fmtDate(data.datas.validadeFinal);
+  // QR Code Compacto
+  const qrContent = `ID:${dados.rastreabilidade.idInterno}|L:${dados.produto.lote}`;
 
   return `
 ^XA
 ^PW480
-^LL320
-^CI28
+^LL480
+^PON
 
-^FX --- CABEÇALHO ---
-^FO20,20^A0N,22,22^FD${empresa}^FS
-^FO20,45^A0N,18,18^FDCNPJ: ${data.empresa.cnpj}^FS
-^FO20,65^GB440,1,3^FS
+// --- MOLDURA ---
+^FO10,10^GB460,460,3^FS
 
-^FX --- PRODUTO ---
-^FO20,80^A0N,30,30^FD${prod}^FS
-^FO20,115^A0N,22,22^FDLOTE: ${lote}^FS
-^FO250,115^A0N,22,22^FD${data.produto.tipoArmazenamento || ''}^FS
+// --- 1. CABEÇALHO (EMPRESA) ---
+^FO20,25^A0N,22,22^FD${dados.empresa.razaoSocial.substring(0, 28)}^FS
+^FO20,50^A0N,18,18^FDCNPJ: ${dados.empresa.cnpj}^FS
+^FO10,75^GB460,1,1^FS
 
-^FX --- DATAS ---
-^FO20,150^A0N,22,22^FDFAB: ${fab}^FS
-^FO20,180^A0N,25,25^FDVAL: ${val}^FS
+// --- 2. PRODUTO (EM DESTAQUE) ---
+// ^FB = Field Block (Quebra de linha automática: largura 440, max 2 linhas)
+^FO20,85^A0N,30,30^FB440,2,0,L,0^FD${dados.produto.nome}^FS
 
-^FX --- RODAPÉ E BARRAS ---
-^FO20,220^BY2,2,50^BCN,50,N,N,N,A^FD${lote}^FS
-^FO250,180^A0N,18,18^FDRESP: ${resp}^FS
-^FO250,280^A0N,18,18^FDID: ${data.rastreabilidade.idInterno.substring(0,8)}^FS
+// --- 3. DETALHES TÉCNICOS ---
+^FO20,155^A0N,20,20^FDLOTE: ${dados.produto.lote}^FS
+^FO240,155^A0N,20,20^FQTD: ${dados.produto.peso}^FS
+^FO20,180^A0N,20,20^FDARMAZ: ${dados.produto.tipoArmazenamento.substring(0,18)}^FS
+^FO10,210^GB460,1,1^FS
+
+// --- 4. DATAS (CRONOLOGIA) ---
+^FO20,220^A0N,18,18^FDMANIPULACAO:^FS
+^FO160,220^A0N,20,20^FD${fmt(dados.datas.manipulacao)} ${fmtHora(dados.datas.manipulacao)}^FS
+
+^FO20,245^A0N,18,18^FDVAL. ORIGINAL:^FS
+^FO160,245^A0N,20,20^FD${fmt(dados.datas.validadeOriginal)}^FS
+
+^FO20,270^A0N,18,18^FDRESPONSAVEL:^FS
+^FO160,270^A0N,20,20^FD${dados.rastreabilidade.responsavel.substring(0, 12)}^FS
+
+// --- 5. RODAPÉ: VALIDADE FINAL & QR CODE ---
+// Caixa Preta para Validade (Destaque Visual)
+^FO10,330^GB300,140,140^FS 
+^FO25,345^A0N,25,25^FR^FDVALIDADE^FS
+^FO25,375^A0N,20,20^FR^FDSANITARIA:^FS
+^FO20,410^A0N,42,42^FR^FD${fmt(dados.datas.validadeFinal)}^FS
+
+// QR Code no canto inferior direito
+^FO330,340^BQN,2,4^FDQA,${qrContent}^FS
 
 ^XZ
   `;

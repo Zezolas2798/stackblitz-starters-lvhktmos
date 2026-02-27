@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -16,7 +16,7 @@ import {
   Thermometer, CheckSquare, Hash, Type, Camera, AlertCircle, Grip
 } from 'lucide-react';
 
-// Tipos Locais
+// Tipos Locais para o Formulário
 interface ItemForm {
   id?: string;
   tempId: string;
@@ -34,16 +34,14 @@ interface SecaoForm {
   itens: ItemForm[];
 }
 
-// --- COMPONENTE INTERNO COM A LÓGICA (NÃO EXPORTADO COMO DEFAULT) ---
-function EditorModeloChecklistContent() {
+export default function EditorModeloChecklistPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const editingId = searchParams.get('id'); // Este hook precisa do Suspense
-  
+  const editingId = searchParams.get('id');
   const { activeClientId } = useClient();
   const theme = useTheme();
 
-  // Estados
+  // Estados do Modelo
   const [nome, setNome] = useState('');
   const [descricao, setDescricao] = useState('');
   const [frequencia, setFrequencia] = useState('DIARIO');
@@ -52,19 +50,20 @@ function EditorModeloChecklistContent() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Carregar dados
+  // Carregar dados se for edição
   useEffect(() => {
     if (editingId && activeClientId) {
       loadModeloCompleto(editingId);
     } else {
-      handleAddSecao(); // Inicia com uma seção vazia se for novo
+        // Se for novo, inicia com uma seção vazia
+        handleAddSecao();
     }
   }, [editingId, activeClientId]);
 
   async function loadModeloCompleto(id: string) {
     setLoading(true);
     
-    // 1. Modelo Pai
+    // 1. Carrega Modelo
     const { data: modelo } = await supabase.from('checklist_modelos').select('*').eq('id', id).single();
     if (!modelo) { setLoading(false); return; }
 
@@ -72,10 +71,13 @@ function EditorModeloChecklistContent() {
     setDescricao(modelo.descricao || '');
     setFrequencia(modelo.frequencia_sugerida || 'DIARIO');
 
-    // 2. Seções e Itens
+    // 2. Carrega Seções e Itens
     const { data: secoesData } = await supabase
         .from('checklist_secoes')
-        .select(`*, checklist_itens (*)`)
+        .select(`
+            *,
+            checklist_itens (*)
+        `)
         .eq('modelo_id', id)
         .order('ordem');
 
@@ -101,9 +103,13 @@ function EditorModeloChecklistContent() {
     setLoading(false);
   }
 
-  // --- MANIPULAÇÃO DE DADOS ---
+  // --- MANIPULAÇÃO DE SEÇÕES ---
   const handleAddSecao = () => {
-    setSecoes([...secoes, { tempId: `new_sec_${Date.now()}`, titulo: '', itens: [] }]);
+    setSecoes([...secoes, { 
+        tempId: `new_sec_${Date.now()}`, 
+        titulo: '', 
+        itens: [] 
+    }]);
   };
 
   const handleRemoveSecao = (index: number) => {
@@ -119,6 +125,7 @@ function EditorModeloChecklistContent() {
     setSecoes(novas);
   };
 
+  // --- MANIPULAÇÃO DE ITENS (PERGUNTAS) ---
   const handleAddItem = (secaoIndex: number) => {
     const novas = [...secoes];
     novas[secaoIndex].itens.push({
@@ -140,11 +147,14 @@ function EditorModeloChecklistContent() {
 
   const handleUpdateItem = (secaoIndex: number, itemIndex: number, field: keyof ItemForm, value: any) => {
     const novas = [...secoes];
-    novas[secaoIndex].itens[itemIndex] = { ...novas[secaoIndex].itens[itemIndex], [field]: value };
+    novas[secaoIndex].itens[itemIndex] = { 
+        ...novas[secaoIndex].itens[itemIndex], 
+        [field]: value 
+    };
     setSecoes(novas);
   };
 
-  // --- SALVAR ---
+  // --- SALVAR TUDO ---
   const handleSave = async () => {
     if (!nome.trim()) return alert('O modelo precisa de um nome.');
     if (secoes.length === 0) return alert('Adicione pelo menos uma seção.');
@@ -163,6 +173,7 @@ function EditorModeloChecklistContent() {
     try {
         let modeloId = editingId;
 
+        // 1. Salvar Modelo Pai
         const payloadModelo = {
             cliente_id: activeClientId,
             titulo: nome,
@@ -180,12 +191,12 @@ function EditorModeloChecklistContent() {
             modeloId = data.id;
         }
 
-        // Limpa estrutura antiga para recriar (Estratégia simples)
+        // 2. Limpar estrutura antiga (Simples e eficaz para edição)
         if (editingId) {
             await supabase.from('checklist_secoes').delete().eq('modelo_id', modeloId);
         }
 
-        // Insere nova estrutura
+        // 3. Inserir Nova Estrutura
         for (let i = 0; i < secoes.length; i++) {
             const secao = secoes[i];
             
@@ -200,7 +211,7 @@ function EditorModeloChecklistContent() {
             if (secao.itens.length > 0) {
                 const itensPayload = secao.itens.map((item, idx) => ({
                     secao_id: secaoSaved.id,
-                    modelo_id: modeloId, 
+                    modelo_id: modeloId, // Mantemos redundância para facilitar queries se necessário
                     texto_pergunta: item.texto_pergunta,
                     tipo_resposta: item.tipo_resposta,
                     obrigatorio: item.obrigatorio,
@@ -311,6 +322,7 @@ function EditorModeloChecklistContent() {
                                         <FormControl fullWidth size="small">
                                             <InputLabel shrink>Tipo de Resposta</InputLabel>
                                             <Select value={item.tipo_resposta} label="Tipo de Resposta" onChange={e => handleUpdateItem(sIdx, iIdx, 'tipo_resposta', e.target.value)}>
+                                                {/* OPÇÃO ATUALIZADA COM N.A. */}
                                                 <MenuItem value="CONFORME_NAOCONFORME"><Box sx={{display:'flex', gap:1, alignItems:'center'}}><CheckSquare size={16} className="text-green-600"/> Conforme / Não Conforme / N.A.</Box></MenuItem>
                                                 <MenuItem value="TEMPERATURA"><Box sx={{display:'flex', gap:1, alignItems:'center'}}><Thermometer size={16} className="text-blue-600"/> Temperatura (°C)</Box></MenuItem>
                                                 <MenuItem value="NUMERO"><Box sx={{display:'flex', gap:1, alignItems:'center'}}><Hash size={16} className="text-orange-600"/> Numérico (Qtd/Peso)</Box></MenuItem>
@@ -350,23 +362,10 @@ function EditorModeloChecklistContent() {
       </Box>
 
       {/* FOOTER ACTIONS */}
-      <Paper elevation={4} sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, p: 2, bgcolor: 'background.paper', borderTop: '1px solid #ddd', display: 'flex', justifyContent: 'flex-end', gap: 2, zIndex: 1000 }}>
+      <Paper elevation={4} sx={{ position: 'fixed', bottom: 0, left: { md: 280, xs: 0 }, right: 0, p: 2, bgcolor: 'background.paper', borderTop: '1px solid #ddd', display: 'flex', justifyContent: 'flex-end', gap: 2, zIndex: 1000 }}>
          <Button variant="text" onClick={() => router.back()}>Cancelar</Button>
          <Button variant="contained" size="large" startIcon={saving ? <CircularProgress size={20} color="inherit"/> : <Save />} onClick={handleSave} disabled={saving} sx={{ px: 4, fontWeight: 'bold' }}>{saving ? 'Salvando...' : 'Salvar Modelo'}</Button>
       </Paper>
     </Container>
-  );
-}
-
-// --- EXPORT DEFAULT COM SUSPENSE (A CORREÇÃO PRINCIPAL) ---
-export default function EditorModeloChecklistPage() {
-  return (
-    <Suspense fallback={
-        <Box sx={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <CircularProgress />
-        </Box>
-    }>
-        <EditorModeloChecklistContent />
-    </Suspense>
   );
 }

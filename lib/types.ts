@@ -417,30 +417,3 @@ export interface AcaoCorretiva {
   responsavel_resolucao?: string;
   created_at: string;
 }
-
-// Adicionar ao final do seu lib/types.ts
-
-export type TarefaStatus = 'A_FAZER' | 'EM_ANDAMENTO' | 'REVISAO' | 'CONCLUIDA';
-export type TarefaPrioridade = 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
-export type TarefaTipo = 'POP' | 'MANUTENCAO' | 'PRODUCAO' | 'LIMPEZA' | 'AVULSA';
-
-export interface OperacaoTarefa {
-  id: string;
-  cliente_id: string;
-  unidade_id: string;
-  titulo: string;
-  descricao: string | null;
-  tipo: TarefaTipo;
-  status: TarefaStatus;
-  prioridade: TarefaPrioridade;
-  responsavel_id: string | null;
-  notificar_usuarios: string[]; // IDs dos usuários
-  requer_evidencia_foto: boolean;
-  prazo_limite: string | null;
-  concluida_em: string | null;
-  created_at: string;
-  
-  // Relacionamentos (Joins)
-  responsavel?: { full_name: string; email: string };
-  subtarefas?: { id: string; titulo: string; concluida: boolean }[];
-}

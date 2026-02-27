@@ -75,12 +75,6 @@ export function AppSidebar({ width }: AppSidebarProps) {
           visible: true // Público
         },
         { 
-          label: 'Gestão de Tarefas', // NOVO ITEM
-        href: '/operacional/tarefas', 
-        icon: <Assignment />, 
-        visible: true // Ou can('quality.checklist.execute')
-      },
-      {
           label: 'Produção', 
           href: '/producao', 
           icon: <TrendingUp />, 

@@ -5,13 +5,12 @@ import Link from 'next/link';
 import { 
   Box, Typography, Button, Paper, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip, 
-  CircularProgress, Alert, Container, useTheme, alpha, Stack 
+  CircularProgress, Alert, Container, useTheme, alpha 
 } from '@mui/material';
 import { Factory, Plus, Eye, Calendar, PackageCheck, AlertCircle, ChefHat, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import { format, parseISO, isAfter, differenceInCalendarDays } from 'date-fns';
-import  EtiquetaPrinter from '@/components/etiquetas/EtiquetaPrinter';
 
 // Definindo a interface localmente para garantir tipagem mesmo se o types.ts não tiver atualizado
 interface OrdemProducaoListagem {
@@ -209,28 +208,13 @@ export default function ProducaoListPage() {
                         {getStatusValidade(ordem.data_validade)}
                       </Box>
                     </TableCell>
-                    
-                    {/* AÇÕES: IMPRESSÃO E DETALHES */}
                     <TableCell align="right">
-                      <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
-                        <EtiquetaPrinter 
-                          dadosProduto={{
-                            produto: ordem.receitas?.nome || 'Produto Indefinido',
-                            lote: ordem.codigo_lote_produto,
-                            dataProducao: ordem.data_producao,
-                            dataValidade: ordem.data_validade,
-                            responsavelNome: 'Chef de Produção', // No futuro, puxar via Join com tabela de usuários
-                            unidadeId: activeClientId || ''
-                          }}
-                        />
-                        <Tooltip title="Ver Detalhes">
-                          <IconButton size="small" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-                            <Eye size={20} />
-                          </IconButton>
-                        </Tooltip>
-                      </Stack>
+                      <Tooltip title="Ver Detalhes (Em breve)">
+                        <IconButton size="small" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
+                          <Eye size={20} />
+                        </IconButton>
+                      </Tooltip>
                     </TableCell>
-
                   </TableRow>
                 ))}
               </TableBody>

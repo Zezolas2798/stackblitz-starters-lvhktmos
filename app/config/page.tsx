@@ -1,21 +1,22 @@
+// app/config/page.tsx
 'use client';
 
 import Link from 'next/link';
 import { 
-  Box, Typography, Paper, Container, 
+  Box, Typography, Paper, Button, Divider, Container, 
   Chip, Avatar, useTheme, alpha 
 } from '@mui/material';
 import Grid from '@mui/material/Grid'; 
 import { 
+  MapPin, 
+  Tag, 
+  Settings, 
   ChevronRight, 
   Users, 
   Store,
   Package,
   ShieldCheck,
-  Truck,
-  ClipboardList,
-  ListChecks,
-  Lock
+  Truck
 } from 'lucide-react';
 
 export default function ConfigPage() {
@@ -30,61 +31,11 @@ export default function ConfigPage() {
           Configurações do Sistema
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600 }}>
-          Central de parâmetros técnicos. Defina aqui as regras de negócio, padrões de qualidade e acessos da sua operação.
+          Central de parâmetros técnicos. Defina aqui as regras de negócio que governam a qualidade e a logística da sua operação.
         </Typography>
       </Box>
 
-      {/* SEÇÃO 1: QUALIDADE & PROCESSOS (GxP) - NOVO */}
-      <Box sx={{ mb: 6 }}>
-        <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 3, color: 'success.main', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          <ClipboardList size={16} style={{ display: 'inline', marginRight: 8, verticalAlign: 'text-bottom' }} />
-          Qualidade e Processos (GxP)
-        </Typography>
-        
-        <Grid container spacing={3}>
-          {/* Card: Modelos de Demandas */}
-          <Grid item xs={12} md={6} lg={4}>
-            <Link href="/config/tarefas/modelos" passHref style={{ textDecoration: 'none' }}>
-              <Paper 
-                elevation={0}
-                sx={{ 
-                  p: 3, 
-                  height: '100%',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 3,
-                  transition: 'all 0.2s ease-in-out',
-                  cursor: 'pointer',
-                  '&:hover': { 
-                    transform: 'translateY(-4px)', 
-                    boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.1)',
-                    borderColor: 'success.main',
-                    '& .icon-box': { bgcolor: 'success.main', color: 'white' }
-                  }
-                }}
-              >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                  <Avatar className="icon-box" sx={{ bgcolor: alpha(theme.palette.success.main, 0.1), color: 'success.main', transition: 'all 0.2s' }}>
-                    <ListChecks size={24} />
-                  </Avatar>
-                  <ChevronRight size={20} color={theme.palette.text.disabled} />
-                </Box>
-                
-                <Typography variant="h6" fontWeight="bold" sx={{ color: 'text.primary', mb: 1 }}>
-                  Modelos de Demandas
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
-                  Crie padrões para POPs, Limpeza e Produção. Defina checklists e responsáveis automáticos.
-                </Typography>
-              </Paper>
-            </Link>
-          </Grid>
-        </Grid>
-      </Box>
-
-      <Divider sx={{ my: 4, borderColor: 'divider', opacity: 0.6 }} />
-
-      {/* SEÇÃO 2: OPERAÇÃO & LOGÍSTICA */}
+      {/* SEÇÃO 1: OPERAÇÃO & LOGÍSTICA */}
       <Box sx={{ mb: 6 }}>
         <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 3, color: 'primary.main', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           <Truck size={16} style={{ display: 'inline', marginRight: 8, verticalAlign: 'text-bottom' }} />
@@ -134,7 +85,7 @@ export default function ConfigPage() {
 
       <Divider sx={{ my: 4, borderColor: 'divider', opacity: 0.6 }} />
 
-      {/* SEÇÃO 3: ADMINISTRAÇÃO & ACESSOS */}
+      {/* SEÇÃO 2: ADMINISTRAÇÃO & ACESSOS */}
       <Box>
         <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 3, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           <ShieldCheck size={16} style={{ display: 'inline', marginRight: 8, verticalAlign: 'text-bottom' }} />
@@ -142,7 +93,7 @@ export default function ConfigPage() {
         </Typography>
 
         <Grid container spacing={3}>
-          {/* Link para Clientes */}
+          {/* Link para Clientes (Atalho) */}
           <Grid item xs={12} md={6} lg={4}>
             <Link href="/clientes" passHref style={{ textDecoration: 'none' }}>
               <Paper 
@@ -164,7 +115,7 @@ export default function ConfigPage() {
                   <Avatar sx={{ bgcolor: alpha(theme.palette.secondary.main, 0.1), color: 'text.primary' }}>
                     <Store size={24} />
                   </Avatar>
-                  <Chip label="Corporativo" size="small" variant="outlined" sx={{ height: 24 }} />
+                  <Chip label="Atalho" size="small" variant="outlined" sx={{ height: 24 }} />
                 </Box>
                 <Typography variant="h6" fontWeight="bold" sx={{ color: 'text.primary', mb: 1 }}>
                   Unidades / Filiais
@@ -176,46 +127,36 @@ export default function ConfigPage() {
             </Link>
           </Grid>
 
-          {/* ATUALIZADO: Link para Cargos (RBAC) */}
+          {/* Placeholder: Usuários */}
           <Grid item xs={12} md={6} lg={4}>
-            <Link href="/config/cargos" passHref style={{ textDecoration: 'none' }}>
-              <Paper 
-                elevation={0}
-                sx={{ 
-                  p: 3, 
-                  height: '100%',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 3,
-                  transition: 'all 0.2s',
-                  '&:hover': { 
-                    borderColor: 'primary.main',
-                    bgcolor: 'grey.50'
-                  }
-                }}
-              >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                  <Avatar sx={{ bgcolor: alpha(theme.palette.info.main, 0.1), color: 'info.main' }}>
-                    <Lock size={24} />
-                  </Avatar>
-                  <Chip label="Segurança" size="small" color="info" variant="outlined" sx={{ height: 24 }} />
-                </Box>
-                <Typography variant="h6" fontWeight="bold" sx={{ color: 'text.primary', mb: 1 }}>
-                  Cargos e Permissões
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Configure o controle de acesso (RBAC) e defina quem pode ver ou editar cada módulo.
-                </Typography>
-              </Paper>
-            </Link>
+            <Paper 
+              elevation={0}
+              sx={{ 
+                p: 3, 
+                height: '100%',
+                border: '1px dashed',
+                borderColor: 'divider',
+                borderRadius: 3,
+                bgcolor: alpha(theme.palette.background.paper, 0.5),
+                opacity: 0.8
+              }}
+            >
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                <Avatar sx={{ bgcolor: 'grey.100', color: 'grey.400' }}>
+                  <Users size={24} />
+                </Avatar>
+                <Chip label="Em Breve" size="small" sx={{ bgcolor: 'grey.100', color: 'text.secondary', height: 24, fontWeight: 600 }} />
+              </Box>
+              <Typography variant="h6" fontWeight="bold" sx={{ color: 'text.disabled', mb: 1 }}>
+                Equipe e Permissões
+              </Typography>
+              <Typography variant="body2" color="text.disabled">
+                Controle de acesso granular (Nutricionista, Estoquista, Gerente) e auditoria de usuários.
+              </Typography>
+            </Paper>
           </Grid>
         </Grid>
       </Box>
     </Container>
   );
-}
-
-// Helper componente Divider se não existir importado (mas já importamos do MUI)
-function Divider({ sx, ...props }: any) {
-  return <Box component="hr" sx={{ border: 'none', borderBottom: '1px solid', ...sx }} {...props} />;
 }
