@@ -7,7 +7,7 @@ import { useClient } from '@/lib/ClientContext';
 import { supabase } from '@/lib/supabaseClient';
 import { ClientSelector } from './ClientSelector';
 // IMPORTANTE: Conectando o cérebro de permissões
-import { usePermission } from '@/hooks/usePermission'; 
+import { usePermission } from '@/hooks/usePermission';
 
 import {
   Drawer,
@@ -25,13 +25,13 @@ import {
 } from '@mui/material';
 
 // Ícones Material UI
-import { 
-  Dashboard, 
-  RestaurantMenu, 
-  Inventory, 
-  Assignment, 
-  VerifiedUser, 
-  Description, 
+import {
+  Dashboard,
+  RestaurantMenu,
+  Inventory,
+  Assignment,
+  VerifiedUser,
+  Description,
   Settings,
   Close,
   TrendingUp,
@@ -48,7 +48,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { mobileOpen, toggleMobileSidebar, closeMobileSidebar } = useClient();
-  
+
   // Hook de Permissões: Traz o poder de decisão para o menu
   const { can, loading: loadingPermissions } = usePermission();
 
@@ -68,46 +68,52 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       title: 'OPERACIONAL',
       items: [
-        { 
-          label: 'Dashboard', 
-          href: '/', 
-          icon: <Dashboard />, 
+        {
+          label: 'Dashboard',
+          href: '/',
+          icon: <Dashboard />,
           visible: true // Público
         },
-        { 
-          label: 'Produção', 
-          href: '/producao', 
-          icon: <TrendingUp />, 
+        {
+          label: 'Produção',
+          href: '/producao',
+          icon: <TrendingUp />,
           // Visível se puder criar OP (Nutri) OU ver separação (Estoque/Chef)
           visible: can('production.order.create') || can('production.picking.view')
         },
-        { 
-          label: 'Estoque & Lotes', 
-          href: '/estoque', 
-          icon: <Inventory />, 
+        {
+          label: 'Estoque & Lotes',
+          href: '/estoque',
+          icon: <Inventory />,
           visible: can('stock.balance.view')
         },
-        { 
-          label: 'Fornecedores', 
-          href: '/fornecedores', 
-          icon: <LocalShipping />, 
+        {
+          label: 'Fornecedores',
+          href: '/fornecedores',
+          icon: <LocalShipping />,
           visible: can('stock.suppliers.manage')
+        },
+        {
+          label: 'Gestão de Tarefas',
+          href: '/operacional/tarefas',
+          icon: <Assignment />,
+          visible: can('production.picking.view') || can('quality.checklist.execute')
         },
       ]
     },
     {
       title: 'TÉCNICO & P&D',
       items: [
-        { 
-          label: 'Receitas', 
-          href: '/receitas', 
-          icon: <RestaurantMenu />, 
+        {
+          label: 'Receitas',
+          href: '/receitas',
+          icon: <RestaurantMenu />,
           visible: can('nutrition.recipe.view')
         },
-        { 
-          label: 'Ingredientes', 
-          href: '/ingredientes', 
-          icon: <Description />, 
+        {
+          label: 'Ingredientes',
+          href: '/ingredientes',
+          icon: <Description />,
           visible: can('nutrition.ingredient.view')
         },
       ]
@@ -115,23 +121,23 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       title: 'QUALIDADE (GxP)',
       items: [
-        { 
-          label: 'Auditorias', 
-          href: '/qualidade', 
-          icon: <Assignment />, 
+        {
+          label: 'Auditorias',
+          href: '/qualidade',
+          icon: <Assignment />,
           // Visível se puder auditar (Nutri) OU preencher checklist (Chef)
           visible: can('quality.audit.perform') || can('quality.checklist.execute')
         },
-        { 
-          label: 'Modelos', 
-          href: '/qualidade/modelos', 
-          icon: <VerifiedUser />, 
+        {
+          label: 'Modelos',
+          href: '/qualidade/modelos',
+          icon: <VerifiedUser />,
           visible: can('quality.action_plan.manage') // Geralmente Nutri/Gestor
         },
-        { 
-          label: 'Relatórios', 
-          href: '/relatorios', 
-          icon: <Description />, 
+        {
+          label: 'Relatórios',
+          href: '/relatorios',
+          icon: <Description />,
           visible: can('quality.audit.perform')
         },
       ]
@@ -139,18 +145,24 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       title: 'SISTEMA',
       items: [
-        { 
-          label: 'Configurações', 
-          href: '/config', 
-          icon: <Settings />, 
+        {
+          label: 'Configurações',
+          href: '/config',
+          icon: <Settings />,
           visible: true // Configs básicas (perfil) liberadas
         },
-        { 
-          label: 'Cargos & Acessos', 
-          href: '/config/cargos', 
-          icon: <AdminPanelSettings />, 
+        {
+          label: 'Cargos & Acessos',
+          href: '/config/cargos',
+          icon: <AdminPanelSettings />,
           // A PROVA DE FOGO: Só Gestor vê isso agora!
-          visible: can('sys.roles.manage') 
+          visible: can('sys.roles.manage')
+        },
+        {
+          label: 'Modelos de Tarefa',
+          href: '/config/tarefas/modelos',
+          icon: <Settings />,
+          visible: can('sys.roles.manage')
         },
       ]
     }
@@ -190,7 +202,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
           menuGroups.map((group, idx) => {
             // Filtra os itens visíveis
             const visibleItems = group.items.filter(item => item.visible);
-            
+
             // Se o grupo ficar vazio (ex: Estoquista não vê nada de 'TÉCNICO'), esconde o título também
             if (visibleItems.length === 0) return null;
 
@@ -201,16 +213,16 @@ export function AppSidebar({ width }: AppSidebarProps) {
                 </Typography>
                 {visibleItems.map((item) => {
                   const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href));
-                  
+
                   return (
                     <ListItem key={item.href} disablePadding sx={{ mb: 0.5 }}>
                       <Link href={item.href} passHref style={{ width: '100%', textDecoration: 'none' }} onClick={closeMobileSidebar}>
-                        <ListItemButton 
-                          selected={isActive} 
-                          sx={{ 
+                        <ListItemButton
+                          selected={isActive}
+                          sx={{
                             borderRadius: 1,
-                            '&.Mui-selected': { 
-                              bgcolor: 'primary.light', 
+                            '&.Mui-selected': {
+                              bgcolor: 'primary.light',
                               color: 'primary.main',
                               '&:hover': { bgcolor: 'primary.light' }
                             }
@@ -219,9 +231,9 @@ export function AppSidebar({ width }: AppSidebarProps) {
                           <ListItemIcon sx={{ color: isActive ? 'primary.main' : 'inherit', minWidth: 40 }}>
                             {item.icon}
                           </ListItemIcon>
-                          <ListItemText 
-                            primary={item.label} 
-                            primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isActive ? 600 : 400 }} 
+                          <ListItemText
+                            primary={item.label}
+                            primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isActive ? 600 : 400 }}
                           />
                         </ListItemButton>
                       </Link>
@@ -233,13 +245,13 @@ export function AppSidebar({ width }: AppSidebarProps) {
           })
         )}
       </List>
-      
+
       {/* Rodapé */}
       <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-        <Button 
-          fullWidth 
-          variant="outlined" 
-          color="error" 
+        <Button
+          fullWidth
+          variant="outlined"
+          color="error"
           startIcon={<ExitToApp />}
           onClick={handleLogout}
           sx={{ mb: 1, textTransform: 'none', fontWeight: 'bold' }}
