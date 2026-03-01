@@ -1,32 +1,32 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { 
-  Dialog, 
-  DialogTitle, 
-  DialogContent, 
-  DialogActions, 
-  Button, 
-  Switch, 
-  FormControlLabel, 
-  Typography, 
-  Box, 
-  Divider, 
-  Chip, 
-  CircularProgress, 
-  useTheme, 
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Switch,
+  FormControlLabel,
+  Typography,
+  Box,
+  Divider,
+  Chip,
+  CircularProgress,
+  useTheme,
   alpha,
   Grid
 } from '@mui/material';
-import { 
-  Shield, 
-  Check, 
-  Save, 
-  X, 
-  ChefHat, 
-  Package, 
-  ClipboardCheck, 
-  Settings 
+import {
+  Shield,
+  Check,
+  Save,
+  X,
+  ChefHat,
+  Package,
+  ClipboardCheck,
+  Settings
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -53,7 +53,7 @@ const MODULE_ICONS: Record<string, any> = {
 
 export default function RolePermissionEditor({ roleId, roleName, onClose }: RolePermissionEditorProps) {
   const theme = useTheme();
-  
+
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -76,11 +76,11 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
         .eq('role_id', roleId);
 
       if (allPerms) setPermissions(allPerms as Permission[]);
-      
+
       const currentSet = new Set<string>();
       currentRolePerms?.forEach((p: any) => currentSet.add(p.permission_slug));
       setSelectedSlugs(currentSet);
-      
+
       setLoading(false);
     }
     loadData();
@@ -104,7 +104,7 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
   // 4. Salvar
   const handleSave = async () => {
     setSaving(true);
-    
+
     // Transação manual: Limpar -> Inserir
     const { error: delErr } = await supabase.from('app_role_permissions').delete().eq('role_id', roleId);
     if (delErr) {
@@ -132,10 +132,10 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
   };
 
   return (
-    <Dialog 
-      open={true} 
-      onClose={onClose} 
-      maxWidth="md" 
+    <Dialog
+      open={true}
+      onClose={onClose}
+      maxWidth="md"
       fullWidth
       PaperProps={{
         sx: { borderRadius: 3, boxShadow: theme.shadows[10] }
@@ -155,7 +155,7 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
       </DialogTitle>
 
       {/* CONTEÚDO */}
-      <DialogContent sx={{ py: 3, bgcolor: '#FAFAFA' }}>
+      <DialogContent sx={{ py: 3, bgcolor: 'background.default' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
             <CircularProgress />
@@ -181,13 +181,13 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
                     const isSelected = selectedSlugs.has(perm.slug);
                     return (
                       <Grid item xs={12} sm={6} md={4} key={perm.slug}>
-                        <Box 
+                        <Box
                           onClick={() => handleToggle(perm.slug)}
-                          sx={{ 
-                            p: 1.5, 
-                            borderRadius: 2, 
-                            bgcolor: 'background.paper', 
-                            border: '1px solid', 
+                          sx={{
+                            p: 1.5,
+                            borderRadius: 2,
+                            bgcolor: 'background.paper',
+                            border: '1px solid',
                             borderColor: isSelected ? 'primary.main' : 'divider',
                             cursor: 'pointer',
                             display: 'flex',
@@ -205,7 +205,7 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
                               {perm.slug}
                             </Typography> */}
                           </Box>
-                          <Switch 
+                          <Switch
                             checked={isSelected}
                             size="small"
                             color="primary"
@@ -227,9 +227,9 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
         <Button onClick={onClose} color="inherit" sx={{ fontWeight: 600 }}>
           Cancelar
         </Button>
-        <Button 
-          onClick={handleSave} 
-          variant="contained" 
+        <Button
+          onClick={handleSave}
+          variant="contained"
           disabled={saving}
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save size={18} />}
           sx={{ px: 4, fontWeight: 'bold' }}
