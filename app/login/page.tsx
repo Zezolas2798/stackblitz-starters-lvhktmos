@@ -70,7 +70,7 @@ export default function LoginPage() {
           <img
             src={mode === 'dark' ? '/logo-cortex.svg' : '/logo-cortex-light.svg'}
             alt="Córtex Logo"
-            style={{ height: '80px', objectFit: 'contain' }}
+            style={{ height: '140px', objectFit: 'contain' }}
           />
         </Box>
         <Typography variant="body2" color="text.secondary">
