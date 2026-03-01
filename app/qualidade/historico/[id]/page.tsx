@@ -146,7 +146,7 @@ export default function DetalheChecklistPage() {
                             p: 2, mb: 2, 
                             border: '1px solid', 
                             borderColor: resp.conforme === false ? 'error.light' : 'divider',
-                            bgcolor: resp.conforme === false ? '#fff5f5' : 'white',
+                            bgcolor: resp.conforme === false ? 'error.main' : 'background.paper',
                             borderRadius: 2
                         }}
                     >

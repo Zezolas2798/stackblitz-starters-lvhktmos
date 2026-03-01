@@ -185,7 +185,7 @@ export default function GestaoCargosPage() {
                 value={newRoleName}
                 onChange={e => setNewRoleName(e.target.value)}
                 autoFocus
-                sx={{ bgcolor: 'white' }}
+                sx={{ bgcolor: 'background.paper' }}
               />
             </Grid>
             <Grid item xs={12} md={5}>
@@ -197,7 +197,7 @@ export default function GestaoCargosPage() {
                 size="small"
                 value={newRoleDesc}
                 onChange={e => setNewRoleDesc(e.target.value)}
-                sx={{ bgcolor: 'white' }}
+                sx={{ bgcolor: 'background.paper' }}
               />
             </Grid>
             <Grid item xs={12} md={3} sx={{ display: 'flex', gap: 1 }}>

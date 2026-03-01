@@ -2,27 +2,29 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  Box, Typography, Button, Paper, Chip, 
+import {
+  Box, Typography, Button, Paper, Chip,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   IconButton, Tooltip, CircularProgress, MenuItem, TextField,
   InputAdornment, Container, useTheme, alpha
 } from '@mui/material';
 
-import Grid from '@mui/material/Grid'; 
+import Grid from '@mui/material/Grid';
 
-import { 
-  Plus, Package, History, ArrowRightLeft, MapPin, Search, Filter, Tag
+import {
+  Plus, Package, History, ArrowRightLeft, MapPin, Search, Filter, Tag, ScanLine
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import { format, parseISO, differenceInCalendarDays } from 'date-fns';
+import MovimentacaoEstoqueDialog from '@/components/MovimentacaoEstoqueDialog';
+import MovimentacaoGeralDialog from '@/components/MovimentacaoGeralDialog';
 
 const STATUS_VALIDADE_OPTIONS = [
   { value: 'VENCIDO', label: '🔴 Vencidos (< 0 dias)' },
   { value: 'CRITICO', label: '🟠 Quase Vencendo (0 a 30 dias)' },
-  { value: 'ALERTA',  label: '🟡 Perto do Vencimento (31 a 89 dias)' },
-  { value: 'OK',      label: '🟢 Longe do Vencimento (90+ dias)' },
+  { value: 'ALERTA', label: '🟡 Perto do Vencimento (31 a 89 dias)' },
+  { value: 'OK', label: '🟢 Longe do Vencimento (90+ dias)' },
 ];
 
 export default function EstoquePage() {
@@ -30,7 +32,7 @@ export default function EstoquePage() {
   const { activeClientId } = useClient();
   const [lotes, setLotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // --- FILTROS ---
   const [filtroBusca, setFiltroBusca] = useState('');
   const [filtroLocal, setFiltroLocal] = useState('');
@@ -41,6 +43,21 @@ export default function EstoquePage() {
   const [locaisDisponiveis, setLocaisDisponiveis] = useState<string[]>([]);
   const [categoriasDisponiveis, setCategoriasDisponiveis] = useState<string[]>([]);
 
+  // --- MOVIMENTAÇÃO ---
+  const [movimentacaoOpen, setMovimentacaoOpen] = useState(false);
+  const [loteSelecionado, setLoteSelecionado] = useState<any>(null);
+  const [buscaGeralOpen, setBuscaGeralOpen] = useState(false);
+
+  const handleOpenMovimentacao = (lote: any) => {
+    setLoteSelecionado(lote);
+    setMovimentacaoOpen(true);
+  };
+
+  const handleLoteSelecionadoDaBusca = (lote: any) => {
+    setBuscaGeralOpen(false);
+    handleOpenMovimentacao(lote);
+  };
+
   useEffect(() => {
     if (activeClientId) {
       loadEstoque();
@@ -49,20 +66,20 @@ export default function EstoquePage() {
 
   async function loadEstoque() {
     setLoading(true);
-    
+
     const { data: lotesData, error } = await supabase
       .from('estoque_lotes')
       .select('*, ingredientes(nome)')
       .eq('cliente_id', activeClientId)
-      .neq('status_lote', 'ESGOTADO') 
-      .order('data_validade_atual', { ascending: true }); 
+      .neq('status_lote', 'ESGOTADO')
+      .order('data_validade_atual', { ascending: true });
 
     if (lotesData) {
       setLotes(lotesData);
-      
+
       const locaisUnicos = Array.from(new Set(lotesData.map(l => l.local_armazenamento).filter(Boolean)));
       const categoriasUnicas = Array.from(new Set(lotesData.map(l => l.categoria_produto).filter(Boolean)));
-      
+
       setLocaisDisponiveis(locaisUnicos as string[]);
       setCategoriasDisponiveis(categoriasUnicas as string[]);
     }
@@ -80,7 +97,7 @@ export default function EstoquePage() {
 
   const lotesFiltrados = lotes.filter(lote => {
     const termo = filtroBusca.toLowerCase();
-    const matchBusca = 
+    const matchBusca =
       (lote.ingredientes?.nome || '').toLowerCase().includes(termo) ||
       (lote.marca || '').toLowerCase().includes(termo) ||
       (lote.codigo_lote_fornecedor || '').toLowerCase().includes(termo);
@@ -100,55 +117,55 @@ export default function EstoquePage() {
   const renderChipValidade = (dataValidade: string) => {
     const status = calcularStatusValidade(dataValidade);
     const dias = differenceInCalendarDays(parseISO(dataValidade), new Date());
-    
+
     let color: 'default' | 'error' | 'warning' | 'success' = 'success';
     let label = `${dias} dias`;
     let bgcolor = alpha(theme.palette.success.main, 0.1);
     let textColor = theme.palette.success.dark;
 
     switch (status) {
-      case 'VENCIDO': 
-          color = 'error'; 
-          label = `Vencido há ${Math.abs(dias)} dias`; 
-          bgcolor = alpha(theme.palette.error.main, 0.1);
-          textColor = theme.palette.error.dark;
-          break;
-      case 'CRITICO': 
-          color = 'error'; 
-          label = `Vence em ${dias} dias`; 
-          bgcolor = alpha(theme.palette.error.main, 0.1);
-          textColor = theme.palette.error.dark;
-          break;
-      case 'ALERTA':  
-          color = 'warning'; 
-          label = `Vence em ${dias} dias`; 
-          bgcolor = alpha(theme.palette.warning.main, 0.1);
-          textColor = theme.palette.warning.dark;
-          break;
-      case 'OK':      
-          color = 'success'; 
-          label = `Vence em ${dias} dias`; 
-          break;
+      case 'VENCIDO':
+        color = 'error';
+        label = `Vencido há ${Math.abs(dias)} dias`;
+        bgcolor = alpha(theme.palette.error.main, 0.1);
+        textColor = theme.palette.error.dark;
+        break;
+      case 'CRITICO':
+        color = 'error';
+        label = `Vence em ${dias} dias`;
+        bgcolor = alpha(theme.palette.error.main, 0.1);
+        textColor = theme.palette.error.dark;
+        break;
+      case 'ALERTA':
+        color = 'warning';
+        label = `Vence em ${dias} dias`;
+        bgcolor = alpha(theme.palette.warning.main, 0.1);
+        textColor = theme.palette.warning.dark;
+        break;
+      case 'OK':
+        color = 'success';
+        label = `Vence em ${dias} dias`;
+        break;
     }
 
     return (
-        <Chip 
-            label={label} 
-            size="small" 
-            sx={{ 
-                fontWeight: 'bold', 
-                bgcolor: bgcolor, 
-                color: textColor,
-                border: '1px solid',
-                borderColor: alpha(textColor, 0.3)
-            }} 
-        />
+      <Chip
+        label={label}
+        size="small"
+        sx={{
+          fontWeight: 'bold',
+          bgcolor: bgcolor,
+          color: textColor,
+          border: '1px solid',
+          borderColor: alpha(textColor, 0.3)
+        }}
+      />
     );
   };
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 10 }}>
-      
+
       {/* Cabeçalho */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Box>
@@ -163,6 +180,15 @@ export default function EstoquePage() {
           <Button variant="outlined" startIcon={<History size={18} />} color="inherit">
             Histórico
           </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<ScanLine size={20} />}
+            sx={{ fontWeight: 'bold' }}
+            onClick={() => setBuscaGeralOpen(true)}
+          >
+            Movimentar Insumo
+          </Button>
           <Link href="/estoque/entrada" passHref style={{ textDecoration: 'none' }}>
             <Button variant="contained" startIcon={<Plus size={20} />} sx={{ fontWeight: 'bold', px: 3 }}>
               Nova Entrada
@@ -174,63 +200,63 @@ export default function EstoquePage() {
       {/* BARRA DE FILTROS AVANÇADA */}
       <Paper elevation={0} sx={{ p: 3, mb: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, color: 'primary.main' }}>
-            <Filter size={18} />
-            <Typography variant="subtitle2" fontWeight="bold">Filtros Avançados</Typography>
+          <Filter size={18} />
+          <Typography variant="subtitle2" fontWeight="bold">Filtros Avançados</Typography>
         </Box>
-        
+
         <Grid container spacing={2}>
-            {/* 1. Busca Texto */}
-            <Grid item xs={12} md={4}>
-                <TextField 
-                    fullWidth size="small" 
-                    placeholder="Buscar Produto, Marca ou Lote..." 
-                    value={filtroBusca} onChange={e => setFiltroBusca(e.target.value)}
-                    InputProps={{ startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> }}
-                />
-            </Grid>
+          {/* 1. Busca Texto */}
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth size="small"
+              placeholder="Buscar Produto, Marca ou Lote..."
+              value={filtroBusca} onChange={e => setFiltroBusca(e.target.value)}
+              InputProps={{ startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> }}
+            />
+          </Grid>
 
-            {/* 2. Filtro Local */}
-            <Grid item xs={12} md={2}>
-                <TextField 
-                    select fullWidth size="small" label="Local" 
-                    value={filtroLocal} onChange={e => setFiltroLocal(e.target.value)} 
-                    SelectProps={{ displayEmpty: true }}
-                    InputLabelProps={{ shrink: true }} // <--- CORREÇÃO AQUI
-                >
-                    <MenuItem value="">Todos os Locais</MenuItem>
-                    {locaisDisponiveis.map(loc => <MenuItem key={loc} value={loc}>{loc}</MenuItem>)}
-                </TextField>
-            </Grid>
+          {/* 2. Filtro Local */}
+          <Grid item xs={12} md={2}>
+            <TextField
+              select fullWidth size="small" label="Local"
+              value={filtroLocal} onChange={e => setFiltroLocal(e.target.value)}
+              SelectProps={{ displayEmpty: true }}
+              InputLabelProps={{ shrink: true }} // <--- CORREÇÃO AQUI
+            >
+              <MenuItem value="">Todos os Locais</MenuItem>
+              {locaisDisponiveis.map(loc => <MenuItem key={loc} value={loc}>{loc}</MenuItem>)}
+            </TextField>
+          </Grid>
 
-            {/* 3. Filtro Categoria */}
-            <Grid item xs={12} md={3}>
-                <TextField 
-                    select fullWidth size="small" label="Categoria" 
-                    value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} 
-                    SelectProps={{ displayEmpty: true }}
-                    InputLabelProps={{ shrink: true }} // <--- CORREÇÃO AQUI
-                >
-                    <MenuItem value="">Todas as Categorias</MenuItem>
-                    {categoriasDisponiveis.map(cat => <MenuItem key={cat} value={cat}>{cat}</MenuItem>)}
-                </TextField>
-            </Grid>
+          {/* 3. Filtro Categoria */}
+          <Grid item xs={12} md={3}>
+            <TextField
+              select fullWidth size="small" label="Categoria"
+              value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}
+              SelectProps={{ displayEmpty: true }}
+              InputLabelProps={{ shrink: true }} // <--- CORREÇÃO AQUI
+            >
+              <MenuItem value="">Todas as Categorias</MenuItem>
+              {categoriasDisponiveis.map(cat => <MenuItem key={cat} value={cat}>{cat}</MenuItem>)}
+            </TextField>
+          </Grid>
 
-            {/* 4. Filtro Validade */}
-            <Grid item xs={12} md={3}>
-                <TextField 
-                    select fullWidth size="small" label="Situação Validade" 
-                    value={filtroValidade} onChange={e => setFiltroValidade(e.target.value)} 
-                    SelectProps={{ displayEmpty: true }}
-                    InputLabelProps={{ shrink: true }} // <--- CORREÇÃO AQUI
-                >
-                    <MenuItem value="">Todas as Situações</MenuItem>
-                    {STATUS_VALIDADE_OPTIONS.map(opt => (
-                        <MenuItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                        </MenuItem>
-                    ))}
-                </TextField>
-            </Grid>
+          {/* 4. Filtro Validade */}
+          <Grid item xs={12} md={3}>
+            <TextField
+              select fullWidth size="small" label="Situação Validade"
+              value={filtroValidade} onChange={e => setFiltroValidade(e.target.value)}
+              SelectProps={{ displayEmpty: true }}
+              InputLabelProps={{ shrink: true }} // <--- CORREÇÃO AQUI
+            >
+              <MenuItem value="">Todas as Situações</MenuItem>
+              {STATUS_VALIDADE_OPTIONS.map(opt => (
+                <MenuItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
         </Grid>
       </Paper>
 
@@ -262,19 +288,19 @@ export default function EstoquePage() {
                     <TableRow key={lote.id} hover sx={{ '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.02) } }}>
                       <TableCell>
                         <Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '0.95rem', color: 'text.primary' }}>
-                                {lote.ingredientes?.nome || 'Ingrediente Desconhecido'}
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-                                {lote.marca && <Chip label={lote.marca} size="small" sx={{ fontSize: '0.7rem', height: 20, bgcolor: 'grey.100' }} />}
-                                {lote.categoria_produto && <Chip icon={<Tag size={10}/>} label={lote.categoria_produto} size="small" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} />}
-                            </Box>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '0.95rem', color: 'text.primary' }}>
+                            {lote.ingredientes?.nome || 'Ingrediente Desconhecido'}
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                            {lote.marca && <Chip label={lote.marca} size="small" sx={{ fontSize: '0.7rem', height: 20, bgcolor: 'grey.100' }} />}
+                            {lote.categoria_produto && <Chip icon={<Tag size={10} />} label={lote.categoria_produto} size="small" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} />}
+                          </Box>
                         </Box>
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-                             <MapPin size={16} /> 
-                             <Typography variant="body2" fontWeight={500}>{lote.local_armazenamento || 'Geral'}</Typography>
+                          <MapPin size={16} />
+                          <Typography variant="body2" fontWeight={500}>{lote.local_armazenamento || 'Geral'}</Typography>
                         </Box>
                       </TableCell>
                       <TableCell>
@@ -297,7 +323,7 @@ export default function EstoquePage() {
                       </TableCell>
                       <TableCell align="right">
                         <Tooltip title="Movimentar / Ajustar">
-                          <IconButton size="small" color="primary">
+                          <IconButton size="small" color="primary" onClick={() => handleOpenMovimentacao(lote)}>
                             <ArrowRightLeft size={18} />
                           </IconButton>
                         </Tooltip>
@@ -310,6 +336,20 @@ export default function EstoquePage() {
           </TableContainer>
         )}
       </Paper>
+
+      <MovimentacaoEstoqueDialog
+        open={movimentacaoOpen}
+        onClose={() => setMovimentacaoOpen(false)}
+        lote={loteSelecionado}
+        onSuccess={loadEstoque}
+      />
+      <MovimentacaoGeralDialog
+        open={buscaGeralOpen}
+        onClose={() => setBuscaGeralOpen(false)}
+        clienteId={activeClientId}
+        onLoteSelected={handleLoteSelecionadoDaBusca}
+      />
+
     </Container>
   );
 }

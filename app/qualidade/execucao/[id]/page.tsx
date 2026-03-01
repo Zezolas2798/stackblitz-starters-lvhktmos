@@ -361,7 +361,7 @@ export default function ExecucaoChecklistPage() {
                                             <IconButton 
                                                 size="small" 
                                                 onClick={() => removeFoto(item.id, url)}
-                                                sx={{ position: 'absolute', top: -8, right: -8, bgcolor: 'white', border: '1px solid #ccc', p: 0.5, '&:hover': { bgcolor: '#ffebee' } }}
+                                                sx={{ position: 'absolute', top: -8, right: -8, bgcolor: 'background.paper', border: '1px solid #ccc', p: 0.5, '&:hover': { bgcolor: '#ffebee' } }}
                                             >
                                                 <X size={12} color="red" />
                                             </IconButton>

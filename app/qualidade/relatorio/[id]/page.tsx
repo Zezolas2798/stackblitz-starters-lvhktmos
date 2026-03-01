@@ -148,7 +148,7 @@ export default function RelatorioAuditoriaPage() {
                 const isNC = resp?.resposta_valor === 'NAO_CONFORME';
 
                 return (
-                    <Card key={item.id} variant="outlined" sx={{ mb: 1.5, bgcolor: isNC ? '#fff5f5' : 'white', borderColor: isNC ? '#feb2b2' : '#e0e0e0' }}>
+                    <Card key={item.id} variant="outlined" sx={{ mb: 1.5, bgcolor: isNC ? 'error.main' : 'background.paper', borderColor: isNC ? '#feb2b2' : '#e0e0e0' }}>
                         <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
                             <Grid container alignItems="flex-start" spacing={2}>
                                 {/* PERGUNTA */}

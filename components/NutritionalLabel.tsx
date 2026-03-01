@@ -159,7 +159,7 @@ const BlocoAltoEm = ({ s }: { s: ReturnType<typeof getMalhaStyles> }) => (
   <Box sx={{
     display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
     position: 'relative', height: s.blockHeight, width: s.blockWidth,
-    bgcolor: 'white', color: 'black', border: `${s.borderWidth}px solid black`,
+    bgcolor: 'background.paper', color: 'text.primary', border: `${s.borderWidth}px solid black`,
     boxSizing: 'border-box', 
     pl: `calc(${s.lupaDiameter}px + ${s.paddingX}px)`, // Espaço reservado para a lupa
     overflow: 'visible'
@@ -183,7 +183,7 @@ const BlocoAltoEm = ({ s }: { s: ReturnType<typeof getMalhaStyles> }) => (
 const BlocoNutriente = ({ label, s, style }: { label: string, s: ReturnType<typeof getMalhaStyles>, style?: React.CSSProperties }) => (
   <Box sx={{
     display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-    height: s.blockHeight, width: s.blockWidth, bgcolor: 'black', color: 'white',
+    height: s.blockHeight, width: s.blockWidth, bgcolor: 'text.primary', color: 'white',
     border: `${s.borderWidth}px solid black`, boxSizing: 'border-box', ...style
   }}>
     <Typography sx={{ 
@@ -313,7 +313,7 @@ export const TabelaVertical = React.forwardRef<HTMLDivElement, { tabela: Resulta
   const porcaoCabecalho = formatarNumero(tabela.infoPorcao.porcao_g_ml);
 
   return (
-    <div ref={ref} style={{ border: borderThick, background: 'white', width: 'fit-content', padding: '4px', fontFamily: font, color: 'black' }}>
+    <div ref={ref} style={{ border: borderThick, background: 'var(--mui-palette-background-paper)', width: 'fit-content', padding: '4px', fontFamily: font, color: 'text.primary' }}>
       <div style={{ fontSize: '10pt', fontWeight: 'bold', borderBottom: 'none' }}>INFORMAÇÃO NUTRICIONAL</div>
       <div style={{ fontSize: '10pt', marginBottom: '4px' }}>
         Porções por embalagem: {tabela.infoPorcao.total_porcoes_embalagem} <br />
@@ -356,7 +356,7 @@ export const TabelaVerticalQuebrada = React.forwardRef<HTMLDivElement, { tabela:
   const medida = formatarMedidaCaseira(tabela.infoPorcao);
 
   return (
-    <div ref={ref} style={{ border: borderThick, background: 'white', width: '100%', padding: '4px', fontFamily: font, color: 'black' }}>
+    <div ref={ref} style={{ border: borderThick, background: 'var(--mui-palette-background-paper)', width: '100%', padding: '4px', fontFamily: font, color: 'text.primary' }}>
       <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>INFORMAÇÃO NUTRICIONAL</div>
       <div style={{ fontSize: '10pt', marginBottom: '4px' }}>
         Porções por embalagem: {tabela.infoPorcao.total_porcoes_embalagem} • Porção: {medida}
@@ -401,7 +401,7 @@ export const TabelaHorizontal = React.forwardRef<HTMLDivElement, { tabela: Resul
   const porcaoCabecalho = formatarNumero(tabela.infoPorcao.porcao_g_ml);
 
   return (
-    <div ref={ref} style={{ border: borderThick, background: 'white', width: '100%', display: 'flex', fontFamily: font, color: 'black' }}>
+    <div ref={ref} style={{ border: borderThick, background: 'var(--mui-palette-background-paper)', width: '100%', display: 'flex', fontFamily: font, color: 'text.primary' }}>
       <div style={{ width: '30%', padding: '6px', borderRight: borderThick, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
          <div style={{ fontSize: '10pt', fontWeight: 'bold', marginBottom: '4px' }}>INFORMAÇÃO NUTRICIONAL</div>
          <div style={{ fontSize: '10pt' }}>Porções por embalagem: {tabela.infoPorcao.total_porcoes_embalagem}</div>
@@ -444,7 +444,7 @@ export const TabelaHorizontalQuebrada = React.forwardRef<HTMLDivElement, { tabel
   const medida = formatarMedidaCaseira(tabela.infoPorcao);
 
   return (
-    <div ref={ref} style={{ border: borderThick, background: 'white', width: '100%', display: 'flex', fontFamily: font, color: 'black' }}>
+    <div ref={ref} style={{ border: borderThick, background: 'var(--mui-palette-background-paper)', width: '100%', display: 'flex', fontFamily: font, color: 'text.primary' }}>
        <div style={{ width: '20%', padding: '6px', borderRight: borderThick, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
          <div style={{ fontSize: '9pt', fontWeight: 'bold' }}>INFORMAÇÃO NUTRICIONAL</div>
          <div style={{ fontSize: '9pt' }}>Porções: {tabela.infoPorcao.total_porcoes_embalagem}</div>
@@ -502,7 +502,7 @@ export const TabelaLinear = React.forwardRef<HTMLDivElement, { tabela: Resultado
     });
 
     return (
-      <div ref={ref} style={{ padding: '6px', border: borderThick, fontFamily: font, background: 'white', color: 'black' }}>
+      <div ref={ref} style={{ padding: '6px', border: borderThick, fontFamily: font, background: 'var(--mui-palette-background-paper)', color: 'text.primary' }}>
         <div style={{ fontSize: '9pt', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '4px' }}>INFORMAÇÃO NUTRICIONAL:</div>
         <div style={{ fontSize: '9pt', lineHeight: 1.4, textAlign: 'justify' }}>
            Porções por embalagem: {infoPorcao.total_porcoes_embalagem}. Porção: {medida}.

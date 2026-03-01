@@ -51,7 +51,7 @@ export function ClientSelector() {
           justifyContent: 'space-between', 
           textTransform: 'none', 
           borderColor: 'divider',
-          bgcolor: 'white',
+          bgcolor: 'background.paper',
           '&:hover': { bgcolor: 'grey.50', borderColor: 'primary.main' }
         }}
       >

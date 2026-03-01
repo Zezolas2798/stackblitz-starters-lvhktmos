@@ -512,7 +512,7 @@ export default function DetalhesReceitaPage() {
 
                 <Box 
                     sx={{ 
-                        bgcolor: 'white', p: 4, border: '1px solid #ccc', borderRadius: 1, 
+                        bgcolor: 'background.paper', p: 4, border: '1px solid #ccc', borderRadius: 1, 
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
                         opacity: isHistorico ? 0.9 : 1,
                         position: 'relative'

@@ -421,13 +421,13 @@ export default function EntradaEstoquePage() {
                 
                 <Grid container spacing={2} alignItems="center">
                     <Grid item xs={12}>
-                        <TextField label="Quantidade de Embalagens" size="small" type="number" fullWidth value={qtdPacotes} onChange={e => setQtdPacotes(e.target.value)} sx={{ bgcolor: 'white' }} placeholder="Ex: 5" />
+                        <TextField label="Quantidade de Embalagens" size="small" type="number" fullWidth value={qtdPacotes} onChange={e => setQtdPacotes(e.target.value)} sx={{ bgcolor: 'background.paper' }} placeholder="Ex: 5" />
                     </Grid>
                     <Grid item xs={6}>
-                        <TextField label="Peso Unitário" size="small" type="number" fullWidth value={pesoPacote} onChange={e => setPesoPacote(e.target.value)} sx={{ bgcolor: 'white' }} placeholder="Ex: 2" />
+                        <TextField label="Peso Unitário" size="small" type="number" fullWidth value={pesoPacote} onChange={e => setPesoPacote(e.target.value)} sx={{ bgcolor: 'background.paper' }} placeholder="Ex: 2" />
                     </Grid>
                     <Grid item xs={6}>
-                        <TextField select label="Unidade" size="small" fullWidth value={unidadePeso} onChange={e => setUnidadePeso(e.target.value)} sx={{ bgcolor: 'white' }}>
+                        <TextField select label="Unidade" size="small" fullWidth value={unidadePeso} onChange={e => setUnidadePeso(e.target.value)} sx={{ bgcolor: 'background.paper' }}>
                             <MenuItem value="KG">KG</MenuItem><MenuItem value="G">G</MenuItem><MenuItem value="L">L</MenuItem><MenuItem value="ML">ML</MenuItem><MenuItem value="UN">UN</MenuItem>
                         </TextField>
                     </Grid>

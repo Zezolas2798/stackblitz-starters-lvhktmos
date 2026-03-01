@@ -290,7 +290,7 @@ export function TarefaDialog({ open, onClose, onSuccess, initialStatus = 'A_FAZE
         </Stack>
       </DialogContent>
 
-      <DialogActions sx={{ p: 2, bgcolor: 'white' }}>
+      <DialogActions sx={{ p: 2, bgcolor: 'background.paper' }}>
         <Button onClick={onClose} color="inherit">Cancelar</Button>
         <Button 
           onClick={handleSubmit} 

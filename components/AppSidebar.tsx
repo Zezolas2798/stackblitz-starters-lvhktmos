@@ -8,6 +8,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { ClientSelector } from './ClientSelector';
 // IMPORTANTE: Conectando o cérebro de permissões
 import { usePermission } from '@/hooks/usePermission';
+import Image from 'next/image';
+import { useThemeContext } from '@/lib/ThemeContext';
 
 import {
   Drawer,
@@ -48,6 +50,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { mobileOpen, toggleMobileSidebar, closeMobileSidebar } = useClient();
+  const { mode } = useThemeContext();
 
   // Hook de Permissões: Traz o poder de decisão para o menu
   const { can, loading: loadingPermissions } = usePermission();
@@ -169,20 +172,22 @@ export function AppSidebar({ width }: AppSidebarProps) {
   ];
 
   const drawerContent = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }}>
       {/* Logo */}
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
-        <Typography variant="h6" color="primary" fontWeight="bold">
-          NutriDev <span style={{ fontWeight: 400, color: '#64748B' }}>GxP</span>
-        </Typography>
-        <IconButton onClick={closeMobileSidebar} sx={{ display: { md: 'none' } }}>
+      <Box sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 160 }}>
+        <img
+          src={mode === 'dark' ? "/logo-cortex.svg" : "/logo-cortex-light.svg"}
+          alt="Córtex Food Solution Logo"
+          style={{ maxHeight: '120px', maxWidth: '100%', objectFit: 'contain' }}
+        />
+        <IconButton onClick={closeMobileSidebar} sx={{ display: { md: 'none' }, position: 'absolute', right: 8, top: 8 }}>
           <Close />
         </IconButton>
       </Box>
       <Divider />
 
       {/* Seletor de Unidade */}
-      <Box sx={{ p: 2, bgcolor: 'grey.50' }}>
+      <Box sx={{ p: 2, bgcolor: 'background.default' }}>
         <ClientSelector />
       </Box>
       <Divider />

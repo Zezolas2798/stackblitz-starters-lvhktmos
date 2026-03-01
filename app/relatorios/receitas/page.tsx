@@ -430,7 +430,7 @@ export default function RelatoriosPage() {
 
       {!activeClientId ? <Alert severity="warning">Selecione um Cliente Ativo.</Alert> : (
         <>
-          <Paper elevation={0} sx={{ p: 4, mb: 4, bgcolor: 'white', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Paper elevation={0} sx={{ p: 4, mb: 4, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 <Button 
@@ -467,7 +467,7 @@ export default function RelatoriosPage() {
             />
           </Paper>
 
-          <Paper variant="outlined" sx={{ bgcolor: 'white', overflow: 'hidden', borderRadius: 2 }}>
+          <Paper variant="outlined" sx={{ bgcolor: 'background.paper', overflow: 'hidden', borderRadius: 2 }}>
              <List dense sx={{ py: 0 }}>
                 <ListItem disablePadding sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05), borderBottom: '1px solid', borderColor: 'divider', py: 1 }}>
                    <ListItemButton onClick={handleSelectAll}>

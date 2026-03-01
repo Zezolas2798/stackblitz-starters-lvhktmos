@@ -356,7 +356,7 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
                           {new Date(c.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </Typography>
                       </Stack>
-                      <Paper sx={{ p: 1.5, bgcolor: 'white', borderRadius: 2, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                      <Paper sx={{ p: 1.5, bgcolor: 'background.paper', borderRadius: 2, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                         <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>{c.texto}</Typography>
                       </Paper>
                     </Box>
@@ -365,7 +365,7 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
                 <div ref={chatEndRef} />
               </Box>
 
-              <Box sx={{ p: 2, borderTop: '1px solid #eee', bgcolor: 'white' }}>
+              <Box sx={{ p: 2, borderTop: '1px solid #eee', bgcolor: 'background.paper' }}>
                 <Stack direction="row" spacing={1}>
                   <TextField 
                     fullWidth size="small" placeholder="Comentar..." 

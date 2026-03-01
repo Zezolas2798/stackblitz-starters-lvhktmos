@@ -186,7 +186,7 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
                           sx={{ 
                             p: 1.5, 
                             borderRadius: 2, 
-                            bgcolor: 'white', 
+                            bgcolor: 'background.paper', 
                             border: '1px solid', 
                             borderColor: isSelected ? 'primary.main' : 'divider',
                             cursor: 'pointer',

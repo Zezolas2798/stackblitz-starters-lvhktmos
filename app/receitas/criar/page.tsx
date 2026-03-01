@@ -706,7 +706,7 @@ function CriarEditarReceitaComponent() {
                       if (funcs.length > 1) { setFuncoesAditivoDisponiveis(funcs); } else { setFuncoesAditivoDisponiveis([funcs[0]]); setFuncaoAditivoSelecionada(funcs[0]); }
                     }
                   }}
-                  renderInput={(params) => <TextField {...params} label="Buscar Ingrediente" size="small" sx={{ bgcolor: 'white' }} InputProps={{ ...params.InputProps, startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> }} />}
+                  renderInput={(params) => <TextField {...params} label="Buscar Ingrediente" size="small" sx={{ bgcolor: 'background.paper' }} InputProps={{ ...params.InputProps, startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> }} />}
                   renderOption={(props, option) => (
                     <li {...props}>
                         <Box>
@@ -729,13 +729,13 @@ function CriarEditarReceitaComponent() {
 
                 <Grid container spacing={2}>
                   <Grid item xs={4}>
-                    <TextField label="Peso Bruto" type="number" value={pesoBruto} onChange={(e) => setPesoBruto(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'white' }} />
+                    <TextField label="Peso Bruto" type="number" value={pesoBruto} onChange={(e) => setPesoBruto(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} />
                   </Grid>
                   <Grid item xs={4}>
-                    <TextField label="Peso Líquido" type="number" value={pesoLiquido} onChange={(e) => setPesoLiquido(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'white' }} />
+                    <TextField label="Peso Líquido" type="number" value={pesoLiquido} onChange={(e) => setPesoLiquido(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} />
                   </Grid>
                   <Grid item xs={4}>
-                    <FormControl fullWidth size="small" sx={{ bgcolor: 'white' }}>
+                    <FormControl fullWidth size="small" sx={{ bgcolor: 'background.paper' }}>
                       <InputLabel>Unidade</InputLabel>
                       <Select value={unidadeIngrediente} label="Unidade" onChange={(e) => setUnidadeIngrediente(e.target.value)}>
                         <MenuItem value="g">g</MenuItem>
@@ -876,7 +876,7 @@ function CriarEditarReceitaComponent() {
                 }}
                 isOptionEqualToValue={(option, value) => option.id === value.id}
                 renderTags={(value, getTagProps) => value.map((option, index) => ( <Chip variant="outlined" label={option.nome} color="error" size="small" {...getTagProps({ index })} /> ))}
-                renderInput={(params) => <TextField {...params} label="Selecione os riscos..." placeholder="Ex: Trigo, Leite" sx={{ bgcolor: 'white' }} />}
+                renderInput={(params) => <TextField {...params} label="Selecione os riscos..." placeholder="Ex: Trigo, Leite" sx={{ bgcolor: 'background.paper' }} />}
               />
             </Paper>
           </Grid>
