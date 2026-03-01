@@ -3,26 +3,28 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { 
-  Box, 
-  Paper, 
-  Typography, 
-  TextField, 
-  Button, 
-  Alert, 
-  InputAdornment, 
-  IconButton, 
+import {
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Alert,
+  InputAdornment,
+  IconButton,
   CircularProgress,
   Container,
   CssBaseline
 } from '@mui/material';
 import { Visibility, VisibilityOff, Lock, Email, Security } from '@mui/icons-material';
+import { useThemeContext } from '@/lib/ThemeContext';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { mode } = useThemeContext();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  
+
   // Estados do Formulário
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -43,7 +45,7 @@ export default function LoginPage() {
 
       // Sucesso: Redireciona para o Dashboard
       router.push('/');
-      
+
     } catch (err: any) {
       console.error(err);
       setErrorMsg('Falha na autenticação: Verifique seu e-mail e senha.');
@@ -63,36 +65,24 @@ export default function LoginPage() {
           alignItems: 'center',
         }}
       >
-        {/* Logo / Ícone */}
-        <Box 
-          sx={{ 
-            m: 1, 
-            bgcolor: 'primary.main', 
-            width: 56, 
-            height: 56, 
-            borderRadius: '50%', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            boxShadow: 3
-          }}
-        >
-          <Security sx={{ color: 'white', fontSize: 32 }} />
+        {/* Logo Córtex */}
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
+          <img
+            src={mode === 'dark' ? '/logo-cortex.svg' : '/logo-cortex-light.svg'}
+            alt="Córtex Logo"
+            style={{ height: '80px', objectFit: 'contain' }}
+          />
         </Box>
-        
-        <Typography component="h1" variant="h5" fontWeight="bold" color="primary" sx={{ mt: 1 }}>
-          NutriDev Manager
-        </Typography>
         <Typography variant="body2" color="text.secondary">
           Sistema de Gestão & Qualidade GxP
         </Typography>
 
-        <Paper 
-          elevation={3} 
-          sx={{ 
-            mt: 4, 
-            p: 4, 
-            width: '100%', 
+        <Paper
+          elevation={3}
+          sx={{
+            mt: 4,
+            p: 4,
+            width: '100%',
             borderRadius: 2,
             borderTop: '4px solid',
             borderColor: 'primary.main'
@@ -168,7 +158,7 @@ export default function LoginPage() {
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'ENTRAR NO SISTEMA'}
             </Button>
-            
+
             <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Typography variant="caption" color="text.secondary">
                 Acesso monitorado para fins de auditoria (21 CFR Part 11).
