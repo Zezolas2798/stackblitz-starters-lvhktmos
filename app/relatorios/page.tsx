@@ -48,7 +48,7 @@ interface ReceitaRelatorio {
 export default function RelatoriosPage() {
   const theme = useTheme();
   const lightTheme = useMemo(() => getTheme('light'), []);
-  const { activeClientId, activeClient } = useClient();
+  const { activeClientId, activeClientName } = useClient();
   const [receitas, setReceitas] = useState<ReceitaRelatorio[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -260,7 +260,7 @@ export default function RelatoriosPage() {
                 <Box sx={{ borderBottom: '2px solid #000', pb: 2, mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                   <Box>
                     <Typography variant="caption" sx={{ letterSpacing: 2, fontWeight: 'bold', color: '#666' }}>
-                      {activeClient?.nome_cliente?.toUpperCase() || 'EMPRESA'} • {modoImpressao === 'FICHA' ? 'PRODUÇÃO' : 'ROTULAGEM'}
+                      {activeClientName?.toUpperCase() || 'EMPRESA'} • {modoImpressao === 'FICHA' ? 'PRODUÇÃO' : 'ROTULAGEM'}
                     </Typography>
                     <Typography variant="h4" fontWeight="900" sx={{ lineHeight: 1, mt: 1 }}>
                       {receita.nome}
@@ -281,8 +281,8 @@ export default function RelatoriosPage() {
                     <Stack spacing={4}>
                       {/* TABELA DE INGREDIENTES */}
                       <Box sx={{ border: '1px solid #000' }}>
-                        <Box sx={{ bgcolor: '#000', color: 'white', p: 1 }}>
-                          <Typography variant="caption" fontWeight="bold" align="center" display="block">COMPOSIÇÃO & INGREDIENTES</Typography>
+                        <Box sx={{ borderBottom: '1px solid #000', p: 1 }}>
+                          <Typography variant="caption" fontWeight="bold" align="center" display="block" color="text.primary">COMPOSIÇÃO & INGREDIENTES</Typography>
                         </Box>
 
                         <TableContainer>
@@ -324,11 +324,11 @@ export default function RelatoriosPage() {
 
                       {/* MODO DE PREPARO */}
                       <Box sx={{ border: '1px solid #000' }}>
-                        <Box sx={{ bgcolor: '#000', color: 'white', p: 1 }}>
-                          <Typography variant="caption" fontWeight="bold" align="center" display="block">INSTRUÇÕES DE PREPARO</Typography>
+                        <Box sx={{ borderBottom: '1px solid #000', p: 1 }}>
+                          <Typography variant="caption" fontWeight="bold" align="center" display="block" color="text.primary">INSTRUÇÕES DE PREPARO</Typography>
                         </Box>
                         <Box sx={{ p: 2 }}>
-                          <Typography sx={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: 1.6, textAlign: 'justify' }}>
+                          <Typography sx={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: 1.6, textAlign: 'justify', color: 'text.primary' }}>
                             {receita.modo_preparo || 'Sem instruções cadastradas.'}
                           </Typography>
                         </Box>
@@ -363,7 +363,7 @@ export default function RelatoriosPage() {
                           <>
                             {/* PAINEL FRONTAL */}
                             <Box sx={{ border: '1px solid #000', p: 2, position: 'relative' }}>
-                              <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, bgcolor: '#000', color: 'white', px: 1, py: 0.2, fontWeight: 'bold', fontSize: '0.6rem' }}>
+                              <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, borderRight: '1px solid #000', borderBottom: '1px solid #000', px: 1, py: 0.2, fontWeight: 'bold', fontSize: '0.6rem', color: 'text.primary' }}>
                                 PAINEL FRONTAL (RDC 429)
                               </Typography>
                               <Box sx={{ display: 'flex', justifyContent: 'center', py: 1, mt: 1 }}>
