@@ -221,7 +221,7 @@ export default function DesempenhoPage() {
                   alignItems: 'center', 
                   justifyContent: 'space-between',
                   borderBottom: index !== ranking.length - 1 ? '1px solid #eee' : 'none',
-                  bgcolor: index === 0 ? 'rgba(255, 247, 237, 0.5)' : 'white' // Destaque suave pro 1º lugar
+                  bgcolor: index === 0 ? 'action.selected' : 'background.paper' // Destaque suave pro 1º lugar
                 }}
               >
                 <Stack direction="row" spacing={2} alignItems="center">

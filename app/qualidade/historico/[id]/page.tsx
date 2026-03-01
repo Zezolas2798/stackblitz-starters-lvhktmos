@@ -105,7 +105,7 @@ export default function DetalheChecklistPage() {
       </Box>
 
       {/* CARTÃO DE RESUMO */}
-      <Paper elevation={0} sx={{ p: 3, mb: 4, bgcolor: '#fff', border: '1px solid #e0e0e0', borderRadius: 2 }}>
+      <Paper elevation={0} sx={{ p: 3, mb: 4, bgcolor: 'background.paper', border: '1px solid #e0e0e0', borderRadius: 2 }}>
         <Grid container spacing={2}>
             <Grid item xs={12} md={8}>
                 <Typography variant="subtitle2" color="text.secondary">MODELO APLICADO</Typography>

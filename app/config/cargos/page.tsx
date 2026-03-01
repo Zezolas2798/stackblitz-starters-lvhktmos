@@ -242,7 +242,7 @@ export default function GestaoCargosPage() {
                   border: '1px solid',
                   borderColor: role.is_system_role ? alpha(theme.palette.primary.main, 0.2) : 'divider',
                   borderRadius: 3,
-                  bgcolor: role.is_system_role ? alpha(theme.palette.primary.main, 0.02) : 'white',
+                  bgcolor: role.is_system_role ? alpha(theme.palette.primary.main, 0.02) : 'background.paper',
                   transition: 'all 0.2s ease-in-out',
                   '&:hover': { 
                     transform: 'translateY(-4px)', 

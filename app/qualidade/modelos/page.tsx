@@ -152,7 +152,7 @@ export default function ListaModelosPage() {
                                         />
                                     </TableCell>
                                     <TableCell>
-                                        <Chip label={`v${modelo.versao || 1}`} size="small" sx={{ bgcolor: '#f5f5f5' }} />
+                                        <Chip label={`v${modelo.versao || 1}`} size="small" sx={{ bgcolor: 'action.hover' }} />
                                     </TableCell>
                                     <TableCell align="right">
                                         <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>

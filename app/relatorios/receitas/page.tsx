@@ -191,7 +191,7 @@ export default function RelatoriosPage() {
     const itensParaImprimir = receitas.filter(r => selectedIds.has(r.id));
     
     return (
-      <Box className="print-root" sx={{ bgcolor: '#525659', minHeight: '100vh', py: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <Box className="print-root" sx={{ bgcolor: 'background.default', minHeight: '100vh', py: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         
         <style jsx global>{`
           @media print {
@@ -308,7 +308,7 @@ export default function RelatoriosPage() {
                                             </TableRow>
                                         );
                                     })}
-                                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                                         <TableCell sx={{ fontWeight: 'bold', borderBottom: 'none' }}>TOTAL FINAL</TableCell>
                                         <TableCell align="right" sx={{ fontWeight: 'bold', borderBottom: 'none' }}>{receita.rendimento_total_g}</TableCell>
                                         <TableCell sx={{ borderBottom: 'none' }} />
@@ -485,7 +485,7 @@ export default function RelatoriosPage() {
                         
                         return (
                             <Accordion key={categoria} defaultExpanded elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 0 }, '&:before': { display: 'none' } }}>
-                                <AccordionSummary expandIcon={<ChevronDown size={20} />} sx={{ bgcolor: '#fafafa' }}>
+                                <AccordionSummary expandIcon={<ChevronDown size={20} />} sx={{ bgcolor: 'action.hover' }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }} onClick={(e) => e.stopPropagation()}>
                                         <Checkbox edge="start" checked={todosCatSelecionados} indeterminate={!todosCatSelecionados && algumCatSelecionado} onChange={() => handleSelectCategory(itens)} sx={{ mr: 2 }} />
                                         <Stack direction="row" alignItems="center" spacing={1}>

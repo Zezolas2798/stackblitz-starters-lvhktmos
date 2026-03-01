@@ -132,7 +132,7 @@ export default function DashboardQualidadePage() {
               </Card>
           </Grid>
           <Grid item xs={12} md={4}>
-              <Card elevation={0} sx={{ border: '1px solid #e0e0e0', bgcolor: '#fff7ed' }}>
+              <Card elevation={0} sx={{ border: '1px solid #e0e0e0', bgcolor: 'warning.light' }}>
                   <CardContent>
                       <Typography variant="overline" color="warning.main">Em Aberto</Typography>
                       <Typography variant="h4" fontWeight="bold" color="warning.dark">

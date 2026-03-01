@@ -306,7 +306,7 @@ function EditorModeloChecklistContent() {
                             </Box>
                         </AccordionSummary>
 
-                        <AccordionDetails sx={{ p: 0, bgcolor: '#fff' }}>
+                        <AccordionDetails sx={{ p: 0, bgcolor: 'background.paper' }}>
                             <Box sx={{ p: 3 }}>
                                 {secao.itens.map((item, iIdx) => (
                                     <Box key={item.tempId} sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 2, mb: 2, border: '1px solid #eee', borderRadius: 2, '&:hover': { borderColor: theme.palette.primary.light, bgcolor: alpha(theme.palette.primary.main, 0.01) } }}>
