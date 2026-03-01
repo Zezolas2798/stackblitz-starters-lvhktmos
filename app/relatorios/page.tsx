@@ -257,21 +257,21 @@ export default function RelatoriosPage() {
               <div key={receita.id} className="preview-page page-break">
 
                 {/* CABEÇALHO */}
-                <Box sx={{ borderBottom: '2px solid #000', pb: 2, mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                <Box sx={{ borderBottom: '2px solid #000', pb: 2, mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', color: '#000' }}>
                   <Box>
                     <Typography variant="caption" sx={{ letterSpacing: 2, fontWeight: 'bold', color: '#666' }}>
                       {activeClientName?.toUpperCase() || 'EMPRESA'} • {modoImpressao === 'FICHA' ? 'PRODUÇÃO' : 'ROTULAGEM'}
                     </Typography>
-                    <Typography variant="h4" fontWeight="900" sx={{ lineHeight: 1, mt: 1 }}>
+                    <Typography variant="h4" fontWeight="900" sx={{ lineHeight: 1, mt: 1, color: '#000' }}>
                       {receita.nome}
                     </Typography>
                     {receita.tipos_receita && (
-                      <Chip label={receita.tipos_receita.nome} size="small" variant="outlined" sx={{ mt: 1, borderRadius: 1, fontWeight: 'bold' }} />
+                      <Chip label={receita.tipos_receita.nome} size="small" variant="outlined" sx={{ mt: 1, borderRadius: 1, fontWeight: 'bold', color: '#000', borderColor: '#000' }} />
                     )}
                   </Box>
-                  <Box sx={{ textAlign: 'right' }}>
-                    <Typography variant="body2" fontWeight="bold">Rendimento: {receita.rendimento_total_g}g</Typography>
-                    <Typography variant="caption" color="text.secondary">REF: {receita.id.slice(0, 6).toUpperCase()}</Typography>
+                  <Box sx={{ textAlign: 'right', color: '#000' }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ color: '#000' }}>Rendimento: {receita.rendimento_total_g}g</Typography>
+                    <Typography variant="caption" sx={{ color: '#666' }}>REF: {receita.id.slice(0, 6).toUpperCase()}</Typography>
                   </Box>
                 </Box>
 
@@ -328,7 +328,7 @@ export default function RelatoriosPage() {
                           <Typography variant="caption" fontWeight="bold" align="center" display="block" color="text.primary">INSTRUÇÕES DE PREPARO</Typography>
                         </Box>
                         <Box sx={{ p: 2 }}>
-                          <Typography sx={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: 1.6, textAlign: 'justify', color: 'text.primary' }}>
+                          <Typography sx={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: 1.6, textAlign: 'justify', color: '#000' }}>
                             {receita.modo_preparo || 'Sem instruções cadastradas.'}
                           </Typography>
                         </Box>
@@ -363,7 +363,7 @@ export default function RelatoriosPage() {
                           <>
                             {/* PAINEL FRONTAL */}
                             <Box sx={{ border: '1px solid #000', p: 2, position: 'relative' }}>
-                              <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, borderRight: '1px solid #000', borderBottom: '1px solid #000', px: 1, py: 0.2, fontWeight: 'bold', fontSize: '0.6rem', color: 'text.primary' }}>
+                              <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, borderRight: '1px solid #000', borderBottom: '1px solid #000', px: 1, py: 0.2, fontWeight: 'bold', fontSize: '0.6rem', color: '#000' }}>
                                 PAINEL FRONTAL (RDC 429)
                               </Typography>
                               <Box sx={{ display: 'flex', justifyContent: 'center', py: 1, mt: 1 }}>
