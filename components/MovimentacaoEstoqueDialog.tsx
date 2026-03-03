@@ -77,7 +77,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
 
         try {
             const qty = Number(quantidade);
-            let novaQuantidade = lote.quantidade_atual;
+            let novaQuantidade = lote.quantidade_atual_g_ml;
 
             const isAjuste = tipo === 'AJUSTE';
             const isEntrada = tipo === 'ENTRADA';
@@ -127,7 +127,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
             // mas o conceito de transferência parcial de lote sem dividí-lo pode causar inconsistências físicas.
             // Vamos adotar: Transferência = "Saída enviada para [Local]"
 
-            const updatePayload: any = { quantidade_atual: novaQuantidade };
+            const updatePayload: any = { quantidade_atual_g_ml: novaQuantidade };
 
             // Se o usuário selecionou TRANSFERENCIA e está movendo TODO o lote restante,
             // podemos atualizar a localização do lote.
@@ -135,11 +135,11 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                 updatePayload.local_armazenamento = nomeDestino;
                 // Na vida real: lote inteiro movido. Qtd = mesmo do que estava.
                 // Revertendo a subtração para que a quantidade não vire 0
-                updatePayload.quantidade_atual = lote.quantidade_atual;
+                updatePayload.quantidade_atual_g_ml = lote.quantidade_atual_g_ml;
             }
 
             const { error: erroLote } = await supabase
-                .from('estoque_lotes')
+                .from('lotes_estoque')
                 .update(updatePayload)
                 .eq('id', lote.id);
 
@@ -153,12 +153,13 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
             else if (isDescartado) justificativaFinal = `DESCARTADO: ${motivo}`;
 
             const { error: erroHist } = await supabase
+                // @ts-ignore - Table typing is deprecated but might still exist in DB
                 .from('estoque_movimentacoes')
                 .insert({
                     lote_id: lote.id,
                     tipo_movimento: isTransferencia && novaQuantidade === 0 ? 'TRANSFERENCIA' : tipoHistorico,
-                    quantidade_movimentada: isAjuste ? (novaQuantidade - lote.quantidade_atual) : (isTransferencia && novaQuantidade === 0 ? lote.quantidade_atual : qty),
-                    quantidade_nova: isTransferencia && novaQuantidade === 0 ? lote.quantidade_atual : novaQuantidade,
+                    quantidade_movimentada: isAjuste ? (novaQuantidade - lote.quantidade_atual_g_ml) : (isTransferencia && novaQuantidade === 0 ? lote.quantidade_atual_g_ml : qty),
+                    quantidade_nova: isTransferencia && novaQuantidade === 0 ? lote.quantidade_atual_g_ml : novaQuantidade,
                     data_movimento: new Date().toISOString(),
                     justificativa: justificativaFinal,
                     responsavel_id: user?.id,
@@ -193,10 +194,10 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
 
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
                         <Typography variant="body2" color="text.secondary">
-                            Lote: {lote.codigo_lote_fornecedor || 'N/A'}
+                            Lote: {lote.numero_lote_fabricante || 'N/A'}
                         </Typography>
                         <Typography variant="body2" color="primary.main" fontWeight="bold">
-                            Atual: {lote.quantidade_atual} {lote.unidade_medida}
+                            Atual: {lote.quantidade_atual_g_ml} g/ml
                         </Typography>
                     </Box>
                 </Box>
@@ -246,7 +247,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                         value={quantidade}
                         onChange={(e) => setQuantidade(e.target.value)}
                         InputProps={{
-                            endAdornment: <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>{lote.unidade_medida}</Typography>
+                            endAdornment: <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>{'g/ml'}</Typography>
                         }}
                     />
 

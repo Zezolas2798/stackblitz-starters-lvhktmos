@@ -19,7 +19,6 @@ import { useClient } from '@/lib/ClientContext';
 import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 import MovimentacaoEstoqueDialog from '@/components/MovimentacaoEstoqueDialog';
 import MovimentacaoGeralDialog from '@/components/MovimentacaoGeralDialog';
-
 const STATUS_VALIDADE_OPTIONS = [
   { value: 'VENCIDO', label: '🔴 Vencidos (< 0 dias)' },
   { value: 'CRITICO', label: '🟠 Quase Vencendo (0 a 30 dias)' },
@@ -29,7 +28,7 @@ const STATUS_VALIDADE_OPTIONS = [
 
 export default function EstoquePage() {
   const theme = useTheme();
-  const { activeClientId } = useClient();
+  const { activeClientId, unidadeId } = useClient();
   const [lotes, setLotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -67,21 +66,27 @@ export default function EstoquePage() {
   async function loadEstoque() {
     setLoading(true);
 
+    if (!unidadeId) {
+      setLoading(false);
+      return;
+    }
+
     const { data: lotesData, error } = await supabase
-      .from('estoque_lotes')
-      .select('*, ingredientes(nome)')
-      .eq('cliente_id', activeClientId)
-      .neq('status_lote', 'ESGOTADO')
-      .order('data_validade_atual', { ascending: true });
+      .from('lotes_estoque')
+      .select('*, ingredientes(nome), fornecedores(razao_social)')
+      .eq('unidade_id', unidadeId)
+      .neq('status', 'REJEITADO')
+      .order('data_validade_rotulo', { ascending: true });
 
     if (lotesData) {
       setLotes(lotesData);
 
-      const locaisUnicos = Array.from(new Set(lotesData.map(l => l.local_armazenamento).filter(Boolean)));
-      const categoriasUnicas = Array.from(new Set(lotesData.map(l => l.categoria_produto).filter(Boolean)));
+      // Usaremos os campos aninhados agora
+      const locaisUnicos = ['Almoxarifado Principal', 'Câmara Fria', 'Área Quarentena']; // Exemplo fixo por enquanto
+      const categoriasUnicas = ['Geral', 'Secos', 'Refrigerados', 'Congelados'];
 
-      setLocaisDisponiveis(locaisUnicos as string[]);
-      setCategoriasDisponiveis(categoriasUnicas as string[]);
+      setLocaisDisponiveis(locaisUnicos);
+      setCategoriasDisponiveis(categoriasUnicas);
     }
     setLoading(false);
   }
@@ -99,15 +104,15 @@ export default function EstoquePage() {
     const termo = filtroBusca.toLowerCase();
     const matchBusca =
       (lote.ingredientes?.nome || '').toLowerCase().includes(termo) ||
-      (lote.marca || '').toLowerCase().includes(termo) ||
-      (lote.codigo_lote_fornecedor || '').toLowerCase().includes(termo);
+      (lote.fornecedores?.razao_social || '').toLowerCase().includes(termo) ||
+      (lote.numero_lote_fabricante || '').toLowerCase().includes(termo);
 
-    const matchLocal = filtroLocal ? lote.local_armazenamento === filtroLocal : true;
-    const matchCategoria = filtroCategoria ? lote.categoria_produto === filtroCategoria : true;
+    const matchLocal = filtroLocal ? true : true; // Sem DB field pra local ainda
+    const matchCategoria = filtroCategoria ? true : true; // Sem DB field pra categoria ainda
 
     let matchValidade = true;
     if (filtroValidade) {
-      const statusCalculado = calcularStatusValidade(lote.data_validade_atual);
+      const statusCalculado = calcularStatusValidade(lote.data_validade_rotulo);
       matchValidade = statusCalculado === filtroValidade;
     }
 
@@ -291,34 +296,34 @@ export default function EstoquePage() {
                           <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '0.95rem', color: 'text.primary' }}>
                             {lote.ingredientes?.nome || 'Ingrediente Desconhecido'}
                           </Typography>
-                          <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-                            {lote.marca && <Chip label={lote.marca} size="small" sx={{ fontSize: '0.7rem', height: 20, bgcolor: 'grey.100' }} />}
-                            {lote.categoria_produto && <Chip icon={<Tag size={10} />} label={lote.categoria_produto} size="small" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} />}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                            {lote.fornecedores?.razao_social && <Chip label={lote.fornecedores.razao_social} size="small" sx={{ fontSize: '0.7rem', height: 20, bgcolor: 'grey.100' }} />}
+                            {lote.status && <Chip label={lote.status} color={lote.status === 'QUARENTENA' ? 'warning' : lote.status === 'VENCIDO' ? 'error' : 'success'} size="small" sx={{ fontSize: '0.65rem', height: 18 }} />}
                           </Box>
                         </Box>
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
                           <MapPin size={16} />
-                          <Typography variant="body2" fontWeight={500}>{lote.local_armazenamento || 'Geral'}</Typography>
+                          <Typography variant="body2" fontWeight={500}>Almoxarifado Geral</Typography>
                         </Box>
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                           <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-                            Lote: {lote.codigo_lote_fornecedor}
+                            Lote: {lote.numero_lote_fabricante}
                           </Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                              {lote.data_validade_atual ? format(parseISO(lote.data_validade_atual), 'dd/MM/yyyy') : '-'}
+                              {lote.data_validade_rotulo ? format(parseISO(lote.data_validade_rotulo), 'dd/MM/yyyy') : '-'}
                             </Typography>
-                            {renderChipValidade(lote.data_validade_atual)}
+                            {renderChipValidade(lote.data_validade_rotulo)}
                           </Box>
                         </Box>
                       </TableCell>
                       <TableCell>
                         <Typography variant="h6" color="primary.main" sx={{ fontWeight: 800 }}>
-                          {lote.quantidade_atual} <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: 600 }}>{lote.unidade_medida}</span>
+                          {lote.quantidade_atual_g_ml} <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: 600 }}>{'g/ml'}</span>
                         </Typography>
                       </TableCell>
                       <TableCell align="right">

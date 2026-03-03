@@ -291,7 +291,7 @@ export default function RelatoriosPage() {
                               <TableRow>
                                 <TableCell sx={{ fontWeight: 'bold', borderBottom: '1px solid #000' }}>Item</TableCell>
                                 <TableCell align="right" sx={{ fontWeight: 'bold', borderBottom: '1px solid #000', width: '120px' }}>Peso Líq. (g)</TableCell>
-                                <TableCell align="right" sx={{ fontWeight: 'bold', borderBottom: '1px solid #000', width: '120px' }}>Uso Sugerido</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 'bold', borderBottom: '1px solid #000', width: '120px' }}>Medida Caseira</TableCell>
                               </TableRow>
                             </TableHead>
                             <TableBody>

@@ -43,17 +43,17 @@ export default function MovimentacaoGeralDialog({ open, onClose, clienteId, onLo
 
         // Busca os lotes ativos do cliente
         let query = supabase
-            .from('estoque_lotes')
+            .from('lotes_estoque')
             .select('*, ingredientes(nome)')
-            .eq('cliente_id', clienteId)
-            .neq('status_lote', 'ESGOTADO');
+            .eq('unidade_id', clienteId) // Assumindo clienteId = unidadeId para esse escopo no MVP
+            .neq('status', 'VENCIDO');
 
         // Se houver termo, busca por ingrediente, lote ou marca
         // Como a relação com ingredientes(nome) não permite ilike fácil pela API REST,
         // buscamos primeiro e filtramos no front se necessário, OU o termo aqui bate com lote e marca.
         // Para simplificar e garantir busca full text, traremos e filtraremos localmente se o termo for curto,
         // ou usamos a busca de texto se configurada.
-        const { data } = await query.order('data_validade_atual', { ascending: true });
+        const { data } = await query.order('data_validade_interna', { ascending: true });
 
         if (data) {
             if (!termo) {
@@ -62,8 +62,7 @@ export default function MovimentacaoGeralDialog({ open, onClose, clienteId, onLo
                 const lowerTerm = termo.toLowerCase();
                 const filtered = data.filter(lote =>
                     (lote.ingredientes?.nome || '').toLowerCase().includes(lowerTerm) ||
-                    (lote.codigo_lote_fornecedor || '').toLowerCase().includes(lowerTerm) ||
-                    (lote.marca || '').toLowerCase().includes(lowerTerm)
+                    (lote.numero_lote_fabricante || '').toLowerCase().includes(lowerTerm)
                 );
                 setLotes(filtered.slice(0, 15));
             }
@@ -136,16 +135,16 @@ export default function MovimentacaoGeralDialog({ open, onClose, clienteId, onLo
                                             <Typography variant="subtitle2" fontWeight="bold">
                                                 {lote.ingredientes?.nome}
                                             </Typography>
-                                            <Chip label={`${lote.quantidade_atual} ${lote.unidade_medida}`} size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem' }} />
+                                            <Chip label={`${lote.quantidade_atual_g_ml} g/ml`} size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem' }} />
                                         </Box>
                                     }
                                     secondary={
                                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.5 }}>
                                             <Typography variant="caption" color="text.secondary">
-                                                Lote: {lote.codigo_lote_fornecedor || 'N/A'} | Local: {lote.local_armazenamento || 'Geral'}
+                                                Lote: {lote.numero_lote_fabricante || 'N/A'} | Local: {lote.local_armazenamento || 'Geral'}
                                             </Typography>
                                             <Typography variant="caption" color="text.secondary">
-                                                Validade: {new Date(lote.data_validade_atual).toLocaleDateString()}
+                                                Validade: {new Date(lote.data_validade_interna).toLocaleDateString()}
                                             </Typography>
                                         </Box>
                                     }

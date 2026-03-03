@@ -74,7 +74,7 @@ export default function LoginPage() {
           />
         </Box>
         <Typography variant="body2" color="text.secondary">
-          Sistema de Gestão & Qualidade GxP
+          Sistema de Gestão & Qualidade
         </Typography>
 
         <Paper
