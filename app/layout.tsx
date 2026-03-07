@@ -11,13 +11,13 @@ import '@fontsource/inter/500.css';
 import '@fontsource/inter/600.css';
 import '@fontsource/inter/700.css';
 
-import { ClientProvider } from '@/lib/ClientContext';
+import { ClientProvider, useClient } from '@/lib/ClientContext';
 import { ThemeContextProvider, useThemeContext } from '@/lib/ThemeContext';
 import { AppSidebar } from '@/components/AppSidebar';
 import { AppHeader } from '@/components/AppHeader';
 
 import { ThemeProvider } from '@mui/material/styles';
-import { CssBaseline, Box } from '@mui/material';
+import { CssBaseline, Box, Toolbar } from '@mui/material';
 import { getTheme } from '@/lib/theme';
 
 const DRAWER_WIDTH = 280;
@@ -27,6 +27,9 @@ function ThemeApplier({ children }: { children: React.ReactNode }) {
   const theme = useMemo(() => getTheme(mode), [mode]);
   const pathname = usePathname(); // Pega a rota atual
   const isLoginPage = pathname === '/login'; // Verifica se é a tela de login
+
+  const { desktopOpen } = useClient();
+  const currentDrawerWidth = desktopOpen ? DRAWER_WIDTH : 0;
 
   return (
     <ThemeProvider theme={theme}>
@@ -50,6 +53,9 @@ function ThemeApplier({ children }: { children: React.ReactNode }) {
         // === LAYOUT DO SISTEMA (Com Sidebar e Header) ===
         <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
 
+          {/* Cabeçalho Fixo Full-Width */}
+          <AppHeader />
+
           {/* Menu Lateral */}
           <AppSidebar width={DRAWER_WIDTH} />
 
@@ -58,14 +64,19 @@ function ThemeApplier({ children }: { children: React.ReactNode }) {
             component="main"
             sx={{
               flexGrow: 1,
-              width: { xs: '100%', md: `calc(100% - ${DRAWER_WIDTH}px)` },
+              width: { xs: '100%', md: `calc(100% - ${currentDrawerWidth}px)` },
+              transition: theme.transitions.create('width', {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.enteringScreen,
+              }),
               minHeight: '100vh',
               display: 'flex',
               flexDirection: 'column',
               bgcolor: 'background.default'
             }}
           >
-            <AppHeader />
+            {/* Espaçador para o Cabeçalho Fixo */}
+            <Toolbar />
 
             {/* Conteúdo */}
             <Box component="div" sx={{ p: 3, flexGrow: 1, overflow: 'auto' }}>

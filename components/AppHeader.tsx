@@ -7,12 +7,12 @@ import { AppBar, Toolbar, IconButton, Typography, Box, Badge, Avatar, Stack } fr
 import { Menu as MenuIcon, Notifications, Person, LightMode, DarkMode } from '@mui/icons-material';
 
 export function AppHeader() {
-  const { toggleMobileSidebar, unidadeSelecionada } = useClient();
+  const { toggleMobileSidebar, toggleDesktopSidebar, unidadeSelecionada } = useClient();
   const { mode, toggleTheme } = useThemeContext();
 
   return (
     <AppBar
-      position="sticky"
+      position="fixed"
       color="inherit"
       elevation={0}
       sx={{
@@ -32,6 +32,25 @@ export function AppHeader() {
         >
           <MenuIcon />
         </IconButton>
+
+        {/* Ícone Menu (Desktop) */}
+        <IconButton
+          color="inherit"
+          edge="start"
+          onClick={toggleDesktopSidebar}
+          sx={{ mr: 2, display: { xs: 'none', md: 'flex' } }}
+        >
+          <MenuIcon />
+        </IconButton>
+
+        {/* LOGO DO SISTEMA NO HEADER */}
+        <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
+          <img
+            src={mode === 'dark' ? "/logo-cortex.svg" : "/logo-cortex-light.svg"}
+            alt="Córtex Food Solution"
+            style={{ height: '36px', objectFit: 'contain' }}
+          />
+        </Box>
 
         {/* Breadcrumb da Unidade */}
         <Box sx={{ flexGrow: 1 }}>

@@ -1,0 +1,1 @@
+ALTER TABLE public.lotes_estoque ADD COLUMN IF NOT EXISTS registro_sif VARCHAR(100);

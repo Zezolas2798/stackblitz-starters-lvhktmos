@@ -76,6 +76,7 @@ export default function EstoquePage() {
       .select('*, ingredientes(nome), fornecedores(razao_social)')
       .eq('unidade_id', unidadeId)
       .neq('status', 'REJEITADO')
+      .is('deleted_at', null) // Governança GxP: Esconde Lotes Apagados (Soft Delete)
       .order('data_validade_rotulo', { ascending: true });
 
     if (lotesData) {
@@ -185,20 +186,6 @@ export default function EstoquePage() {
           <Button variant="outlined" startIcon={<History size={18} />} color="inherit">
             Histórico
           </Button>
-          <Button
-            variant="contained"
-            color="secondary"
-            startIcon={<ScanLine size={20} />}
-            sx={{ fontWeight: 'bold' }}
-            onClick={() => setBuscaGeralOpen(true)}
-          >
-            Movimentar Insumo
-          </Button>
-          <Link href="/estoque/entrada" passHref style={{ textDecoration: 'none' }}>
-            <Button variant="contained" startIcon={<Plus size={20} />} sx={{ fontWeight: 'bold', px: 3 }}>
-              Nova Entrada
-            </Button>
-          </Link>
         </Box>
       </Box>
 

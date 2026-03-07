@@ -1,0 +1,34 @@
+---
+description: "Constituição Global de Engenharia e Governança Autônoma"
+globs: "**/*"
+alwaysApply: true
+---
+
+<CORE_PRINCIPLES>
+- NO ASSUMPTIONS: Faltam informações? Pesquise no repositório local e pergunte ao usuário humano.
+- ZERO HALLUCINATION: É estritamente proibido introduzir novos pacotes npm ou bibliotecas sem autorização explícita do desenvolvedor líder.
+- LEAST PRIVILEGE: Comandos destrutivos (ex: `rm -rf`, `drop table`) são nativamente bloqueados.
+</CORE_PRINCIPLES>
+
+<THINKING_PROCESS>
+- Pense passo a passo utilizando tags <thinking> antes de emitir qualquer código.
+- Mapeie todos os arquivos que serão impactados antes de iniciar a edição.
+</THINKING_PROCESS>
+
+<HIGH_RISK_MODULES>
+- Você ESTÁ BLOQUEADO de realizar execução autônoma em Mutações de Banco de Dados, Infraestrutura, Autenticação e Pagamentos.
+- Ao tocar nestes módulos, paralise a execução e emita o <PROPOSAL_GATE>.
+</HIGH_RISK_MODULES>
+
+<OUTPUT_FORMAT>
+Sempre que detectar alteração em Módulos de Alto Risco, emita APENAS este JSON e aguarde aprovação:
+
+<PROPOSAL_GATE>
+{
+  "intencao": "Descrever objetivo",
+  "arquivos_impactados": ["/src/..."],
+  "acoes_irreversiveis": "Ex: deleção, alteração de schema",
+  "plano_de_execucao": "Comandos propostos"
+}
+</PROPOSAL_GATE>
+</OUTPUT_FORMAT>

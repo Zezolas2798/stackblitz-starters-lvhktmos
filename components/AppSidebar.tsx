@@ -23,7 +23,8 @@ import {
   Divider,
   IconButton,
   Button,
-  Skeleton
+  Skeleton,
+  Toolbar
 } from '@mui/material';
 
 // Ícones Material UI
@@ -49,7 +50,7 @@ interface AppSidebarProps {
 export function AppSidebar({ width }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { mobileOpen, toggleMobileSidebar, closeMobileSidebar } = useClient();
+  const { mobileOpen, toggleMobileSidebar, closeMobileSidebar, desktopOpen } = useClient();
   const { mode } = useThemeContext();
 
   // Hook de Permissões: Traz o poder de decisão para o menu
@@ -85,16 +86,22 @@ export function AppSidebar({ width }: AppSidebarProps) {
           visible: can('production.order.create') || can('production.picking.view')
         },
         {
-          label: 'Estoque & Lotes',
+          label: 'Recebimento de Entrada',
+          href: '/estoque/entrada',
+          icon: <LocalShipping />,
+          visible: can('stock.balance.view') // Permissão de estoque mantida
+        },
+        {
+          label: 'Estoque e Prazos',
           href: '/estoque',
           icon: <Inventory />,
           visible: can('stock.balance.view')
         },
         {
-          label: 'Fornecedores',
-          href: '/fornecedores',
-          icon: <LocalShipping />,
-          visible: can('stock.suppliers.manage')
+          label: 'Documentos e GED',
+          href: '/documentos',
+          icon: <Description />,
+          visible: can('stock.suppliers.manage') // Pode ser refeito p/ admin depois
         },
         {
           label: 'Gestão de Tarefas',
@@ -124,6 +131,12 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       title: 'QUALIDADE (GxP)',
       items: [
+        {
+          label: 'Certificações (SIVISA)',
+          href: '/certificacoes',
+          icon: <VerifiedUser />,
+          visible: can('quality.audit.perform') || can('quality.action_plan.manage')
+        },
         {
           label: 'Auditorias',
           href: '/qualidade',
@@ -173,17 +186,13 @@ export function AppSidebar({ width }: AppSidebarProps) {
 
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.paper' }}>
-      {/* Logo */}
-      <Box sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 160 }}>
-        <img
-          src={mode === 'dark' ? "/logo-cortex.svg" : "/logo-cortex-light.svg"}
-          alt="Córtex Food Solution Logo"
-          style={{ maxHeight: '120px', maxWidth: '100%', objectFit: 'contain' }}
-        />
-        <IconButton onClick={closeMobileSidebar} sx={{ display: { md: 'none' }, position: 'absolute', right: 8, top: 8 }}>
+      {/* Spacer para Desktop (compensar Header fixo) e Fechar Mobile */}
+      <Toolbar sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'flex-end', px: 1 }}>
+        <IconButton onClick={closeMobileSidebar}>
           <Close />
         </IconButton>
-      </Box>
+      </Toolbar>
+      <Toolbar sx={{ display: { xs: 'none', md: 'flex' } }} />
       <Divider />
 
       {/* Seletor de Unidade */}
@@ -271,7 +280,12 @@ export function AppSidebar({ width }: AppSidebarProps) {
   );
 
   return (
-    <Box component="nav" sx={{ width: { md: width }, flexShrink: { md: 0 } }}>
+    <Box component="nav" sx={{
+      width: { md: desktopOpen ? width : 0 },
+      flexShrink: { md: 0 },
+      overflowX: 'hidden',
+      transition: 'width 0.225s cubic-bezier(0.4, 0, 0.6, 1) 0ms'
+    }}>
       <Drawer
         variant="temporary"
         open={mobileOpen}
@@ -285,12 +299,17 @@ export function AppSidebar({ width }: AppSidebarProps) {
         {drawerContent}
       </Drawer>
       <Drawer
-        variant="permanent"
+        variant="persistent"
+        open={desktopOpen}
         sx={{
           display: { xs: 'none', md: 'block' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: width, borderRight: '1px solid #e0e0e0' },
+          '& .MuiDrawer-paper': {
+            boxSizing: 'border-box',
+            width: width,
+            borderRight: '1px solid #e0e0e0',
+            transition: 'transform 0.225s cubic-bezier(0.4, 0, 0.6, 1) 0ms'
+          },
         }}
-        open
       >
         {drawerContent}
       </Drawer>

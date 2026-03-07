@@ -5,18 +5,18 @@ import Link from 'next/link';
 import { useClient } from '@/lib/ClientContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Ingrediente } from '@/lib/types';
-import { 
-  Box, 
-  Button, 
-  Typography, 
-  Paper, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  Chip, 
+import {
+  Box,
+  Button,
+  Typography,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
   IconButton,
   TextField,
   InputAdornment,
@@ -25,11 +25,11 @@ import {
   Tooltip,
   Container
 } from '@mui/material';
-import { 
-  Add, 
-  Search, 
-  Edit, 
-  Delete, 
+import {
+  Add,
+  Search,
+  Edit,
+  Delete,
   FilterList,
   Science,
   Restaurant
@@ -51,7 +51,7 @@ export default function IngredientesPage() {
   const fetchIngredientes = async () => {
     try {
       setLoadingData(true);
-      
+
       // REGRA DE OURO GxP:
       // Busca ingredientes do Cliente Atual OU Ingredientes do Sistema (cliente_id IS NULL)
       // Isso isola os dados para que um cliente não veja os dados do outro.
@@ -73,7 +73,7 @@ export default function IngredientesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este ingrediente?')) return;
     try {
-      const { error } = await supabase.from('ingredientes').delete().eq('id', id);
+      const { error } = await supabase.from('ingredientes').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
       fetchIngredientes(); // Atualiza a lista
     } catch (error: any) {
@@ -82,7 +82,7 @@ export default function IngredientesPage() {
   };
 
   // Filtragem local (Busca rápida no Frontend)
-  const filteredIngredientes = ingredientes.filter(ing => 
+  const filteredIngredientes = ingredientes.filter(ing =>
     ing.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -94,7 +94,7 @@ export default function IngredientesPage() {
       </Box>
     );
   }
-  
+
   if (!unidadeSelecionada) {
     return (
       <Container maxWidth="md" sx={{ mt: 4 }}>
@@ -187,9 +187,9 @@ export default function IngredientesPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Chip 
-                      label={ing.tipo_ingrediente || 'SIMPLES'} 
-                      size="small" 
+                    <Chip
+                      label={ing.tipo_ingrediente || 'SIMPLES'}
+                      size="small"
                       color={ing.tipo_ingrediente === 'COMPOSTO' ? 'info' : 'default'}
                       variant="outlined"
                       sx={{ fontSize: '0.7rem' }}
@@ -197,18 +197,18 @@ export default function IngredientesPage() {
                   </TableCell>
                   <TableCell>
                     {ing.cliente_id ? (
-                      <Chip 
-                        icon={<Restaurant style={{ fontSize: 14 }} />} 
-                        label="Próprio" 
-                        size="small" 
-                        color="primary" 
-                        sx={{ height: 24 }} 
+                      <Chip
+                        icon={<Restaurant style={{ fontSize: 14 }} />}
+                        label="Próprio"
+                        size="small"
+                        color="primary"
+                        sx={{ height: 24 }}
                       />
                     ) : (
-                      <Chip 
-                        label="Sistema (TACO)" 
-                        size="small" 
-                        sx={{ bgcolor: 'grey.200', color: 'text.secondary' }} 
+                      <Chip
+                        label="Sistema (TACO)"
+                        size="small"
+                        sx={{ bgcolor: 'grey.200', color: 'text.secondary' }}
                       />
                     )}
                   </TableCell>

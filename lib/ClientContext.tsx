@@ -9,24 +9,28 @@ interface ClientContextType {
   // --- GESTÃO DE ACESSO (CORE GxP) ---
   unidadeSelecionada: ClienteUnidade | null; // A unidade física onde o usuário está trabalhando
   unidadeId: string | null; // Atalho rápido para ID
-  
+
   // Lista de todas as unidades que este usuário tem permissão de acessar
   minhasUnidades: ClienteUnidade[];
   loading: boolean;
-  
+
   // --- AÇÕES ---
   setUnidadeSelecionada: (unidade: ClienteUnidade | null) => void;
   refreshUnidades: () => Promise<void>;
-  
+
   // --- COMPATIBILIDADE (LAYOUT & LEGADO) ---
   // Mantemos 'activeClientId' para não quebrar componentes antigos que dependem disso
   activeClientId: string | null;
   activeClientName: string | null;
-  
+
   // Controle do Sidebar Mobile (Preservado do original)
   mobileOpen: boolean;
   toggleMobileSidebar: () => void;
   closeMobileSidebar: () => void;
+
+  // Controle do Sidebar Desktop (Retrátil)
+  desktopOpen: boolean;
+  toggleDesktopSidebar: () => void;
 }
 
 const ClientContext = createContext<ClientContextType | undefined>(undefined);
@@ -37,15 +41,16 @@ export function ClientProvider({ children }: { children: ReactNode }) {
   const [minhasUnidades, setMinhasUnidades] = useState<ClienteUnidade[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 2. Estados de UI (Sidebar Mobile)
+  // 2. Estados de UI (Sidebar)
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopOpen, setDesktopOpen] = useState(true);
 
   // 3. Função Core: Buscar Permissões e Unidades no Supabase
   const fetchUnidades = async () => {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         setMinhasUnidades([]);
         return;
@@ -88,7 +93,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
       // 4. Lógica de Persistência Inteligente
       // Tenta recuperar a última unidade que o usuário estava usando
       const lastUnitId = localStorage.getItem('nutridev_last_unit_id');
-      
+
       if (lastUnitId) {
         const found = unidadesCarregadas.find(u => u.id === lastUnitId);
         if (found) {
@@ -135,20 +140,22 @@ export function ClientProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // 7. Funções de Layout (Mobile)
+  // 7. Funções de Layout (Mobile & Desktop)
   const toggleMobileSidebar = () => setMobileOpen(!mobileOpen);
   const closeMobileSidebar = () => setMobileOpen(false);
+
+  const toggleDesktopSidebar = () => setDesktopOpen(!desktopOpen);
 
   // 8. Derivação de Dados (Helpers de Compatibilidade)
   // Alguns componentes antigos esperam 'clientId', então derivamos isso da Unidade selecionada
   const activeClientId = unidadeSelecionada?.cliente_id || null;
-  const activeClientName = unidadeSelecionada?.cliente 
+  const activeClientName = unidadeSelecionada?.cliente
     ? (unidadeSelecionada.cliente.nome_fantasia || unidadeSelecionada.cliente.razao_social)
     : null;
 
   return (
-    <ClientContext.Provider 
-      value={{ 
+    <ClientContext.Provider
+      value={{
         // Estado Principal
         unidadeSelecionada,
         unidadeId: unidadeSelecionada?.id || null,
@@ -160,11 +167,13 @@ export function ClientProvider({ children }: { children: ReactNode }) {
         // Compatibilidade Legado
         activeClientId,
         activeClientName,
-        
+
         // Layout
         mobileOpen,
         toggleMobileSidebar,
-        closeMobileSidebar
+        closeMobileSidebar,
+        desktopOpen,
+        toggleDesktopSidebar
       }}
     >
       {children}

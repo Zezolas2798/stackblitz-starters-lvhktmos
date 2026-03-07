@@ -1,0 +1,1061 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import {
+  Box, Typography, Button, Paper, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Chip, IconButton, Container,
+  Grid, List, ListItemButton, ListItemIcon, ListItemText, Divider,
+  Collapse, Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
+  Tooltip, Breadcrumbs, Link, Skeleton
+} from '@mui/material';
+import {
+  Folder, InsertDriveFile, Warning, CheckCircle,
+  UploadFile, CreateNewFolder, MoreVert, ExpandLess, ExpandMore,
+  Add, Edit, Delete, ArrowBack, NavigateNext, Download, Link as LinkIcon, DriveFileMove
+} from '@mui/icons-material';
+import { supabase } from '@/lib/supabaseClient';
+import { useClient } from '@/lib/ClientContext';
+import { format, isBefore } from 'date-fns';
+
+interface Categoria {
+  id: string;
+  nome: string;
+}
+
+interface Pasta {
+  id: string;
+  categoria_id: string;
+  parent_id: string | null;
+  nome: string;
+}
+
+interface Arquivo {
+  id: string;
+  nome_arquivo: string;
+  data_emissao: string | null;
+  data_validade: string | null;
+  url_storage: string | null;
+}
+
+export default function GEDPage() {
+  const { activeClientId } = useClient();
+  const [loading, setLoading] = useState(false);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [pastas, setPastas] = useState<Pasta[]>([]);
+  const [arquivosAtuais, setArquivosAtuais] = useState<Arquivo[]>([]);
+
+  // ESTADOS DE NAVEGAÇÃO DRIVE
+  const [activeCategoriaId, setActiveCategoriaId] = useState<string | null>(null);
+  const [activePastaId, setActivePastaId] = useState<string | null>(null);
+
+  // SANFONA SIDEBAR
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
+  // ESTADOS DO CRUD PASTAS
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [activeNodeForMenu, setActiveNodeForMenu] = useState<{ id: string, type: 'categoria' | 'pasta', catId: string } | null>(null);
+
+  // ESTADOS DO CRUD ARQUIVOS
+  const [fileMenuAnchorEl, setFileMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [activeFileForMenu, setActiveFileForMenu] = useState<Arquivo | null>(null);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<'create_cat' | 'create_folder' | 'edit_cat' | 'edit_folder' | 'edit_file'>('create_folder');
+  const [targetPastaId, setTargetPastaId] = useState<string | null>(null);
+  const [targetCatId, setTargetCatId] = useState<string | null>(null);
+  const [targetFileId, setTargetFileId] = useState<string | null>(null);
+  const [inputValue, setInputValue] = useState('');
+
+  // ESTADOS DE EDIÇÃO DE ARQUIVO
+  const [editFileOpen, setEditFileOpen] = useState(false);
+  const [editDocNome, setEditDocNome] = useState('');
+  const [editDocEmissao, setEditDocEmissao] = useState('');
+  const [editDocValidade, setEditDocValidade] = useState('');
+
+  // ESTADOS DO MOVER
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [nodeToMove, setNodeToMove] = useState<{ id: string, type: 'categoria' | 'pasta' | 'arquivo', nome: string } | null>(null);
+  const [moveTargetCategoriaId, setMoveTargetCategoriaId] = useState<string | null>(null);
+  const [moveTargetPastaId, setMoveTargetPastaId] = useState<string | null>(null);
+
+  // ESTADOS DO UPLOAD
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+  const [docNome, setDocNome] = useState('');
+  const [docEmissao, setDocEmissao] = useState('');
+  const [docValidade, setDocValidade] = useState('');
+
+  const toggleCategory = (id: string) => {
+    setExpandedCategories(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleFolder = (id: string) => {
+    setExpandedFolders(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // NAVEGAÇÃO PRINCIPAL (BREADCRUMBS)
+  const getBreadcrumbs = () => {
+    let breadcrumbs: any[] = [];
+    if (activeCategoriaId) {
+      const cat = categorias.find(c => c.id === activeCategoriaId);
+      if (cat) breadcrumbs.push({ name: cat.nome, id: cat.id, type: 'categoria' });
+    }
+
+    if (activePastaId) {
+      let current = pastas.find(p => p.id === activePastaId);
+      const pastaPath = [];
+      while (current) {
+        pastaPath.unshift({ name: current.nome, id: current.id, type: 'pasta', catId: current.categoria_id });
+        current = pastas.find(p => p.id === current?.parent_id);
+      }
+      breadcrumbs = [...breadcrumbs, ...pastaPath];
+    }
+    return breadcrumbs;
+  };
+
+  const handleNavigateBreadcrumb = (node: any) => {
+    if (node.type === 'categoria') {
+      setActiveCategoriaId(node.id);
+      setActivePastaId(null);
+    } else {
+      setActiveCategoriaId(node.catId);
+      setActivePastaId(node.id);
+    }
+  };
+
+  const handleBack = () => {
+    if (activePastaId) {
+      const current = pastas.find(p => p.id === activePastaId);
+      if (current && current.parent_id) {
+        setActivePastaId(current.parent_id);
+      } else {
+        setActivePastaId(null);
+      }
+    } else if (activeCategoriaId) {
+      setActiveCategoriaId(null);
+    }
+  };
+
+  // GRID VISUAL (QUADRADOS)
+  const getFoldersToShow = () => {
+    if (!activeCategoriaId) {
+      return categorias.map(c => ({ id: c.id, nome: c.nome, type: 'categoria' }));
+    }
+    if (activeCategoriaId && !activePastaId) {
+      return pastas.filter(p => p.categoria_id === activeCategoriaId && p.parent_id === null).map(p => ({ ...p, type: 'pasta', categoria_id: p.categoria_id }));
+    }
+    if (activePastaId) {
+      return pastas.filter(p => p.parent_id === activePastaId).map(p => ({ ...p, type: 'pasta', categoria_id: p.categoria_id }));
+    }
+    return [];
+  };
+
+  const handleGridFolderClick = (node: any) => {
+    if (node.type === 'categoria') {
+      setActiveCategoriaId(node.id);
+      setActivePastaId(null);
+    } else {
+      setActiveCategoriaId(node.categoria_id);
+      setActivePastaId(node.id);
+    }
+  };
+
+
+  // RENDERIZAÇÃO SIDEBAR
+  const renderPastasSidebar = (categoriaId: string, parentId: string | null = null, level: number = 0) => {
+    const pastasFilhas = pastas.filter(p => p.categoria_id === categoriaId && p.parent_id === parentId);
+    if (pastasFilhas.length === 0) return null;
+
+    return (
+      <List component="div" disablePadding>
+        {pastasFilhas.map(pasta => {
+          const hasChildren = pastas.some(p => p.parent_id === pasta.id);
+          const isExpanded = expandedFolders[pasta.id];
+          return (
+            <Box key={pasta.id}>
+              <ListItemButton
+                selected={activePastaId === pasta.id}
+                onClick={() => {
+                  setActiveCategoriaId(categoriaId);
+                  setActivePastaId(pasta.id);
+                  if (hasChildren) toggleFolder(pasta.id);
+                }}
+                sx={{ pl: 4 + (level * 3), pr: 1 }}
+              >
+                <ListItemIcon sx={{ minWidth: 35 }}>
+                  <Folder fontSize="small" color={activePastaId === pasta.id ? "primary" : "inherit"} />
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Tooltip title={pasta.nome} placement="top-start" enterDelay={500}>
+                      <Typography variant="body2" sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        lineHeight: 1.2
+                      }}>
+                        {pasta.nome}
+                      </Typography>
+                    </Tooltip>
+                  }
+                />
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveNodeForMenu({ id: pasta.id, type: 'pasta', catId: categoriaId });
+                    setMenuAnchorEl(e.currentTarget);
+                  }}
+                >
+                  <MoreVert fontSize="small" />
+                </IconButton>
+                {hasChildren ? (isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />) : null}
+              </ListItemButton>
+              {hasChildren && (
+                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                  {renderPastasSidebar(categoriaId, pasta.id, level + 1)}
+                </Collapse>
+              )}
+            </Box>
+          );
+        })}
+      </List>
+    );
+  };
+
+  useEffect(() => {
+    if (activeClientId) {
+      fetchEstruturaRaiz();
+    }
+  }, [activeClientId]);
+
+  useEffect(() => {
+    if (activePastaId) {
+      fetchArquivos(activePastaId);
+    } else {
+      setArquivosAtuais([]);
+    }
+  }, [activePastaId]);
+
+  async function fetchEstruturaRaiz() {
+    setLoading(true);
+    const { data: catData } = await supabase
+      .from('documentos_categorias')
+      .select('*')
+      .order('ordem');
+
+    const { data: pastData } = await supabase
+      .from('documentos_pastas')
+      .select('*')
+      .order('ordem');
+
+    if (catData) setCategorias(catData);
+    if (pastData) setPastas(pastData);
+    setLoading(false);
+  }
+
+  async function fetchArquivos(pastaId: string) {
+    const { data } = await supabase
+      .from('documentos_arquivos')
+      .select('*')
+      .eq('pasta_id', pastaId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (data) setArquivosAtuais(data);
+  }
+
+  const checkVencido = (validade: string | null) => {
+    if (!validade) return false;
+    return isBefore(new Date(validade), new Date());
+  };
+
+  // === FUNÇÕES DE API (UPLOAD DE ARQUIVOS) ===
+  const handleOpenUploadDialog = () => {
+    setFileToUpload(null);
+    setDocNome('');
+    setDocEmissao('');
+    setDocValidade('');
+    setUploadDialogOpen(true);
+  };
+
+  const executeUpload = async () => {
+    if (!fileToUpload || !activePastaId) return;
+
+    try {
+      setIsUploading(true);
+
+      // 1. Gera nome único pro bucket
+      const fileExt = fileToUpload.name.split('.').pop();
+      const fileNameUnico = `${activeClientId}/${activePastaId}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      // 2. Sobe fisicamente no Bucket S3 (Supabase Storage)
+      const { error: uploadError, data: uploadData } = await supabase.storage
+        .from('ged_documentos')
+        .upload(fileNameUnico, fileToUpload);
+
+      if (uploadError) throw uploadError;
+
+      // 3. Registra os MetaDados Padrão GxP na Tabela SQl
+      const { error: dbError } = await supabase.from('documentos_arquivos' as any).insert({
+        pasta_id: activePastaId,
+        nome_arquivo: docNome || fileToUpload.name, // Nome customizado ou nativo
+        url_storage: uploadData.path, // O caminho relativo no bucket
+        data_emissao: docEmissao || null,
+        data_validade: docValidade || null,
+      });
+
+      if (dbError) {
+        // Fallback: se der erro no SQL, tentar deletar a sujeira no Bucket (Boas práticas GxP)
+        await supabase.storage.from('ged_documentos').remove([uploadData.path]);
+        throw dbError;
+      }
+
+      setUploadDialogOpen(false);
+      fetchArquivos(activePastaId); // Reativa e refaz a query
+    } catch (err: any) {
+      console.error('Falha crítica no Upload:', err);
+      alert('Erro ao enviar documento. ' + err.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleOpenDialog = (mode: 'create_cat' | 'create_folder' | 'edit_cat' | 'edit_folder' | 'edit_file', catId: string | null = null, parentId: string | null = null, defaultName: string = '', fileId: string | null = null) => {
+    setDialogMode(mode);
+    setTargetCatId(catId);
+    setTargetPastaId(parentId);
+    setTargetFileId(fileId);
+    setInputValue(defaultName);
+    setDialogOpen(true);
+    setMenuAnchorEl(null);
+    setFileMenuAnchorEl(null);
+  };
+
+  const handleSaveNode = async () => {
+    if (!inputValue.trim()) return;
+
+    if (dialogMode === 'create_cat') {
+      await supabase.from('documentos_categorias' as any).insert({ cliente_id: activeClientId, nome: inputValue });
+    } else if (dialogMode === 'edit_cat') {
+      await supabase.from('documentos_categorias' as any).update({ nome: inputValue }).eq('id', targetCatId);
+    } else if (dialogMode === 'create_folder') {
+      await supabase.from('documentos_pastas' as any).insert({ categoria_id: targetCatId, parent_id: targetPastaId, nome: inputValue });
+    } else if (dialogMode === 'edit_folder') {
+      await supabase.from('documentos_pastas' as any).update({ nome: inputValue }).eq('id', targetPastaId);
+    } else if (dialogMode === 'edit_file') {
+      await supabase.from('documentos_arquivos' as any).update({ nome_arquivo: inputValue }).eq('id', targetFileId);
+    }
+
+    setDialogOpen(false);
+    fetchEstruturaRaiz();
+    if (activePastaId) fetchArquivos(activePastaId);
+  };
+
+  const handleOpenMoveDialog = (node: { id: string, type: 'categoria' | 'pasta' | 'arquivo', nome: string }) => {
+    setNodeToMove(node);
+    setMoveTargetCategoriaId(null);
+    setMoveTargetPastaId(null);
+    setMoveDialogOpen(true);
+    setMenuAnchorEl(null);
+    setFileMenuAnchorEl(null);
+  };
+
+  const handleSaveMove = async () => {
+    if (!nodeToMove) return;
+
+    if (nodeToMove.type === 'pasta') {
+      if (!moveTargetCategoriaId) {
+        alert('Selecione uma categoria de destino.'); return;
+      }
+      if (nodeToMove.id === moveTargetPastaId) {
+        alert('Não é possível mover uma pasta para dentro de si mesma.'); return;
+      }
+      await supabase.from('documentos_pastas' as any).update({ categoria_id: moveTargetCategoriaId, parent_id: moveTargetPastaId }).eq('id', nodeToMove.id);
+    } else if (nodeToMove.type === 'arquivo') {
+      if (!moveTargetPastaId) {
+        alert('Selecione uma pasta de destino válida para o arquivo.'); return;
+      }
+      await supabase.from('documentos_arquivos' as any).update({ pasta_id: moveTargetPastaId }).eq('id', nodeToMove.id);
+    }
+
+    setMoveDialogOpen(false);
+    setNodeToMove(null);
+    fetchEstruturaRaiz();
+    if (activePastaId) fetchArquivos(activePastaId);
+  };
+
+  const handleOpenEditFile = (file: Arquivo) => {
+    setTargetFileId(file.id);
+    setEditDocNome(file.nome_arquivo);
+    setEditDocEmissao(file.data_emissao ? new Date(file.data_emissao).toISOString().split('T')[0] : '');
+    setEditDocValidade(file.data_validade ? new Date(file.data_validade).toISOString().split('T')[0] : '');
+    setEditFileOpen(true);
+    setFileMenuAnchorEl(null);
+  };
+
+  const handleSaveEditFile = async () => {
+    if (!editDocNome.trim() || !targetFileId) return;
+
+    try {
+      const { error } = await supabase.from('documentos_arquivos' as any).update({
+        nome_arquivo: editDocNome,
+        data_emissao: editDocEmissao || null,
+        data_validade: editDocValidade || null
+      }).eq('id', targetFileId);
+
+      if (error) throw error;
+
+      setEditFileOpen(false);
+      if (activePastaId) fetchArquivos(activePastaId);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao salvar as edições do documento.');
+    }
+  };
+
+  const handleDeleteNode = async () => {
+    if (!activeNodeForMenu) return;
+    const confirm = window.confirm("Tem certeza? Esta ação removerá a pasta e todo o seu conteúdo interno.");
+    if (!confirm) return;
+
+    if (activeNodeForMenu.type === 'categoria') {
+      await supabase.from('documentos_categorias' as any).delete().eq('id', activeNodeForMenu.id);
+    } else {
+      await supabase.from('documentos_pastas' as any).delete().eq('id', activeNodeForMenu.id);
+    }
+
+    setMenuAnchorEl(null);
+    setActiveNodeForMenu(null);
+
+    // Se a pasta apagada for a ativa, recuar
+    if (activePastaId === activeNodeForMenu.id || activeCategoriaId === activeNodeForMenu.id) {
+      handleBack();
+    }
+
+    fetchEstruturaRaiz();
+  };
+
+  // === FUNÇÕES DE API (AÇÕES DE ARQUIVOS INTERNOS) ===
+  const handleDownloadFile = async () => {
+    if (!activeFileForMenu?.url_storage) return;
+
+    try {
+      const { data, error } = await supabase.storage
+        .from('ged_documentos')
+        .download(activeFileForMenu.url_storage);
+
+      if (error) throw error;
+
+      // Cria um link temporário para forçar o download no Browser
+      const url = window.URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', activeFileForMenu.nome_arquivo);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao Baixar o Documento.');
+    } finally {
+      setFileMenuAnchorEl(null);
+      setActiveFileForMenu(null);
+    }
+  };
+
+  const handleCopyLinkFile = async () => {
+    if (!activeFileForMenu?.url_storage) return;
+
+    try {
+      // Pega URL pública assinada ou estática do Bucket
+      const { data } = supabase.storage
+        .from('ged_documentos')
+        .getPublicUrl(activeFileForMenu.url_storage);
+
+      if (data?.publicUrl) {
+        await navigator.clipboard.writeText(data.publicUrl);
+        alert('Link Público do Documento copiado para a Área de Transferência!');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao copiar URL.');
+    } finally {
+      setFileMenuAnchorEl(null);
+      setActiveFileForMenu(null);
+    }
+  };
+
+  const handleSoftDeleteFile = async () => {
+    if (!activeFileForMenu) return;
+
+    const confirm = window.confirm(`Deseja mesmo Arquivar (Deletar) o documento "${activeFileForMenu.nome_arquivo}"? Ele deixará de aparecer no GED Oficial.`);
+    if (!confirm) {
+      setFileMenuAnchorEl(null);
+      return;
+    }
+
+    try {
+      // Soft Delete: Insere Data Atual no deleted_at (Mantém rastro visual no BD de auditoria GxP)
+      const { error } = await supabase
+        .from('documentos_arquivos')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', activeFileForMenu.id);
+
+      if (error) throw error;
+
+      if (activePastaId) {
+        fetchArquivos(activePastaId);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao excluir documento.');
+    } finally {
+      setFileMenuAnchorEl(null);
+      setActiveFileForMenu(null);
+    }
+  };
+
+  return (
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+        <Typography variant="h4" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Folder size={32} /> Central de Documentos (GED)
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          {/* Botão Dinâmico: Cria Categoria se na raiz, Cria Pasta se dentro */}
+          {!activeCategoriaId ? (
+            <Button variant="outlined" startIcon={<CreateNewFolder />} onClick={() => handleOpenDialog('create_cat')}>Nova Categoria Base</Button>
+          ) : (
+            <Button variant="outlined" startIcon={<CreateNewFolder />} onClick={() => handleOpenDialog('create_folder', activeCategoriaId, activePastaId)}>Nova Pasta Aqui</Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<UploadFile />}
+            // Bloqueia upload se a ActivePastaId for Nula OU se estivermos apenas numa Categoria Base
+            disabled={!activePastaId || !pastas.find(p => p.id === activePastaId)}
+            onClick={handleOpenUploadDialog}
+          >
+            Anexar Arquivo
+          </Button>
+        </Box>
+      </Box>
+
+      <Grid container spacing={3}>
+        {/* SIDEBAR: NAVEGAÇÃO RÁPIDA DE PASTAS */}
+        <Grid item xs={12} md={3} lg={3}>
+          <Paper elevation={0} sx={{
+            border: '1px solid',
+            borderColor: 'divider',
+            minHeight: '600px',
+            maxHeight: 'calc(100vh - 180px)',
+            overflowY: 'auto',
+            '&::-webkit-scrollbar': { width: '6px' },
+            '&::-webkit-scrollbar-thumb': { backgroundColor: '#e0e0e0', borderRadius: '4px' }
+          }}>
+            <List component="nav" dense>
+              {categorias.map(cat => {
+                const isCatExpanded = !!expandedCategories[cat.id]; // Inicialmente Fechadas
+                return (
+                  <Box key={cat.id}>
+                    <ListItemButton
+                      selected={activeCategoriaId === cat.id && !activePastaId}
+                      onClick={() => {
+                        toggleCategory(cat.id);
+                        setActiveCategoriaId(cat.id);
+                        setActivePastaId(null);
+                      }}
+                      sx={{ bgcolor: 'grey.100', mt: 1, '&:hover': { bgcolor: 'grey.200' }, pr: 1 }}
+                    >
+                      <ListItemText
+                        primary={
+                          <Typography fontWeight="bold" variant="overline" sx={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            display: 'block'
+                          }}>
+                            {cat.nome}
+                          </Typography>
+                        }
+                      />
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveNodeForMenu({ id: cat.id, type: 'categoria', catId: cat.id });
+                          setMenuAnchorEl(e.currentTarget);
+                        }}
+                      >
+                        <MoreVert fontSize="small" />
+                      </IconButton>
+                      {isCatExpanded ? <ExpandLess /> : <ExpandMore />}
+                    </ListItemButton>
+                    <Collapse in={isCatExpanded} timeout="auto" unmountOnExit>
+                      {renderPastasSidebar(cat.id, null, 0)}
+                    </Collapse>
+                  </Box>
+                );
+              })}
+            </List>
+          </Paper>
+        </Grid>
+
+        {/* MAIN: QUADRADO PRINCIPAL GOOGLE DRIVE */}
+        <Grid item xs={12} md={9}>
+          <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', minHeight: '600px', p: 3, display: 'flex', flexDirection: 'column' }}>
+
+            {/* CABEÇALHO DO DRIVE: BREADCRUMBS */}
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 1 }}>
+              <Tooltip title="Sair / Subir de Nível">
+                <span>
+                  <IconButton onClick={handleBack} disabled={!activeCategoriaId && !activePastaId}>
+                    <ArrowBack />
+                  </IconButton>
+                </span>
+              </Tooltip>
+
+              <Breadcrumbs separator={<NavigateNext fontSize="small" />} sx={{ ml: 1 }}>
+                <Link
+                  component="button"
+                  variant="h6"
+                  underline="hover"
+                  color={!activeCategoriaId && !activePastaId ? "text.primary" : "inherit"}
+                  onClick={() => { setActiveCategoriaId(null); setActivePastaId(null); }}
+                  sx={{ fontWeight: '500' }}
+                >
+                  Meu Drive GED
+                </Link>
+                {getBreadcrumbs().map((b, i) => {
+                  const isLast = i === getBreadcrumbs().length - 1;
+                  if (isLast) {
+                    return (
+                      <Typography key={b.id} variant="h6" color="text.primary" fontWeight="bold">
+                        {b.name}
+                      </Typography>
+                    );
+                  }
+                  return (
+                    <Link
+                      component="button"
+                      variant="h6"
+                      key={b.id}
+                      underline="hover"
+                      color="inherit"
+                      onClick={() => handleNavigateBreadcrumb(b)}
+                    >
+                      {b.name}
+                    </Link>
+                  );
+                })}
+              </Breadcrumbs>
+            </Box>
+
+            <Divider sx={{ mb: 3 }} />
+
+            {/* SEÇÃO 1: PASTAS (QUADRADOS) */}
+            {getFoldersToShow().length > 0 && (
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="overline" color="text.secondary" fontWeight="bold" sx={{ display: 'block', mb: 2 }}>
+                  Pastas
+                </Typography>
+                <Grid container spacing={2}>
+                  {getFoldersToShow().map(f => (
+                    <Grid item xs={12} sm={6} md={4} key={f.id}>
+                      <Paper
+                        variant="outlined"
+                        onClick={() => handleGridFolderClick(f)}
+                        sx={{
+                          p: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          cursor: 'pointer',
+                          bgcolor: 'grey.50',
+                          transition: 'all 0.2s',
+                          '&:hover': { bgcolor: 'grey.100', borderColor: 'primary.main', transform: 'translateY(-2px)', boxShadow: 2 }
+                        }}
+                      >
+                        <Folder color="primary" />
+                        <Tooltip title={f.nome} placement="top">
+                          <Typography variant="body2" fontWeight="500" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                            {f.nome}
+                          </Typography>
+                        </Tooltip>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveNodeForMenu({ id: f.id, type: f.type as 'categoria' | 'pasta', catId: f.type === 'categoria' ? f.id : (f as any).categoria_id });
+                            setMenuAnchorEl(e.currentTarget);
+                          }}
+                        >
+                          <MoreVert fontSize="small" />
+                        </IconButton>
+                      </Paper>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            )}
+
+            {/* EMPTY STATE */}
+            {!activeCategoriaId && !activePastaId && getFoldersToShow().length === 0 && (
+              <Box textAlign="center" py={10} color="text.secondary" flex={1} display="flex" flexDirection="column" justifyContent="center" alignItems="center">
+                <Folder sx={{ fontSize: 64, opacity: 0.2, mb: 2 }} />
+                <Typography variant="h6">Seu Drive está vazio.</Typography>
+                <Typography variant="body2">Crie uma nova Categoria para começar.</Typography>
+              </Box>
+            )}
+
+            {activeCategoriaId && !activePastaId && getFoldersToShow().length === 0 && (
+              <Box textAlign="center" py={10} color="text.secondary" flex={1} display="flex" flexDirection="column" justifyContent="center" alignItems="center">
+                <Folder sx={{ fontSize: 64, opacity: 0.2, mb: 2 }} />
+                <Typography variant="h6">Categoria vazia.</Typography>
+                <Typography variant="body2">Clique em "Nova Pasta Aqui" acima para organizar seus documentos.</Typography>
+              </Box>
+            )}
+
+            {/* SEÇÃO 2: ARQUIVOS (TABELA) - SÓ ATIVA QUANDO UMA PASTA FINAL ESTÁ SELECIONADA */}
+            {activePastaId && (
+              <Box>
+                <Typography variant="overline" color="text.secondary" fontWeight="bold" sx={{ display: 'block', mb: 2 }}>
+                  Arquivos nesta Pasta
+                </Typography>
+                <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: 'grey.50' }}>
+                      <TableRow>
+                        <TableCell>Nome do Arquivo</TableCell>
+                        <TableCell>Validade</TableCell>
+                        <TableCell>Status Regulatória</TableCell>
+                        <TableCell align="right">Ações</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {arquivosAtuais.length === 0 && (
+                        <TableRow><TableCell colSpan={4} align="center" sx={{ py: 6, color: 'text.secondary' }}>Nenhum documento encontrado nesta pasta.</TableCell></TableRow>
+                      )}
+                      {arquivosAtuais.map((arq) => {
+                        const vencido = checkVencido(arq.data_validade);
+                        return (
+                          <TableRow key={arq.id} hover>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <InsertDriveFile color="action" />
+                                <Typography fontWeight="500" variant="body2">{arq.nome_arquivo}</Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              {arq.data_validade ? format(new Date(arq.data_validade), 'dd/MM/yyyy') : 'Sem Vencimento'}
+                            </TableCell>
+                            <TableCell>
+                              {arq.data_validade ? (
+                                <Chip
+                                  label={vencido ? 'Vencido' : 'Vigente'}
+                                  color={vencido ? 'error' : 'success'}
+                                  size="small"
+                                  icon={vencido ? <Warning fontSize="small" /> : <CheckCircle fontSize="small" />}
+                                />
+                              ) : (
+                                <Chip label="Permanente" size="small" variant="outlined" />
+                              )}
+                            </TableCell>
+                            <TableCell align="right">
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  setActiveFileForMenu(arq);
+                                  setFileMenuAnchorEl(e.currentTarget);
+                                }}
+                              >
+                                <MoreVert />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
+          </Paper>
+        </Grid>
+
+      </Grid>
+
+      {/* MENUS DE CONTEXTO */}
+      <Menu
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={() => setMenuAnchorEl(null)}
+      >
+        <MenuItem onClick={() => {
+          if (!activeNodeForMenu) return;
+          handleOpenDialog('create_folder', activeNodeForMenu.catId, activeNodeForMenu.type === 'pasta' ? activeNodeForMenu.id : null);
+        }}>
+          <ListItemIcon><Add fontSize="small" /></ListItemIcon> Nova Sub-pasta
+        </MenuItem>
+
+        <MenuItem onClick={() => {
+          if (!activeNodeForMenu) return;
+          const isCat = activeNodeForMenu.type === 'categoria';
+          const nodeName = isCat
+            ? categorias.find(c => c.id === activeNodeForMenu.id)?.nome
+            : pastas.find(p => p.id === activeNodeForMenu.id)?.nome;
+
+          handleOpenDialog(isCat ? 'edit_cat' : 'edit_folder', isCat ? activeNodeForMenu.id : null, isCat ? null : activeNodeForMenu.id, nodeName || '');
+        }}>
+          <ListItemIcon><Edit fontSize="small" /></ListItemIcon> Renomear
+        </MenuItem>
+
+        {activeNodeForMenu?.type === 'pasta' && (
+          <MenuItem onClick={() => {
+            if (!activeNodeForMenu) return;
+            const nodeName = pastas.find(p => p.id === activeNodeForMenu.id)?.nome || '';
+            handleOpenMoveDialog({ id: activeNodeForMenu.id, type: 'pasta', nome: nodeName });
+          }}>
+            <ListItemIcon><DriveFileMove fontSize="small" /></ListItemIcon> Mover Pasta
+          </MenuItem>
+        )}
+
+        <Divider />
+        <MenuItem onClick={handleDeleteNode} sx={{ color: 'error.main' }}>
+          <ListItemIcon><Delete fontSize="small" color="error" /></ListItemIcon> Excluir Toda a Pasta
+        </MenuItem>
+      </Menu>
+
+      {/* MENU DE AÇÕES DOS ARQUIVOS */}
+      <Menu
+        anchorEl={fileMenuAnchorEl}
+        open={Boolean(fileMenuAnchorEl)}
+        onClose={() => setFileMenuAnchorEl(null)}
+      >
+        <MenuItem onClick={() => {
+          if (!activeFileForMenu) return;
+          handleOpenEditFile(activeFileForMenu);
+        }}>
+          <ListItemIcon><Edit fontSize="small" /></ListItemIcon> Editar Detalhes
+        </MenuItem>
+
+        <MenuItem onClick={() => {
+          if (!activeFileForMenu) return;
+          handleOpenMoveDialog({ id: activeFileForMenu.id, type: 'arquivo', nome: activeFileForMenu.nome_arquivo });
+        }}>
+          <ListItemIcon><DriveFileMove fontSize="small" /></ListItemIcon> Mover Arquivo
+        </MenuItem>
+
+        <Divider />
+
+        <MenuItem onClick={handleDownloadFile}>
+          <ListItemIcon><Download fontSize="small" /></ListItemIcon> Baixar Arquivo Exato
+        </MenuItem>
+
+        <MenuItem onClick={handleCopyLinkFile}>
+          <ListItemIcon><LinkIcon fontSize="small" /></ListItemIcon> Copiar Link Seguro
+        </MenuItem>
+
+        <Divider />
+        <MenuItem onClick={handleSoftDeleteFile} sx={{ color: 'error.main' }}>
+          <ListItemIcon><Delete fontSize="small" color="error" /></ListItemIcon> Arquivar (Soft Delete)
+        </MenuItem>
+      </Menu>
+
+      {/* DIALOG DE CRUD */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {dialogMode.includes('create') ? 'Criar Novo Diretório' : dialogMode === 'edit_file' ? 'Renomear Arquivo' : 'Renomear Diretório'}
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Nome da Pasta ou Categoria"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)} color="inherit">Cancelar</Button>
+          <Button onClick={handleSaveNode} variant="contained" disabled={!inputValue.trim()}>Salvar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DIALOG DE EDIÇÃO DE ARQUIVO */}
+      <Dialog open={editFileOpen} onClose={() => setEditFileOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Editar Detalhes do Documento</DialogTitle>
+        <DialogContent dividers>
+          <Box display="flex" flexDirection="column" gap={3} py={1}>
+            <TextField
+              label="Nome de Apresentação (Visível no Drive)"
+              placeholder="Ex: Alvará de Funcionamento 2026"
+              fullWidth
+              variant="outlined"
+              value={editDocNome}
+              onChange={(e) => setEditDocNome(e.target.value)}
+            />
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Data de Emissão (Opcional)"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={editDocEmissao}
+                onChange={(e) => setEditDocEmissao(e.target.value)}
+              />
+              <TextField
+                label="Data de Validade (Alerta GxP)"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={editDocValidade}
+                onChange={(e) => setEditDocValidade(e.target.value)}
+              />
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setEditFileOpen(false)} color="inherit">Cancelar</Button>
+          <Button onClick={handleSaveEditFile} variant="contained" disabled={!editDocNome.trim()}>Salvar Edições</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DIALOG DE MOVER */}
+      <Dialog open={moveDialogOpen} onClose={() => setMoveDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Mover "{nodeToMove?.nome}"
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box display="flex" flexDirection="column" gap={3} py={1}>
+            <TextField
+              select
+              label="Categoria de Destino"
+              value={moveTargetCategoriaId || ''}
+              onChange={(e) => {
+                setMoveTargetCategoriaId(e.target.value);
+                setMoveTargetPastaId(null);
+              }}
+              fullWidth
+            >
+              {categorias.map(c => (
+                <MenuItem key={c.id} value={c.id}>{c.nome}</MenuItem>
+              ))}
+            </TextField>
+
+            {moveTargetCategoriaId && (
+              <TextField
+                select
+                label={nodeToMove?.type === 'arquivo' ? "Pasta de Destino" : "Pasta Pai de Destino (Opcional)"}
+                value={moveTargetPastaId || ''}
+                onChange={(e) => setMoveTargetPastaId(e.target.value)}
+                fullWidth
+                helperText={nodeToMove?.type === 'pasta' ? "Deixe em branco para mover para a raiz desta Categoria." : ""}
+              >
+                {nodeToMove?.type === 'pasta' && (
+                  <MenuItem value=""><em>Raiz da Categoria</em></MenuItem>
+                )}
+                {pastas.filter(p => p.categoria_id === moveTargetCategoriaId && p.id !== nodeToMove?.id).map(p => (
+                  <MenuItem key={p.id} value={p.id}>{p.nome}</MenuItem>
+                ))}
+              </TextField>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setMoveDialogOpen(false)}>Cancelar</Button>
+          <Button onClick={handleSaveMove} variant="contained" color="primary" disabled={!moveTargetCategoriaId}>Confirmar Movimentação</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DIALOG DE UPLOAD GxP */}
+      <Dialog open={uploadDialogOpen} onClose={() => !isUploading && setUploadDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <UploadFile color="primary" /> Enviar Novo Documento
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+
+            {/* Input Físico de Arquivo */}
+            <Button
+              variant="outlined"
+              component="label"
+              size="large"
+              fullWidth
+              sx={{ py: 4, borderStyle: 'dashed', borderWidth: 2, display: 'flex', flexDirection: 'column', gap: 1 }}
+            >
+              <UploadFile fontSize="large" color="action" />
+              <Typography variant="body1">
+                {fileToUpload ? fileToUpload.name : "Clique aqui para selecionar seu Arquivo (PDF, Imagem, Docx)"}
+              </Typography>
+              <input
+                type="file"
+                hidden
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    setFileToUpload(e.target.files[0]);
+                    // Auto-preenche o nome do doc com o arquivo original se estiver vazio
+                    if (!docNome) setDocNome(e.target.files[0].name);
+                  }
+                }}
+              />
+            </Button>
+
+            {/* Metadados */}
+            <TextField
+              label="Nome de Apresentação (Visível no Drive)"
+              placeholder="Ex: Alvará de Funcionamento 2026"
+              fullWidth
+              variant="outlined"
+              value={docNome}
+              onChange={(e) => setDocNome(e.target.value)}
+              disabled={isUploading}
+            />
+
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Data de Emissão (Opcional)"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={docEmissao}
+                onChange={(e) => setDocEmissao(e.target.value)}
+                disabled={isUploading}
+              />
+              <TextField
+                label="Data de Validade (Alerta GxP)"
+                type="date"
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+                value={docValidade}
+                onChange={(e) => setDocValidade(e.target.value)}
+                disabled={isUploading}
+              />
+            </Box>
+
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setUploadDialogOpen(false)} disabled={isUploading}>Cancelar</Button>
+          <Button
+            onClick={executeUpload}
+            variant="contained"
+            color="primary"
+            disabled={!fileToUpload || isUploading}
+            startIcon={isUploading ? <Skeleton variant="circular" width={20} height={20} /> : <UploadFile />}
+          >
+            {isUploading ? 'Enviando...' : 'Realizar Upload'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container >
+  );
+}

@@ -1,26 +1,26 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { supabase } from '@/lib/supabaseClient'; 
-import { 
-    Container, Typography, Box, Button, 
-    List, ListItem, ListItemText, CircularProgress, Alert, IconButton,
-    TextField, InputAdornment, Chip, Accordion, AccordionSummary, AccordionDetails,
-    Paper, useTheme, alpha, ListItemButton
+import { supabase } from '@/lib/supabaseClient';
+import {
+  Container, Typography, Box, Button,
+  List, ListItem, ListItemText, CircularProgress, Alert, IconButton,
+  TextField, InputAdornment, Chip, Accordion, AccordionSummary, AccordionDetails,
+  Paper, useTheme, alpha, ListItemButton
 } from '@mui/material';
 import Link from 'next/link';
-import { 
-    Edit, 
-    Trash2, 
-    Search, 
-    ChevronDown, 
-    ChefHat, 
-    BookOpen,
-    Plus,
-    Eye // Ícone para visualizar
+import {
+  Edit,
+  Trash2,
+  Search,
+  ChevronDown,
+  ChefHat,
+  BookOpen,
+  Plus,
+  Eye // Ícone para visualizar
 } from 'lucide-react';
 
-import { useClient } from '@/lib/ClientContext'; 
+import { useClient } from '@/lib/ClientContext';
 
 interface ReceitaLista {
   id: string;
@@ -33,7 +33,7 @@ export default function ListarReceitasPage() {
   const [receitas, setReceitas] = useState<ReceitaLista[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState(''); 
+  const [searchTerm, setSearchTerm] = useState('');
 
   const { activeClientId } = useClient();
 
@@ -44,7 +44,7 @@ export default function ListarReceitasPage() {
 
     const { data, error } = await supabase
       .from('receitas')
-      .select('id, nome, tipos_receita(nome)') 
+      .select('id, nome, tipos_receita(nome)')
       .eq('cliente_id', clienteId)
       .order('nome', { ascending: true });
 
@@ -68,21 +68,38 @@ export default function ListarReceitasPage() {
   }, [activeClientId]);
 
   async function handleDelete(id: string, nome: string) {
-    if (window.confirm(`Tem certeza que deseja excluir a receita "${nome}"?`)) {
-      const { error: compError } = await supabase.from('composicao_receitas').delete().eq('receita_id', id);
-      if (compError) { alert('Falha ao limpar ingredientes.'); return; }
+    if (window.confirm(`Tem certeza que deseja inativar a receita "${nome}"?`)) {
+      setLoading(true);
+      try {
+        // Pega Token Seguro da sessão Supabase para passar à API RLS
+        const { data: { session } } = await supabase.auth.getSession();
 
-      const { error: recError } = await supabase.from('receitas').delete().eq('id', id);
-      if (recError) { 
-          alert('Falha ao excluir receita.'); 
-      } else {
+        const response = await fetch('/api/receitas', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+          },
+          body: JSON.stringify({ id })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.erro || errData.dbDetalhes || 'Falha na exclusão.');
+        }
+
         if (activeClientId) fetchReceitas(activeClientId);
+
+      } catch (err: any) {
+        alert('Erro ao excluir: ' + err.message);
+      } finally {
+        setLoading(false);
       }
     }
   }
 
   const receitasAgrupadas = useMemo(() => {
-    const filtradas = receitas.filter(r => 
+    const filtradas = receitas.filter(r =>
       r.nome.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
@@ -112,11 +129,11 @@ export default function ListarReceitasPage() {
     if (receitas.length === 0) {
       return (
         <Box sx={{ textAlign: 'center', py: 8, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 2, border: '1px dashed', borderColor: 'primary.main' }}>
-            <ChefHat size={48} className="text-gray-400 mx-auto mb-2" />
-            <Typography variant="h6" color="text.secondary">Nenhuma receita cadastrada.</Typography>
-            <Link href="/receitas/criar" passHref>
-                <Button variant="contained" startIcon={<Plus size={18} />} sx={{ mt: 2 }}>Criar Primeira Receita</Button>
-            </Link>
+          <ChefHat size={48} className="text-gray-400 mx-auto mb-2" />
+          <Typography variant="h6" color="text.secondary">Nenhuma receita cadastrada.</Typography>
+          <Link href="/receitas/criar" passHref>
+            <Button variant="contained" startIcon={<Plus size={18} />} sx={{ mt: 2 }}>Criar Primeira Receita</Button>
+          </Link>
         </Box>
       );
     }
@@ -135,33 +152,33 @@ export default function ListarReceitasPage() {
             <AccordionDetails sx={{ p: 0 }}>
               <List disablePadding>
                 {itens.map((receita, index) => (
-                  <ListItem 
-                    key={receita.id} 
+                  <ListItem
+                    key={receita.id}
                     divider={index < itens.length - 1}
                     disablePadding
                     secondaryAction={
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <Link href={`/receitas/criar?id=${receita.id}`} passHref>
-                            <IconButton edge="end" size="small" sx={{ color: 'primary.main' }}><Edit size={16} /></IconButton>
+                          <IconButton edge="end" size="small" sx={{ color: 'primary.main' }}><Edit size={16} /></IconButton>
                         </Link>
                         <IconButton edge="end" onClick={() => handleDelete(receita.id, receita.nome)} size="small" sx={{ color: 'error.main' }}><Trash2 size={16} /></IconButton>
                       </Box>
                     }
                   >
                     {/* AQUI ESTÁ A CORREÇÃO: Link para /receitas/[id] */}
-                    <ListItemButton 
-                        component={Link} 
-                        href={`/receitas/${receita.id}`} 
-                        sx={{ pl: 3, pr: 10, py: 1.5 }}
+                    <ListItemButton
+                      component={Link}
+                      href={`/receitas/${receita.id}`}
+                      sx={{ pl: 3, pr: 10, py: 1.5 }}
                     >
-                        <ListItemText 
+                      <ListItemText
                         primary={
-                            <Typography variant="body1" sx={{ color: 'text.primary', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body1" sx={{ color: 'text.primary', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 1 }}>
                             <ChefHat size={16} className="text-gray-400" />
                             {receita.nome}
-                            </Typography>
-                        } 
-                        />
+                          </Typography>
+                        }
+                      />
                     </ListItemButton>
                   </ListItem>
                 ))}
@@ -178,13 +195,13 @@ export default function ListarReceitasPage() {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" fontWeight="800">Minhas Receitas</Typography>
         <Link href="/receitas/criar" passHref>
-            <Button variant="contained" size="large" disabled={!activeClientId} startIcon={<Plus size={20} />}>Nova Receita</Button>
+          <Button variant="contained" size="large" disabled={!activeClientId} startIcon={<Plus size={20} />}>Nova Receita</Button>
         </Link>
       </Box>
       <Paper elevation={0} sx={{ p: 2, mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
         <TextField
-            fullWidth size="small" placeholder="Buscar receita..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{ startAdornment: <InputAdornment position="start"><Search size={18} color="gray"/></InputAdornment> }}
+          fullWidth size="small" placeholder="Buscar receita..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{ startAdornment: <InputAdornment position="start"><Search size={18} color="gray" /></InputAdornment> }}
         />
       </Paper>
       {renderContent()}
