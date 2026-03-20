@@ -43,8 +43,7 @@ export default function DesempenhoPage() {
     dataCorte.setDate(dataCorte.getDate() - parseInt(periodo));
 
     // 1. Buscar Tarefas
-    const { data: tarefas } = await supabase
-      .from('operacao_tarefas')
+    const { data: tarefas } = await (supabase as any).from('operacao_tarefas')
       .select('*, responsavel:responsavel_id(full_name)')
       .eq('cliente_id', activeClientId)
       .gte('created_at', dataCorte.toISOString());
@@ -56,14 +55,14 @@ export default function DesempenhoPage() {
 
     // 2. Processar Dados Gerais
     const total = tarefas.length;
-    const concluidas = tarefas.filter(t => t.status === 'CONCLUIDA');
+    const concluidas = tarefas.filter((t: any) => t.status === 'CONCLUIDA');
     const emAberto = total - concluidas.length;
     
     // Cálculo de Pontualidade (SLA)
     let noPrazo = 0;
     let somaDiasConclusao = 0;
 
-    concluidas.forEach(t => {
+    concluidas.forEach((t: any) => {
       // Se não tinha prazo, considera no prazo. Se tinha, compara.
       if (!t.prazo_limite || new Date(t.concluida_em) <= new Date(t.prazo_limite)) {
         noPrazo++;
@@ -79,7 +78,7 @@ export default function DesempenhoPage() {
     // 3. Processar Ranking de Equipe
     const userMap = new Map();
 
-    tarefas.forEach(t => {
+    tarefas.forEach((t: any) => {
       if (!t.responsavel) return;
       const nome = t.responsavel.full_name;
       
@@ -268,3 +267,5 @@ export default function DesempenhoPage() {
     </Box>
   );
 }
+
+

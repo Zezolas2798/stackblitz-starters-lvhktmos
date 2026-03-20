@@ -62,11 +62,11 @@ export default function RelatoriosPage() {
   useEffect(() => {
     if (activeClientId) {
       setLoading(true);
-      supabase.from('receitas')
+      (supabase as any).from('receitas')
         .select('id, nome, rendimento_total_g, modo_preparo, foto_url, tipos_receita(nome)')
         .eq('cliente_id', activeClientId)
         .order('nome')
-        .then(({ data }) => {
+        .then(({ data }: any) => {
           if (data) setReceitas(data as any[]);
           setLoading(false);
         });
@@ -129,18 +129,17 @@ export default function RelatoriosPage() {
       if (index === -1) continue;
 
       if (modo === 'FICHA' && !receitasAtualizadas[index].ingredientesDetalhados) {
-        const { data: comps } = await supabase
-          .from('composicao_receitas')
+        const { data: comps } = await (supabase as any).from('composicao_receitas')
           .select('item_id, item_type, peso_liquido_g')
           .eq('receita_id', id);
 
         if (comps && comps.length > 0) {
-          const idsIng = comps.filter(c => c.item_type === 'ingrediente').map(c => c.item_id);
-          const idsRec = comps.filter(c => c.item_type === 'receita').map(c => c.item_id);
+          const idsIng = comps.filter((c: any) => c.item_type === 'ingrediente').map((c: any) => c.item_id);
+          const idsRec = comps.filter((c: any) => c.item_type === 'receita').map((c: any) => c.item_id);
 
           const [resIng, resRec] = await Promise.all([
-            idsIng.length > 0 ? supabase.from('ingredientes').select('id, nome, fonte, peso_unitario_g').in('id', idsIng) : { data: [] },
-            idsRec.length > 0 ? supabase.from('receitas').select('id, nome').in('id', idsRec) : { data: [] }
+            idsIng.length > 0 ? (supabase as any).from('ingredientes').select('id, nome, fonte, peso_unitario_g').in('id', idsIng) : { data: [] },
+            idsRec.length > 0 ? (supabase as any).from('receitas').select('id, nome').in('id', idsRec) : { data: [] }
           ]);
 
           const nomeMap = new Map();
@@ -158,7 +157,7 @@ export default function RelatoriosPage() {
             fonteMap.set(r.id, "Sub-receita");
           });
 
-          receitasAtualizadas[index].ingredientesDetalhados = comps.map(c => ({
+          receitasAtualizadas[index].ingredientesDetalhados = comps.map((c: any) => ({
             nome: nomeMap.get(c.item_id) || 'Item desconhecido',
             peso_liquido_g: c.peso_liquido_g,
             unidade: 'g',
@@ -523,3 +522,5 @@ export default function RelatoriosPage() {
     </Container>
   );
 }
+
+

@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       acoes_corretivas: {
@@ -288,45 +313,6 @@ export type Database = {
             columns: ["grupo_id"]
             isOneToOne: false
             referencedRelation: "anvisa_grupos_populacionais"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      apontamentos_producao: {
-        Row: {
-          created_at: string | null
-          id: string
-          lote_estoque_id: string
-          ordem_producao_id: string
-          quantidade_utilizada_g_ml: number
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          lote_estoque_id: string
-          ordem_producao_id: string
-          quantidade_utilizada_g_ml: number
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          lote_estoque_id?: string
-          ordem_producao_id?: string
-          quantidade_utilizada_g_ml?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "apontamentos_producao_lote_estoque_id_fkey"
-            columns: ["lote_estoque_id"]
-            isOneToOne: false
-            referencedRelation: "lotes_estoque"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "apontamentos_producao_ordem_producao_id_fkey"
-            columns: ["ordem_producao_id"]
-            isOneToOne: false
-            referencedRelation: "ordens_producao"
             referencedColumns: ["id"]
           },
         ]
@@ -1356,7 +1342,6 @@ export type Database = {
           data_validade: string | null
           data_validade_atual: string | null
           data_validade_original: string | null
-          deleted_at: string | null
           estado_produto: string | null
           fornecedor: string | null
           fornecedor_id: string | null
@@ -1376,8 +1361,6 @@ export type Database = {
           unidade_id: string
           unidade_medida: string
           unidade_peso_embalagem: string | null
-          updated_at: string | null
-          updated_by: string | null
           valor_unitario: number | null
         }
         Insert: {
@@ -1389,7 +1372,6 @@ export type Database = {
           data_validade?: string | null
           data_validade_atual?: string | null
           data_validade_original?: string | null
-          deleted_at?: string | null
           estado_produto?: string | null
           fornecedor?: string | null
           fornecedor_id?: string | null
@@ -1409,8 +1391,6 @@ export type Database = {
           unidade_id: string
           unidade_medida: string
           unidade_peso_embalagem?: string | null
-          updated_at?: string | null
-          updated_by?: string | null
           valor_unitario?: number | null
         }
         Update: {
@@ -1422,7 +1402,6 @@ export type Database = {
           data_validade?: string | null
           data_validade_atual?: string | null
           data_validade_original?: string | null
-          deleted_at?: string | null
           estado_produto?: string | null
           fornecedor?: string | null
           fornecedor_id?: string | null
@@ -1442,8 +1421,6 @@ export type Database = {
           unidade_id?: string
           unidade_medida?: string
           unidade_peso_embalagem?: string | null
-          updated_at?: string | null
-          updated_by?: string | null
           valor_unitario?: number | null
         }
         Relationships: [
@@ -1535,16 +1512,12 @@ export type Database = {
           contato_qualidade_email: string | null
           contato_qualidade_nome: string | null
           created_at: string | null
-          created_by: string | null
-          deleted_at: string | null
           id: string
           licenca_sanitaria_numero: string | null
           licenca_sanitaria_validade: string | null
           nome_fantasia: string | null
           razao_social: string
           status_homologacao: string | null
-          updated_at: string | null
-          updated_by: string | null
         }
         Insert: {
           cliente_id: string
@@ -1552,16 +1525,12 @@ export type Database = {
           contato_qualidade_email?: string | null
           contato_qualidade_nome?: string | null
           created_at?: string | null
-          created_by?: string | null
-          deleted_at?: string | null
           id?: string
           licenca_sanitaria_numero?: string | null
           licenca_sanitaria_validade?: string | null
           nome_fantasia?: string | null
           razao_social: string
           status_homologacao?: string | null
-          updated_at?: string | null
-          updated_by?: string | null
         }
         Update: {
           cliente_id?: string
@@ -1569,16 +1538,12 @@ export type Database = {
           contato_qualidade_email?: string | null
           contato_qualidade_nome?: string | null
           created_at?: string | null
-          created_by?: string | null
-          deleted_at?: string | null
           id?: string
           licenca_sanitaria_numero?: string | null
           licenca_sanitaria_validade?: string | null
           nome_fantasia?: string | null
           razao_social?: string
           status_homologacao?: string | null
-          updated_at?: string | null
-          updated_by?: string | null
         }
         Relationships: [
           {
@@ -1643,10 +1608,8 @@ export type Database = {
           colesterol_mg: number | null
           contem_gluten: boolean | null
           created_at: string | null
-          created_by: string | null
           cromo_mcg: number | null
           declaracao_ingredientes_fornecedor: string | null
-          deleted_at: string | null
           energia_kcal: number | null
           eritritol_g: number | null
           ferro_mg: number | null
@@ -1679,7 +1642,6 @@ export type Database = {
           sodio_mg: number | null
           sorbitol_g: number | null
           tipo_ingrediente: string | null
-          updated_at: string | null
           updated_by: string | null
           vitamina_a_mcg: number | null
           vitamina_b1_mg: number | null
@@ -1710,10 +1672,8 @@ export type Database = {
           colesterol_mg?: number | null
           contem_gluten?: boolean | null
           created_at?: string | null
-          created_by?: string | null
           cromo_mcg?: number | null
           declaracao_ingredientes_fornecedor?: string | null
-          deleted_at?: string | null
           energia_kcal?: number | null
           eritritol_g?: number | null
           ferro_mg?: number | null
@@ -1746,7 +1706,6 @@ export type Database = {
           sodio_mg?: number | null
           sorbitol_g?: number | null
           tipo_ingrediente?: string | null
-          updated_at?: string | null
           updated_by?: string | null
           vitamina_a_mcg?: number | null
           vitamina_b1_mg?: number | null
@@ -1777,10 +1736,8 @@ export type Database = {
           colesterol_mg?: number | null
           contem_gluten?: boolean | null
           created_at?: string | null
-          created_by?: string | null
           cromo_mcg?: number | null
           declaracao_ingredientes_fornecedor?: string | null
-          deleted_at?: string | null
           energia_kcal?: number | null
           eritritol_g?: number | null
           ferro_mg?: number | null
@@ -1813,7 +1770,6 @@ export type Database = {
           sodio_mg?: number | null
           sorbitol_g?: number | null
           tipo_ingrediente?: string | null
-          updated_at?: string | null
           updated_by?: string | null
           vitamina_a_mcg?: number | null
           vitamina_b1_mg?: number | null
@@ -1923,121 +1879,6 @@ export type Database = {
           },
           {
             foreignKeyName: "iot_etiquetas_impressas_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "cliente_unidades"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      lotes_estoque: {
-        Row: {
-          created_at: string | null
-          data_fabricacao: string
-          data_validade_interna: string | null
-          data_validade_rotulo: string
-          fornecedor_id: string
-          id: string
-          ingrediente_id: string
-          nota_fiscal: string | null
-          numero_lote_fabricante: string
-          quantidade_atual_g_ml: number
-          quantidade_inicial_g_ml: number
-          status: Database["public"]["Enums"]["status_lote_estoque"] | null
-          unidade_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          data_fabricacao: string
-          data_validade_interna?: string | null
-          data_validade_rotulo: string
-          fornecedor_id: string
-          id?: string
-          ingrediente_id: string
-          nota_fiscal?: string | null
-          numero_lote_fabricante: string
-          quantidade_atual_g_ml: number
-          quantidade_inicial_g_ml: number
-          status?: Database["public"]["Enums"]["status_lote_estoque"] | null
-          unidade_id: string
-        }
-        Update: {
-          created_at?: string | null
-          data_fabricacao?: string
-          data_validade_interna?: string | null
-          data_validade_rotulo?: string
-          fornecedor_id?: string
-          id?: string
-          ingrediente_id?: string
-          nota_fiscal?: string | null
-          numero_lote_fabricante?: string
-          quantidade_atual_g_ml?: number
-          quantidade_inicial_g_ml?: number
-          status?: Database["public"]["Enums"]["status_lote_estoque"] | null
-          unidade_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "lotes_estoque_fornecedor_id_fkey"
-            columns: ["fornecedor_id"]
-            isOneToOne: false
-            referencedRelation: "fornecedores"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lotes_estoque_ingrediente_id_fkey"
-            columns: ["ingrediente_id"]
-            isOneToOne: false
-            referencedRelation: "ingredientes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lotes_estoque_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "cliente_unidades"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      lotes_internos: {
-        Row: {
-          codigo_lote_interno: string
-          created_at: string | null
-          data_fabricacao: string
-          data_validade: string
-          id: string
-          ordem_producao_id: string
-          unidade_id: string
-        }
-        Insert: {
-          codigo_lote_interno: string
-          created_at?: string | null
-          data_fabricacao?: string
-          data_validade: string
-          id?: string
-          ordem_producao_id: string
-          unidade_id: string
-        }
-        Update: {
-          codigo_lote_interno?: string
-          created_at?: string | null
-          data_fabricacao?: string
-          data_validade?: string
-          id?: string
-          ordem_producao_id?: string
-          unidade_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "lotes_internos_ordem_producao_id_fkey"
-            columns: ["ordem_producao_id"]
-            isOneToOne: true
-            referencedRelation: "ordens_producao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lotes_internos_unidade_id_fkey"
             columns: ["unidade_id"]
             isOneToOne: false
             referencedRelation: "cliente_unidades"
@@ -2247,12 +2088,9 @@ export type Database = {
       ordens_producao: {
         Row: {
           cliente_id: string | null
-          created_at: string | null
-          created_by: string | null
           data_fim_producao: string | null
           data_inicio_producao: string | null
           data_validade: string
-          deleted_at: string | null
           id: string
           lote_interno: string
           qtd_produzida: number
@@ -2260,17 +2098,12 @@ export type Database = {
           responsavel_producao_id: string | null
           status: string | null
           unidade_id: string
-          updated_at: string | null
-          updated_by: string | null
         }
         Insert: {
           cliente_id?: string | null
-          created_at?: string | null
-          created_by?: string | null
           data_fim_producao?: string | null
           data_inicio_producao?: string | null
           data_validade: string
-          deleted_at?: string | null
           id?: string
           lote_interno: string
           qtd_produzida: number
@@ -2278,17 +2111,12 @@ export type Database = {
           responsavel_producao_id?: string | null
           status?: string | null
           unidade_id: string
-          updated_at?: string | null
-          updated_by?: string | null
         }
         Update: {
           cliente_id?: string | null
-          created_at?: string | null
-          created_by?: string | null
           data_fim_producao?: string | null
           data_inicio_producao?: string | null
           data_validade?: string
-          deleted_at?: string | null
           id?: string
           lote_interno?: string
           qtd_produzida?: number
@@ -2296,8 +2124,6 @@ export type Database = {
           responsavel_producao_id?: string | null
           status?: string | null
           unidade_id?: string
-          updated_at?: string | null
-          updated_by?: string | null
         }
         Relationships: [
           {
@@ -2449,48 +2275,6 @@ export type Database = {
           },
         ]
       }
-      produtos_bombeiros: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          data_emissao: string
-          data_validade: string
-          deleted_at: string | null
-          descricao: string | null
-          id: string
-          nome: string
-          status_sivisa: string | null
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          data_emissao: string
-          data_validade: string
-          deleted_at?: string | null
-          descricao?: string | null
-          id?: string
-          nome: string
-          status_sivisa?: string | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          data_emissao?: string
-          data_validade?: string
-          deleted_at?: string | null
-          descricao?: string | null
-          id?: string
-          nome?: string
-          status_sivisa?: string | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           company_id: string | null
@@ -2532,8 +2316,6 @@ export type Database = {
           area_painel_principal_cm2: number | null
           cliente_id: string
           created_at: string | null
-          created_by: string | null
-          deleted_at: string | null
           estado_alimento: string | null
           foto_url: string | null
           grupo_populacional_id: string | null
@@ -2549,7 +2331,6 @@ export type Database = {
           status: string | null
           tipo_receita_id: string | null
           updated_at: string | null
-          updated_by: string | null
           versao_atual: number | null
         }
         Insert: {
@@ -2557,8 +2338,6 @@ export type Database = {
           area_painel_principal_cm2?: number | null
           cliente_id: string
           created_at?: string | null
-          created_by?: string | null
-          deleted_at?: string | null
           estado_alimento?: string | null
           foto_url?: string | null
           grupo_populacional_id?: string | null
@@ -2574,7 +2353,6 @@ export type Database = {
           status?: string | null
           tipo_receita_id?: string | null
           updated_at?: string | null
-          updated_by?: string | null
           versao_atual?: number | null
         }
         Update: {
@@ -2582,8 +2360,6 @@ export type Database = {
           area_painel_principal_cm2?: number | null
           cliente_id?: string
           created_at?: string | null
-          created_by?: string | null
-          deleted_at?: string | null
           estado_alimento?: string | null
           foto_url?: string | null
           grupo_populacional_id?: string | null
@@ -2599,7 +2375,6 @@ export type Database = {
           status?: string | null
           tipo_receita_id?: string | null
           updated_at?: string | null
-          updated_by?: string | null
           versao_atual?: number | null
         }
         Relationships: [
@@ -2851,12 +2626,6 @@ export type Database = {
     Enums: {
       criticidade_insumo: "BAIXA" | "MEDIA" | "ALTA"
       status_homologacao: "PENDENTE" | "APROVADO" | "REJEITADO" | "SUSPENSO"
-      status_lote_estoque: "QUARENTENA" | "APROVADO" | "REJEITADO" | "VENCIDO"
-      status_ordem_producao:
-        | "PENDENTE"
-        | "EM_PREPARO"
-        | "FINALIZADA"
-        | "CANCELADA"
       status_receita: "RASCUNHO" | "EM_ANALISE" | "APROVADO" | "OBSOLETO"
     }
     CompositeTypes: {
@@ -2983,18 +2752,15 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       criticidade_insumo: ["BAIXA", "MEDIA", "ALTA"],
       status_homologacao: ["PENDENTE", "APROVADO", "REJEITADO", "SUSPENSO"],
-      status_lote_estoque: ["QUARENTENA", "APROVADO", "REJEITADO", "VENCIDO"],
-      status_ordem_producao: [
-        "PENDENTE",
-        "EM_PREPARO",
-        "FINALIZADA",
-        "CANCELADA",
-      ],
       status_receita: ["RASCUNHO", "EM_ANALISE", "APROVADO", "OBSOLETO"],
     },
   },
 } as const
+

@@ -23,10 +23,9 @@ export default function ModelosTarefasPage() {
 
   async function fetchModelos() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('config_modelos_demandas')
+    const { data, error } = await (supabase as any).from('config_modelos_demandas')
       .select('*, config_modelo_subtarefas(count)')
-      .eq('cliente_id', activeClientId)
+      .eq('cliente_id', activeClientId as string)
       .order('created_at', { ascending: false });
 
     if (!error && data) setModelos(data);
@@ -35,7 +34,7 @@ export default function ModelosTarefasPage() {
 
   async function handleDelete(id: string) {
     if (confirm('Deseja excluir este modelo de conformidade?')) {
-      await supabase.from('config_modelos_demandas').delete().eq('id', id);
+      await (supabase as any).from('config_modelos_demandas').delete().eq('id', id);
       fetchModelos();
     }
   }
@@ -127,3 +126,5 @@ export default function ModelosTarefasPage() {
     </Box>
   );
 }
+
+

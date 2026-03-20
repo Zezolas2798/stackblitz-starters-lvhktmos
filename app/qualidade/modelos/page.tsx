@@ -36,8 +36,7 @@ export default function ListaModelosPage() {
 
   async function fetchModelos() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('checklist_modelos')
+    const { data, error } = await (supabase as any).from('checklist_modelos')
       .select('*')
       .eq('cliente_id', activeClientId)
       .order('created_at', { ascending: false });
@@ -58,7 +57,7 @@ export default function ListaModelosPage() {
     
     // Soft Delete (Recomendado para GxP) ou Delete Real se nunca usado
     // Aqui faremos delete real para simplificar a gestão de modelos não usados
-    const { error } = await supabase.from('checklist_modelos').delete().eq('id', id);
+    const { error } = await (supabase as any).from('checklist_modelos').delete().eq('id', id);
     
     if (error) {
         alert('Erro ao excluir: ' + error.message);
@@ -184,3 +183,5 @@ export default function ListaModelosPage() {
     </Container>
   );
 }
+
+

@@ -2,8 +2,8 @@ import { supabase } from '@/lib/supabaseClient';
 
 export interface TeamMember {
   id: string;
-  full_name: string;
-  email: string;
+  full_name: string | null;
+  email: string | null;
   role: string;
   // Trazemos os IDs das unidades como um array para facilitar o Checkbox
   accessible_units: string[]; 
@@ -13,8 +13,7 @@ export const teamService = {
   // Busca todos os funcionários da empresa do usuário logado
   async getTeamMembers(): Promise<TeamMember[]> {
     // 1. Busca perfis
-    const { data: profiles, error } = await supabase
-      .from('profiles')
+    const { data: profiles, error } = await (supabase as any).from('profiles')
       .select('id, full_name, email, role')
       .order('full_name');
 
@@ -25,14 +24,13 @@ export const teamService = {
     const members: TeamMember[] = [];
 
     for (const p of profiles) {
-      const { data: units } = await supabase
-        .from('user_units')
+      const { data: units } = await (supabase as any).from('user_units')
         .select('unit_id')
         .eq('user_id', p.id);
       
       members.push({
         ...p,
-        accessible_units: units?.map(u => u.unit_id) || []
+        accessible_units: units?.map((u: any) => u.unit_id) || []
       });
     }
 
@@ -42,8 +40,7 @@ export const teamService = {
   // Atualiza as permissões de unidade (O CORAÇÃO DA GOVERNANÇA)
   async updateUserUnits(userId: string, unitIds: string[]) {
     // 1. Limpa acessos antigos (Audit Trail registrará "DELETE")
-    const { error: deleteError } = await supabase
-      .from('user_units')
+    const { error: deleteError } = await (supabase as any).from('user_units')
       .delete()
       .eq('user_id', userId);
     
@@ -56,11 +53,12 @@ export const teamService = {
         unit_id: unit_id
       }));
 
-      const { error: insertError } = await supabase
-        .from('user_units')
+      const { error: insertError } = await (supabase as any).from('user_units')
         .insert(toInsert);
       
       if (insertError) throw insertError;
     }
   }
 };
+
+

@@ -1,227 +1,256 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { 
-  Box, Typography, Button, Paper, Table, TableBody, TableCell, 
-  TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip, 
-  CircularProgress, Alert, Container, useTheme, alpha 
+  Box, Typography, Grid, Paper, Card, CardContent, 
+  Chip, LinearProgress, Button, IconButton, Dialog,
+  DialogTitle, DialogContent, DialogActions, TextField,
+  Table, TableBody, TableCell, TableHead, TableRow, TableContainer,
+  CircularProgress, Alert, Container, useTheme, alpha,
+  Divider, Tooltip, List, ListItemButton
 } from '@mui/material';
-import { Factory, Plus, Eye, Calendar, PackageCheck, AlertCircle, ChefHat, Clock } from 'lucide-react';
+import { 
+  ChefHat, 
+  Play, 
+  CheckCircle, 
+  AlertTriangle, 
+  Info, 
+  ArrowRight,
+  ClipboardList,
+  Layers,
+  Trash2,
+  Save,
+  Clock
+} from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
-import { format, parseISO, isAfter, differenceInCalendarDays } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
-// Definindo a interface localmente para garantir tipagem mesmo se o types.ts não tiver atualizado
-interface OrdemProducaoListagem {
+interface Setor {
   id: string;
-  codigo_lote_produto: string;
-  data_producao: string;
-  data_validade: string;
+  nome: string;
+}
+
+interface ItemProducao {
+  id: string;
+  receita_id: string;
+  ordem_id: string;
+  setor_producao_id: string;
+  quantidade_planejada: number;
   quantidade_produzida: number;
-  unidade_medida: string;
-  status: string;
   receitas: {
     nome: string;
   };
+  producao_ordens: {
+    codigo: string;
+    titulo: string | null;
+    status: string;
+  };
 }
 
-export default function ProducaoListPage() {
+interface RequisicaoItem {
+  id: string;
+  ingrediente_id: string;
+  grupo_estoque_id: string | null;
+  qtd_necessaria_g: number;
+  qtd_separada_g: number;
+  ingredientes: {
+    nome: string;
+  } | null;
+  ingredientes_grupos: {
+    nome: string;
+  } | null;
+}
+
+export default function ProducaoDashboardPage() {
   const theme = useTheme();
-  const { activeClientId } = useClient();
-  const [ordens, setOrdens] = useState<OrdemProducaoListagem[]>([]);
+  const { activeClientId, unidadeId } = useClient();
   const [loading, setLoading] = useState(true);
+  const [setores, setSetores] = useState<Setor[]>([]);
+  const [itensPorSetor, setItensPorSetor] = useState<Record<string, ItemProducao[]>>({});
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (activeClientId) {
-      loadProducao();
+    if (unidadeId) {
+      fetchData();
     }
-  }, [activeClientId]);
+  }, [unidadeId]);
 
-  async function loadProducao() {
+  async function fetchData() {
     setLoading(true);
     setError('');
-    
     try {
-      const { data, error } = await supabase
-        .from('ordens_producao')
+      const { data: setoresData, error: setoresErr } = await supabase
+        .from('cliente_setores_producao')
+        .select('id, nome')
+        .eq('cliente_id', activeClientId)
+        .eq('ativo', true)
+        .order('nome');
+
+      if (setoresErr) throw setoresErr;
+      setSetores(setoresData || []);
+
+      const { data: itensData, error: itensErr } = await supabase
+        .from('producao_ordens_itens')
         .select(`
           id,
-          codigo_lote_produto,
-          data_producao,
-          data_validade,
+          receita_id,
+          ordem_id,
+          setor_producao_id,
+          quantidade_planejada,
           quantidade_produzida,
-          unidade_medida,
-          status,
-          receitas ( nome )
+          receitas ( nome ),
+          producao_ordens ( id, codigo, titulo, status )
         `)
-        .eq('cliente_id', activeClientId)
-        .order('data_producao', { ascending: false }); // Mais recentes primeiro
+        .in('producao_ordens.status', ['PLANEJADA', 'SEPARADA', 'EM_PRODUCAO'])
+        .eq('producao_ordens.unidade_id', unidadeId);
 
-      if (error) throw error;
+      if (itensErr) throw itensErr;
 
-      setOrdens(data as unknown as OrdemProducaoListagem[]);
+      const validItens = (itensData as any[]).filter(i => i.producao_ordens);
+
+      const agroupped: Record<string, ItemProducao[]> = {};
+      validItens.forEach(item => {
+        const setorId = item.setor_producao_id || 'unassigned';
+        if (!agroupped[setorId]) agroupped[setorId] = [];
+        agroupped[setorId].push(item);
+      });
+
+      setItensPorSetor(agroupped);
     } catch (err: any) {
-      console.error('Erro ao carregar produção:', err);
-      setError('Não foi possível carregar o histórico de produção.');
+      console.error(err);
+      setError('Erro ao carregar dados de produção.');
     } finally {
       setLoading(false);
     }
   }
 
-  // Função auxiliar para status visual da validade
-  const getStatusValidade = (dataValidade: string) => {
-    const hoje = new Date();
-    const dataVal = parseISO(dataValidade);
-    const diasRestantes = differenceInCalendarDays(dataVal, hoje);
-    const vencido = diasRestantes < 0;
-
-    if (vencido) {
-      return (
-        <Chip 
-            label={`Vencido há ${Math.abs(diasRestantes)} dias`} 
-            size="small" 
-            sx={{ bgcolor: alpha(theme.palette.error.main, 0.1), color: 'error.main', fontWeight: 'bold', border: '1px solid', borderColor: alpha(theme.palette.error.main, 0.2) }} 
-        />
-      );
-    }
-    if (diasRestantes <= 3) {
-        return (
-            <Chip 
-                label={`Vence em ${diasRestantes} dias`} 
-                size="small" 
-                sx={{ bgcolor: alpha(theme.palette.warning.main, 0.1), color: 'warning.dark', fontWeight: 'bold', border: '1px solid', borderColor: alpha(theme.palette.warning.main, 0.2) }} 
-            />
-        );
-    }
+  if (loading) {
     return (
-        <Chip 
-            label="Válido" 
-            size="small" 
-            sx={{ bgcolor: alpha(theme.palette.success.main, 0.1), color: 'success.main', fontWeight: 'bold', border: '1px solid', borderColor: alpha(theme.palette.success.main, 0.2) }} 
-        />
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+        <CircularProgress />
+      </Box>
     );
-  };
+  }
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
-      
-      {/* Cabeçalho da Página */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Box>
-          <Typography variant="h4" fontWeight="800" sx={{ color: 'text.primary', letterSpacing: '-0.02em' }}>
-            Histórico de Produção
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Registro de lotes produzidos e rastreabilidade (RDC 216).
-          </Typography>
-        </Box>
-        
-        <Link href="/producao/nova" passHref style={{ textDecoration: 'none' }}>
-          <Button 
-            variant="contained" 
-            size="large" 
-            startIcon={<Plus size={20} />}
-            sx={{ px: 3, fontWeight: 'bold' }}
-          >
-            Nova Produção
-          </Button>
-        </Link>
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" fontWeight="800" sx={{ color: 'text.primary', letterSpacing: '-0.02em', mb: 1 }}>
+          Controle de Produção Executiva
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Selecione um setor para iniciar ou acompanhar a produção.
+        </Typography>
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
-      )}
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-      {/* Tabela de Registros */}
-      <Paper elevation={0} sx={{ width: '100%', overflow: 'hidden', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-        {loading ? (
-          <Box sx={{ p: 8, textAlign: 'center' }}>
-            <CircularProgress />
-            <Typography sx={{ mt: 2, color: 'text.secondary' }}>Carregando registros...</Typography>
-          </Box>
-        ) : ordens.length === 0 ? (
-          <Box sx={{ p: 8, textAlign: 'center', bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-            <PackageCheck size={64} style={{ opacity: 0.2, marginBottom: 16 }} />
-            <Typography variant="h6" color="text.secondary">Nenhuma produção registrada.</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Clique em "Nova Produção" para registrar seu primeiro lote e baixar o estoque automaticamente.
-            </Typography>
-            <Link href="/producao/nova" passHref style={{ textDecoration: 'none' }}>
-              <Button variant="outlined" startIcon={<Plus size={18} />}>Registrar Primeiro Lote</Button>
-            </Link>
-          </Box>
-        ) : (
-          <TableContainer>
-            <Table sx={{ minWidth: 650 }}>
-              <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: 'bold', color: 'primary.dark' }}>DATA / HORA</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: 'primary.dark' }}>LOTE (RASTREABILIDADE)</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: 'primary.dark' }}>PRODUTO FINAL</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: 'primary.dark' }}>QUANTIDADE</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: 'primary.dark' }}>VALIDADE</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.dark' }}>AÇÕES</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {ordens.map((ordem) => (
-                  <TableRow key={ordem.id} hover sx={{ '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.02) } }}>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-                        <Clock size={16} />
-                        <Typography variant="body2">{format(parseISO(ordem.data_producao), 'dd/MM/yyyy HH:mm')}</Typography>
+      <Grid container spacing={4}>
+        {setores.map((setor) => {
+          const itens = itensPorSetor[setor.id] || [];
+          const totalPlanejado = itens.reduce((acc, i) => acc + i.quantidade_planejada, 0);
+          const totalProduzido = itens.reduce((acc, i) => acc + i.quantidade_produzida, 0);
+          const completion = totalPlanejado > 0 ? (totalProduzido / totalPlanejado) * 100 : 0;
+          const itensConcluidos = itens.filter(i => i.quantidade_produzida >= i.quantidade_planejada).length;
+
+          return (
+            <Grid item xs={12} md={6} lg={4} key={setor.id}>
+              <Card 
+                elevation={0} 
+                sx={{ 
+                  border: '1px solid', 
+                  borderColor: 'divider', 
+                  borderRadius: 4, 
+                  transition: 'all 0.2s',
+                  '&:hover': { 
+                    borderColor: 'primary.main',
+                    boxShadow: '0 8px 24px ' + alpha(theme.palette.primary.main, 0.08),
+                    transform: 'translateY(-4px)',
+                    cursor: 'pointer'
+                  }
+                }}
+                onClick={() => window.location.href = `/producao/setor/${setor.id}`}
+              >
+                <Box sx={{ p: 3, bgcolor: alpha(theme.palette.primary.main, 0.04), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'primary.main', color: 'white' }}>
+                    <ChefHat size={28} />
+                  </Box>
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold">{setor.nome}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Clock size={12} /> Atualizado agora
+                    </Typography>
+                  </Box>
+                </Box>
+                
+                <CardContent sx={{ p: 3 }}>
+                  <Box sx={{ mb: 3 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, alignItems: 'baseline' }}>
+                      <Typography variant="body2" color="text.secondary" fontWeight="600">PRODUÇÃO GERAL</Typography>
+                      <Typography variant="h6" fontWeight="800" color="primary.main">{Math.round(completion)}%</Typography>
+                    </Box>
+                    <LinearProgress 
+                      variant="determinate" 
+                      value={completion} 
+                      sx={{ height: 10, borderRadius: 5, bgcolor: alpha(theme.palette.divider, 0.5) }} 
+                    />
+                  </Box>
+
+                  <Grid container spacing={2}>
+                    <Grid item xs={6}>
+                      <Box sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.success.main, 0.05), border: '1px solid', borderColor: alpha(theme.palette.success.main, 0.1) }}>
+                        <Typography variant="caption" color="success.main" fontWeight="bold">CONCLUÍDOS</Typography>
+                        <Typography variant="h5" fontWeight="800">{itensConcluidos}</Typography>
                       </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={ordem.codigo_lote_produto} 
-                        size="small" 
-                        sx={{ 
-                            fontFamily: 'monospace', 
-                            fontWeight: 'bold', 
-                            bgcolor: 'grey.100', 
-                            color: 'text.primary',
-                            border: '1px solid',
-                            borderColor: 'grey.300',
-                            borderRadius: 1
-                        }} 
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <ChefHat size={18} color={theme.palette.primary.main} />
-                          <Typography fontWeight={600} color="text.primary">
-                            {ordem.receitas?.nome || <span style={{ color: 'red', fontStyle: 'italic' }}>Receita Excluída</span>}
-                          </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Box sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.warning.main, 0.05), border: '1px solid', borderColor: alpha(theme.palette.warning.main, 0.1) }}>
+                        <Typography variant="caption" color="warning.main" fontWeight="bold">PENDENTES</Typography>
+                        <Typography variant="h5" fontWeight="800">{itens.length - itensConcluidos}</Typography>
                       </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight={700}>
-                          {ordem.quantidade_produzida} <span style={{ fontSize: '0.8em', color: '#666', fontWeight: 400 }}>{ordem.unidade_medida}</span>
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{format(parseISO(ordem.data_validade), 'dd/MM/yyyy')}</Typography>
-                        {getStatusValidade(ordem.data_validade)}
-                      </Box>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Tooltip title="Ver Detalhes (Em breve)">
-                        <IconButton size="small" sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}>
-                          <Eye size={20} />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                    </Grid>
+                  </Grid>
+
+                  <Button 
+                    variant="contained" 
+                    fullWidth 
+                    endIcon={<ArrowRight size={18} />}
+                    sx={{ mt: 3, borderRadius: 2, py: 1.5, fontWeight: 'bold' }}
+                  >
+                    ACESSAR SETOR
+                  </Button>
+                </CardContent>
+              </Card>
+            </Grid>
+          );
+        })}
+        
+        {itensPorSetor['unassigned']?.length > 0 && (
+          <Grid item xs={12} md={6} lg={4}>
+            <Card 
+              elevation={0} 
+              sx={{ 
+                border: '1px dashed', 
+                borderColor: 'warning.main', 
+                borderRadius: 4, 
+                bgcolor: alpha(theme.palette.warning.main, 0.02),
+                '&:hover': { cursor: 'pointer', bgcolor: alpha(theme.palette.warning.main, 0.05) }
+              }}
+              onClick={() => window.location.href = `/producao/setor/unassigned`}
+            >
+              <CardContent sx={{ p: 4, textAlign: 'center' }}>
+                <Layers size={48} color={theme.palette.warning.main} style={{ marginBottom: 16 }} />
+                <Typography variant="h6" fontWeight="bold">Sem Setor Definido</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Existem {itensPorSetor['unassigned'].length} itens sem setor atribuído.
+                </Typography>
+                <Button variant="outlined" color="warning" fullWidth>Ver Itens Pendentes</Button>
+              </CardContent>
+            </Card>
+          </Grid>
         )}
-      </Paper>
+      </Grid>
     </Container>
   );
 }

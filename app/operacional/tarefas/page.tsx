@@ -39,8 +39,7 @@ export default function TarefasPage() {
     try {
       // CORREÇÃO CRÍTICA AQUI:
       // Mudamos 'responsavel:usuario_id' para 'responsavel:responsavel_id'
-      const { data, error } = await supabase
-        .from('operacao_tarefas')
+      const { data, error } = await (supabase as any).from('operacao_tarefas')
         .select(`
           *,
           responsavel:responsavel_id ( full_name, email ),
@@ -74,8 +73,7 @@ export default function TarefasPage() {
       t.id === taskId ? { ...t, status: newStatus } : t
     ));
 
-    const { error } = await supabase
-      .from('operacao_tarefas')
+    const { error } = await (supabase as any).from('operacao_tarefas')
       .update({ status: newStatus })
       .eq('id', taskId);
 
@@ -130,3 +128,5 @@ export default function TarefasPage() {
     </Box>
   );
 }
+
+

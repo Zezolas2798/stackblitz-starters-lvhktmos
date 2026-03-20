@@ -91,11 +91,10 @@ export default function CriarModeloPage() {
     setLoading(true);
     try {
       // 1. Criar Modelo
-      const { data: modeloData, error: modError } = await supabase
-        .from('checklist_modelos')
+      const { data: modeloData, error: modError } = await (supabase as any).from('checklist_modelos')
         .insert({
           cliente_id: activeClientId,
-          nome,
+          titulo: nome, // Corrigido de 'nome' para 'titulo' conforme schema
           descricao,
           frequencia_sugerida: frequencia,
           ativo: true,
@@ -110,8 +109,7 @@ export default function CriarModeloPage() {
       // 2. Loop Seções
       for (let i = 0; i < secoes.length; i++) {
         const secao = secoes[i];
-        const { data: secaoData, error: secError } = await supabase
-          .from('checklist_secoes')
+        const { data: secaoData, error: secError } = await (supabase as any).from('checklist_secoes')
           .insert({ modelo_id: modeloId, titulo: secao.titulo, ordem: i })
           .select()
           .single();
@@ -122,6 +120,7 @@ export default function CriarModeloPage() {
         // 3. Loop Itens
         if (secao.itens.length > 0) {
           const itensParaInserir = secao.itens.map((item, itemIdx) => ({
+            modelo_id: modeloId, // Adicionado campo obrigatório modelo_id
             secao_id: secaoId,
             texto_pergunta: item.texto_pergunta,
             tipo_resposta: item.tipo_resposta,
@@ -130,7 +129,7 @@ export default function CriarModeloPage() {
             ordem: itemIdx
           }));
 
-          const { error: itemError } = await supabase.from('checklist_itens').insert(itensParaInserir);
+          const { error: itemError } = await (supabase as any).from('checklist_itens').insert(itensParaInserir);
           if (itemError) throw itemError;
         }
       }
@@ -417,3 +416,5 @@ export default function CriarModeloPage() {
     </Container>
   );
 }
+
+

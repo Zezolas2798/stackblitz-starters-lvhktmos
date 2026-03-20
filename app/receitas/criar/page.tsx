@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -144,30 +144,22 @@ function CriarEditarReceitaComponent() {
     return anvisaCategorias.filter(c => c.grupo_anvisa === selectedGrupoAnvisa);
   }, [anvisaCategorias, selectedGrupoAnvisa]);
 
-  // --- CARREGAMENTO ---
-  useEffect(() => {
-    if (!activeClientId) {
-      setLoading(false);
-      return;
-    }
-    carregarDados();
-  }, [editingId, activeClientId]);
 
-  async function carregarDados() {
+  const carregarDados = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       // NOTA: Adicionei 'alergenicos_ids' na query de ingredientes para suportar o novo formato
       const [ingPromise, recPromise, catPromise, medPromise, alergenicosPromise, ingAlergLinkPromise, gruposPopPromise, tiposRecPromise, aditivosMestrePromise] = await Promise.all([
-        supabase.from('ingredientes').select('id, nome, fonte, ins_code, tipo_ingrediente, funcao_aditivo, alergenicos_ids').or(`cliente_id.eq.${activeClientId},cliente_id.is.null`).order('nome'),
-        supabase.from('receitas').select('id, nome').eq('cliente_id', activeClientId).neq('id', editingId || '00000000-0000-0000-0000-000000000000').order('nome'),
-        supabase.from('anvisa_categorias').select('*').order('nome_produto'),
-        supabase.from('anvisa_medidas_caseiras').select('nome').order('nome'),
-        supabase.from('anvisa_alergenicos').select('id, nome').order('nome'),
-        supabase.from('ingredientes_alergenicos_link').select('ingrediente_id, alergenico_id, contem, contem_derivado'),
-        supabase.from('anvisa_grupos_populacionais').select('*').order('id'),
-        supabase.from('tipos_receita').select('*').eq('cliente_id', activeClientId).order('nome'),
-        supabase.from('anvisa_aditivos').select('*').order('ins')
+        (supabase as any).from('ingredientes').select('id, nome, fonte, ins_code, tipo_ingrediente, funcao_aditivo, alergenicos_ids').or(`cliente_id.eq.${activeClientId},cliente_id.is.null`).order('nome'),
+        (supabase as any).from('receitas').select('id, nome').eq('cliente_id', activeClientId!).neq('id', editingId || '00000000-0000-0000-0000-000000000000').order('nome'),
+        (supabase as any).from('anvisa_categorias').select('*').order('nome_produto'),
+        (supabase as any).from('anvisa_medidas_caseiras').select('nome').order('nome'),
+        (supabase as any).from('anvisa_alergenicos').select('id, nome').order('nome'),
+        (supabase as any).from('ingrediente_alergenicos').select('ingrediente_id, alergenico_id, contem, contem_derivado'),
+        (supabase as any).from('anvisa_grupos_populacionais').select('*').order('id'),
+        (supabase as any).from('tipos_receita').select('*').eq('cliente_id', activeClientId!).order('nome'),
+        (supabase as any).from('anvisa_aditivos').select('*').order('ins')
       ]);
 
       if (ingPromise.error) throw ingPromise.error;
@@ -213,7 +205,7 @@ function CriarEditarReceitaComponent() {
           fonte: ing.fonte
         }));
 
-      const receitasFormatadas: ItemDeBusca[] = (recPromise.data || []).map(rec => ({
+      const receitasFormatadas: ItemDeBusca[] = (recPromise.data || []).map((rec: any) => ({
         id: rec.id, nome: rec.nome, tipo: 'receita', grupo: 'Minhas Receitas (Sub-receitas)', fonte: 'Própria'
       }));
 
@@ -241,11 +233,11 @@ function CriarEditarReceitaComponent() {
       setSelectedGrupoPop(grupoGeral || null);
 
       if (editingId) {
-        const { data: recData, error: recError } = await supabase
+        const { data: recData, error: recError } = await (supabase as any)
           .from('receitas')
           .select('*, anvisa_categorias(*), composicao_receitas(*), risco_contaminacao_cruzada_ids')
           .eq('id', editingId)
-          .eq('cliente_id', activeClientId)
+          .eq('cliente_id', activeClientId!)
           .single();
 
         if (recError || !recData) { setError('Receita não encontrada.'); router.push('/receitas'); return; }
@@ -256,7 +248,7 @@ function CriarEditarReceitaComponent() {
         setUnidadeRendimento(recData.rendimento_total_g % 1000 === 0 && recData.rendimento_total_g > 0 ? 'Kg' : 'g');
         setPesoEmbalagem(recData.peso_embalagem_g || '');
         setFotoUrlAtual(recData.foto_url || null);
-        setEstadoAlimento(recData.estado_alimento || 'solido');
+        setEstadoAlimento((recData.estado_alimento as "solido" | "liquido") || 'solido');
         setMedidaCaseiraNome(recData.medida_caseira_nome || null);
         setMedidaCaseiraPesoG(recData.medida_caseira_peso_g || '');
         setAreaPainelCm2(recData.area_painel_principal_cm2 || '');
@@ -269,11 +261,11 @@ function CriarEditarReceitaComponent() {
 
         if (recData.grupo_populacional_id) {
           const grp = (gruposPopPromise.data || []).find((g: any) => g.id === recData.grupo_populacional_id);
-          if (grp) setSelectedGrupoPop(grp);
+          if (grp) setSelectedGrupoPop(grp as AnvisaGrupoPopulacional);
         }
         if (recData.tipo_receita_id) {
           const tipo = (tiposRecPromise.data || []).find((t: any) => t.id === recData.tipo_receita_id);
-          if (tipo) setSelectedTipoReceita(tipo);
+          if (tipo) setSelectedTipoReceita(tipo as TipoReceita);
         }
         if (recData.risco_contaminacao_cruzada_ids && Array.isArray(recData.risco_contaminacao_cruzada_ids)) {
           const riscosSalvos = (alergenicosPromise.data || []).filter((a: any) => (recData.risco_contaminacao_cruzada_ids as number[]).includes(a.id));
@@ -296,8 +288,8 @@ function CriarEditarReceitaComponent() {
                   grupo: 'Aditivo Cadastrado',
                   fonte: ingRaw.fonte,
                   aditivoData: {
-                    ins: ingRaw.ins_code,
-                    funcao: ingRaw.funcao_aditivo
+                    ins: ingRaw.ins_code as string,
+                    funcao: ingRaw.funcao_aditivo as string
                   }
                 };
                 isAditivo = ingRaw.tipo_ingrediente === 'ADITIVO';
@@ -328,24 +320,49 @@ function CriarEditarReceitaComponent() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [activeClientId, editingId, router]);
+
+  useEffect(() => {
+    if (activeClientId) {
+      carregarDados();
+    }
+  }, [carregarDados, activeClientId]);
+
+  useEffect(() => {
+    if (selectedCategory) {
+      const porcaoReferencia = selectedCategory.porcao_referencia_g_ml;
+      const pesoEmbalagemNum = typeof pesoEmbalagem === 'number' ? pesoEmbalagem : 0;
+
+      // Cálculo de Porção (RDC 429) - SEM interferir na Medida Caseira
+      if (pesoEmbalagemNum > 0 && pesoEmbalagemNum <= (2 * porcaoReferencia)) {
+        setPorcaoFinal(pesoEmbalagemNum);
+      } else {
+        setPorcaoFinal(porcaoReferencia);
+      }
+    } else {
+      setPorcaoFinal('');
+    }
+  }, [pesoEmbalagem, selectedCategory]);
 
   // Handlers
   const handleAddTipoReceita = async () => {
     if (!novoTipoNome.trim()) return;
-    const { data, error } = await supabase.from('tipos_receita').insert({ nome: novoTipoNome, cliente_id: activeClientId }).select().single();
+    const { data, error } = await (supabase as any).from('tipos_receita').insert({
+      nome: novoTipoNome,
+      cliente_id: activeClientId!
+    }).select().single();
     if (error) {
       console.error(error);
       alert('Erro ao criar tipo: ' + error.message);
       return;
     }
-    setTiposReceita([...tiposReceita, data]);
+    setTiposReceita([...tiposReceita, data as TipoReceita]);
     setNovoTipoNome('');
   };
 
   const handleDeleteTipoReceita = async (id: string) => {
     if (!confirm('Excluir esta categoria?')) return;
-    const { error } = await supabase.from('tipos_receita').delete().eq('id', id);
+    const { error } = await (supabase as any).from('tipos_receita').delete().eq('id', id);
     if (error) { alert('Erro ao excluir'); return; }
     setTiposReceita(tiposReceita.filter(t => t.id !== id));
     if (selectedTipoReceita?.id === id) setSelectedTipoReceita(null);
@@ -443,9 +460,9 @@ function CriarEditarReceitaComponent() {
 
     if (ehAditivoMestre && itemSelecionado.aditivoData) {
       try {
-        const { data: existing } = await supabase.from('ingredientes')
+        const { data: existing } = await (supabase as any).from('ingredientes')
           .select('id')
-          .eq('cliente_id', activeClientId)
+          .eq('cliente_id', activeClientId!)
           .eq('ins_code', itemSelecionado.aditivoData.ins)
           .eq('funcao_aditivo', funcaoFinal)
           .maybeSingle();
@@ -454,7 +471,7 @@ function CriarEditarReceitaComponent() {
           realItemId = existing.id;
           realItemType = 'ingrediente';
         } else {
-          const { data: novo, error } = await supabase.from('ingredientes').insert({
+          const { data: novo, error } = await (supabase as any).from('ingredientes').insert({
             cliente_id: activeClientId,
             nome: itemSelecionado.nome,
             tipo_ingrediente: 'ADITIVO',
@@ -473,7 +490,7 @@ function CriarEditarReceitaComponent() {
     }
     else if (ehAditivoEdicao) {
       const ingredienteId = composicao[editingItemIndex!].item_id;
-      const { error } = await supabase.from('ingredientes')
+      const { error } = await (supabase as any).from('ingredientes')
         .update({ funcao_aditivo: funcaoFinal })
         .eq('id', ingredienteId);
       if (error) { alert('Erro ao atualizar função: ' + error.message); return; }
@@ -531,8 +548,8 @@ function CriarEditarReceitaComponent() {
         };
         if (funcs.length > 0) {
           setFuncoesAditivoDisponiveis(funcs);
-          supabase.from('ingredientes').select('funcao_aditivo').eq('id', item.item_id).single()
-            .then(({ data }) => { if (data) setFuncaoAditivoSelecionada(data.funcao_aditivo || ''); });
+          (supabase as any).from('ingredientes').select('funcao_aditivo').eq('id', item.item_id).single()
+            .then(({ data }: any) => { if (data) setFuncaoAditivoSelecionada(data.funcao_aditivo || ''); });
         }
       } else {
         const tipoCompativel = (item.item_type === 'ingrediente' || item.item_type === 'receita') ? item.item_type : 'ingrediente';
@@ -605,16 +622,16 @@ function CriarEditarReceitaComponent() {
     }));
     try {
       if (editingId) {
-        const { error: recError } = await supabase.from('receitas').update(dadosReceita).eq('id', editingId);
+        const { error: recError } = await (supabase as any).from('receitas').update(dadosReceita).eq('id', editingId);
         if (recError) throw recError;
-        await supabase.from('composicao_receitas').delete().eq('receita_id', editingId);
-        const { error: compError } = await supabase.from('composicao_receitas').insert(itensParaSalvar.map((item) => ({ ...item, receita_id: editingId })));
+        await (supabase as any).from('composicao_receitas').delete().eq('receita_id', editingId);
+        const { error: compError } = await (supabase as any).from('composicao_receitas').insert(itensParaSalvar.map((item) => ({ ...item, receita_id: editingId })));
         if (compError) throw compError;
         alert('Receita atualizada!');
       } else {
-        const { data: novaReceita, error: recError } = await supabase.from('receitas').insert(dadosReceita).select('id').single();
+        const { data: novaReceita, error: recError } = await (supabase as any).from('receitas').insert(dadosReceita).select('id').single();
         if (recError || !novaReceita) throw recError;
-        const { error: compError } = await supabase.from('composicao_receitas').insert(itensParaSalvar.map((item) => ({ ...item, receita_id: novaReceita.id })));
+        const { error: compError } = await (supabase as any).from('composicao_receitas').insert(itensParaSalvar.map((item) => ({ ...item, receita_id: novaReceita.id })));
         if (compError) throw compError;
         alert('Receita salva!');
         router.push('/receitas');
@@ -875,7 +892,10 @@ function CriarEditarReceitaComponent() {
                   else setRiscosContaminacao(newValue);
                 }}
                 isOptionEqualToValue={(option, value) => option.id === value.id}
-                renderTags={(value, getTagProps) => value.map((option, index) => (<Chip variant="outlined" label={option.nome} color="error" size="small" {...getTagProps({ index })} />))}
+                renderTags={(value, getTagProps) => value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return <Chip key={option.id} variant="outlined" label={option.nome} color="error" size="small" {...tagProps} />;
+                })}
                 renderInput={(params) => <TextField {...params} label="Selecione os riscos..." placeholder="Ex: Trigo, Leite" sx={{ bgcolor: 'background.paper' }} />}
               />
             </Paper>
@@ -919,3 +939,5 @@ function CriarEditarReceitaComponent() {
 export default function CriarReceitaPageWrapper() {
   return <Suspense fallback={<CircularProgress />}><CriarEditarReceitaComponent /></Suspense>;
 }
+
+

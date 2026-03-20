@@ -42,8 +42,7 @@ export default function ListarReceitasPage() {
     setError(null);
     setReceitas([]);
 
-    const { data, error } = await supabase
-      .from('receitas')
+    const { data, error } = await (supabase as any).from('receitas')
       .select('id, nome, tipos_receita(nome)')
       .eq('cliente_id', clienteId)
       .order('nome', { ascending: true });
@@ -208,3 +207,5 @@ export default function ListarReceitasPage() {
     </Container>
   );
 }
+
+

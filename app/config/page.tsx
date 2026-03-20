@@ -93,9 +93,9 @@ export default function ConfigPage() {
         </Typography>
 
         <Grid container spacing={3}>
-          {/* Link para Clientes (Atalho) */}
+          {/* Link para Unidades */}
           <Grid item xs={12} md={6} lg={4}>
-            <Link href="/clientes" passHref style={{ textDecoration: 'none' }}>
+            <Link href="/config/unidades" passHref style={{ textDecoration: 'none' }}>
               <Paper 
                 elevation={0}
                 sx={{ 
@@ -105,17 +105,19 @@ export default function ConfigPage() {
                   borderColor: 'divider',
                   borderRadius: 3,
                   transition: 'all 0.2s',
+                  cursor: 'pointer',
                   '&:hover': { 
-                    borderColor: 'text.primary',
-                    bgcolor: 'grey.50'
+                    borderColor: 'primary.main',
+                    boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.1)',
+                    '& .icon-box': { bgcolor: 'primary.main', color: 'white' }
                   }
                 }}
               >
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                  <Avatar sx={{ bgcolor: alpha(theme.palette.secondary.main, 0.1), color: 'text.primary' }}>
+                  <Avatar className="icon-box" sx={{ bgcolor: alpha(theme.palette.secondary.main, 0.1), color: 'text.primary', transition: 'all 0.2s' }}>
                     <Store size={24} />
                   </Avatar>
-                  <Chip label="Atalho" size="small" variant="outlined" sx={{ height: 24 }} />
+                  <ChevronRight size={20} color={theme.palette.text.disabled} />
                 </Box>
                 <Typography variant="h6" fontWeight="bold" sx={{ color: 'text.primary', mb: 1 }}>
                   Unidades / Filiais
@@ -160,3 +162,5 @@ export default function ConfigPage() {
     </Container>
   );
 }
+
+

@@ -64,7 +64,7 @@ function EditorModeloChecklistContent() {
         setLoading(true);
 
         // 1. Carrega Modelo
-        const { data: modelo } = await supabase.from('checklist_modelos').select('*').eq('id', id).single();
+        const { data: modelo } = await (supabase as any).from('checklist_modelos').select('*').eq('id', id).single();
         if (!modelo) { setLoading(false); return; }
 
         setNome(modelo.titulo);
@@ -72,8 +72,7 @@ function EditorModeloChecklistContent() {
         setFrequencia(modelo.frequencia_sugerida || 'DIARIO');
 
         // 2. Carrega Seções e Itens
-        const { data: secoesData } = await supabase
-            .from('checklist_secoes')
+        const { data: secoesData } = await (supabase as any).from('checklist_secoes')
             .select(`
             *,
             checklist_itens (*)
@@ -183,24 +182,24 @@ function EditorModeloChecklistContent() {
             };
 
             if (modeloId) {
-                const { error } = await supabase.from('checklist_modelos').update(payloadModelo).eq('id', modeloId);
+                const { error } = await (supabase as any).from('checklist_modelos').update(payloadModelo).eq('id', modeloId);
                 if (error) throw error;
             } else {
-                const { data, error } = await supabase.from('checklist_modelos').insert(payloadModelo).select('id').single();
+                const { data, error } = await (supabase as any).from('checklist_modelos').insert(payloadModelo).select('id').single();
                 if (error) throw error;
                 modeloId = data.id;
             }
 
             // 2. Limpar estrutura antiga (Simples e eficaz para edição)
             if (editingId) {
-                await supabase.from('checklist_secoes').delete().eq('modelo_id', modeloId);
+                await (supabase as any).from('checklist_secoes').delete().eq('modelo_id', modeloId);
             }
 
             // 3. Inserir Nova Estrutura
             for (let i = 0; i < secoes.length; i++) {
                 const secao = secoes[i];
 
-                const { data: secaoSaved, error: sErr } = await supabase.from('checklist_secoes').insert({
+                const { data: secaoSaved, error: sErr } = await (supabase as any).from('checklist_secoes').insert({
                     modelo_id: modeloId,
                     titulo: secao.titulo,
                     ordem: i
@@ -219,7 +218,7 @@ function EditorModeloChecklistContent() {
                         ajuda_texto: item.ajuda_texto,
                         ordem: idx
                     }));
-                    const { error: iErr } = await supabase.from('checklist_itens').insert(itensPayload);
+                    const { error: iErr } = await (supabase as any).from('checklist_itens').insert(itensPayload);
                     if (iErr) throw iErr;
                 }
             }
@@ -353,7 +352,7 @@ function EditorModeloChecklistContent() {
                                         </Grid>
                                     </Box>
                                 ))}
-                                <Button fullWidth variant="outlined" startIcon={<Plus size={16} />} onClick={() => handleAddItem(sIdx)} sx={{ borderStyle: 'dashed', height: 48, color: 'text.secondary' }}>Adicionar Pergunta à seção "{secao.titulo || 'Nova'}"</Button>
+                                <Button fullWidth variant="outlined" startIcon={<Plus size={16} />} onClick={() => handleAddItem(sIdx)} sx={{ borderStyle: 'dashed', height: 48, color: 'text.secondary' }}>Adicionar Pergunta à seção &quot;{secao.titulo || 'Nova'}&quot;</Button>
                             </Box>
                         </AccordionDetails>
                     </Accordion>
@@ -381,3 +380,5 @@ export default function EditorModeloChecklistPage() {
         </Suspense>
     );
 }
+
+

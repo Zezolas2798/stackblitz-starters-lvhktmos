@@ -32,14 +32,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import RolePermissionEditor from '@/components/RolePermissionEditor';
+import { Role } from '@/lib/types';
 
-// Interface do Cargo
-type Role = {
-  id: string;
-  nome: string;
-  descricao: string;
-  is_system_role: boolean;
-};
 
 export default function GestaoCargosPage() {
   const theme = useTheme();
@@ -63,8 +57,7 @@ export default function GestaoCargosPage() {
     setLoading(true);
     setError('');
     try {
-      const { data, error } = await supabase
-        .from('app_roles')
+      const { data, error } = await (supabase as any).from('app_roles')
         .select('*')
         .order('is_system_role', { ascending: false }) // Sistema primeiro
         .order('nome', { ascending: true });
@@ -92,7 +85,7 @@ export default function GestaoCargosPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Sessão expirada.");
 
-      const { error } = await supabase.from('app_roles').insert({
+      const { error } = await (supabase as any).from('app_roles').insert({
         nome: newRoleName,
         descricao: newRoleDesc,
         is_system_role: false,
@@ -118,7 +111,7 @@ export default function GestaoCargosPage() {
     if (!confirm('ATENÇÃO: Isso removerá o acesso de todos os usuários vinculados a este cargo. Deseja continuar?')) return;
     
     try {
-      const { error } = await supabase.from('app_roles').delete().eq('id', id);
+      const { error } = await (supabase as any).from('app_roles').delete().eq('id', id);
       if (error) throw error;
       fetchRoles();
     } catch (err: any) {
@@ -337,3 +330,5 @@ export default function GestaoCargosPage() {
     </Container>
   );
 }
+
+

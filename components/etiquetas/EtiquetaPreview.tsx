@@ -14,7 +14,10 @@ export default function EtiquetaPreview({ dados }: EtiquetaPreviewProps) {
     return format(dateObj, 'dd/MM/yyyy');
   };
   
-  const fmtHora = (d: Date) => format(d, 'HH:mm');
+  const fmtCompleto = (d: Date | string) => {
+    const dateObj = typeof d === 'string' ? new Date(d) : d;
+    return format(dateObj, 'dd/MM/yyyy - HH:mm:ss');
+  };
 
   // QR Code (API Pública para preview)
   const qrContent = `ID:${dados.rastreabilidade.idInterno}|L:${dados.produto.lote}`;
@@ -24,85 +27,88 @@ export default function EtiquetaPreview({ dados }: EtiquetaPreviewProps) {
     <Paper 
       elevation={4}
       sx={{
-        width: '300px',  // Representação visual na tela (proporção 1:1)
-        height: '300px', // Quadrado 60mm x 60mm
-        p: 1.5,
+        width: '320px', 
+        minHeight: '320px',
+        p: 2,
         bgcolor: '#fff',
         color: '#000',
-        fontFamily: '"Courier New", Courier, monospace', 
+        fontFamily: '"Inter", sans-serif', 
         border: '1px solid #ddd',
-        position: 'relative',
         mx: 'auto',
-        overflow: 'hidden'
+        borderRadius: 1
       }}
     >
-      {/* MOLDURA IMPRESSORA */}
-      <Box sx={{ border: '2px solid #000', height: '100%', display: 'flex', flexDirection: 'column' }}>
-        
-        {/* 1. EMPRESA */}
-        <Box sx={{ p: 1, borderBottom: '1px solid #000' }}>
-            <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '0.75rem', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {dados.empresa.razaoSocial}
-            </Typography>
-            <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>
-                CNPJ: {dados.empresa.cnpj}
-            </Typography>
-        </Box>
+      {/* 1. NOME PRODUTO */}
+      <Typography variant="h6" fontWeight="900" sx={{ fontSize: '1.2rem', lineHeight: 1.1, mb: 1.5, textTransform: 'uppercase' }}>
+        {dados.produto.nome}
+      </Typography>
 
-        {/* 2. PRODUTO */}
-        <Box sx={{ px: 1, py: 0.5, flexGrow: 1 }}>
-            <Typography variant="body1" fontWeight="900" sx={{ fontSize: '1rem', lineHeight: 1.1, mb: 0.5, textTransform: 'uppercase' }}>
-                {dados.produto.nome.substring(0, 35)}
-            </Typography>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem' }}>L: {dados.produto.lote}</Typography>
-                <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.7rem' }}>Q: {dados.produto.peso}</Typography>
-            </Box>
-            <Typography variant="caption" display="block" sx={{ fontSize: '0.65rem' }}>
-                {dados.produto.tipoArmazenamento}
-            </Typography>
-        </Box>
+      {/* 2. STATUS E PESO */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+          <Typography variant="body2" fontWeight="800" sx={{ fontSize: '0.75rem' }}>
+            {dados.produto.tipoArmazenamento.toUpperCase()}
+          </Typography>
+          <Typography variant="body2" fontWeight="900" sx={{ fontSize: '0.85rem' }}>
+            {dados.produto.peso}
+          </Typography>
+      </Box>
+      
+      <Divider sx={{ my: 1, bgcolor: '#000' }} />
 
-        <Divider sx={{ bgcolor: '#000' }} />
+      {/* 3. DADOS TÉCNICOS EM LISTA */}
+      <Box sx={{ flexGrow: 1 }}>
+          <Box sx={{ display: 'flex', mb: 0.3 }}>
+              <Typography variant="caption" fontWeight="bold" sx={{ width: '100px', fontSize: '0.65rem' }}>VAL. ORIGINAL:</Typography>
+              <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>{fmt(dados.datas.validadeOriginal)}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', mb: 0.3 }}>
+              <Typography variant="caption" fontWeight="bold" sx={{ width: '100px', fontSize: '0.65rem' }}>MANIPULAÇÃO:</Typography>
+              <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>{fmtCompleto(dados.datas.manipulacao)}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', mb: 0.3 }}>
+              <Typography variant="caption" fontWeight="bold" sx={{ width: '100px', fontSize: '0.65rem' }}>VALIDADE:</Typography>
+              <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>{fmtCompleto(dados.datas.validadeFinal)}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', mb: 0.3 }}>
+              <Typography variant="caption" fontWeight="bold" sx={{ width: '100px', fontSize: '0.65rem' }}>MARCA / FORN:</Typography>
+              <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>{(dados.produto.marcaForn || 'PRÓPRIO').toUpperCase()}</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', mb: 0.3 }}>
+              <Typography variant="caption" fontWeight="bold" sx={{ width: '100px', fontSize: '0.65rem' }}>SIF:</Typography>
+              <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>{dados.produto.sif || 'N/A'}</Typography>
+          </Box>
+      </Box>
 
-        {/* 3. DATAS & RASTREIO */}
-        <Box sx={{ px: 1, py: 0.5 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>Manip:</Typography>
-                <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.65rem' }}>{fmt(dados.datas.manipulacao)} {fmtHora(dados.datas.manipulacao)}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>Val. Orig:</Typography>
-                <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.65rem' }}>{fmt(dados.datas.validadeOriginal)}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>Resp:</Typography>
-                <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.65rem' }}>{dados.rastreabilidade.responsavel.substring(0,10)}</Typography>
-            </Box>
-        </Box>
+      <Divider sx={{ my: 1, bgcolor: '#000' }} />
 
-        {/* 4. RODAPÉ (VALIDADE + QR) */}
-        <Box sx={{ display: 'flex', height: '80px', borderTop: '1px solid #000' }}>
-            {/* Bloco Preto Invertido */}
-            <Box sx={{ bgcolor: '#000', color: '#fff', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', pl: 1 }}>
-                <Typography variant="caption" sx={{ fontSize: '0.6rem', lineHeight: 1 }}>VALIDADE</Typography>
-                <Typography variant="caption" sx={{ fontSize: '0.6rem', lineHeight: 1 }}>SANITÁRIA</Typography>
-                <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.4rem', lineHeight: 1.1 }}>
-                    {fmt(dados.datas.validadeFinal).substring(0,5)}
-                </Typography>
-                <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1rem', lineHeight: 1 }}>
-                    {fmt(dados.datas.validadeFinal).substring(6)}
-                </Typography>
-            </Box>
-            
-            {/* QR Code */}
-            <Box sx={{ width: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #000' }}>
-                 <img src={qrUrl} alt="QR" style={{ width: '70px', height: '70px' }} />
-            </Box>
-        </Box>
+      {/* 4. RODAPÉ (RESP + EMPRESA + QR) */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box sx={{ pr: 1, flex: 1 }}>
+              <Typography variant="caption" component="div" sx={{ mb: 0.5 }}>
+                  <span style={{ fontWeight: 'bold' }}>RESP.:</span> {dados.rastreabilidade.responsavel.toUpperCase()}
+              </Typography>
+              
+              <Typography variant="caption" fontWeight="bold" display="block" sx={{ fontSize: '0.6rem', lineHeight: 1.1 }}>
+                  {dados.empresa.razaoSocial.toUpperCase()}
+              </Typography>
+              <Typography variant="caption" display="block" sx={{ fontSize: '0.55rem', mt: 0.2 }}>
+                  CNPJ: {dados.empresa.cnpj}  CEP: {dados.empresa.cep || '00000-000'}
+              </Typography>
+              <Typography variant="caption" display="block" sx={{ fontSize: '0.55rem', overflowWrap: 'break-word', maxWidth: '180px' }}>
+                  {dados.empresa.enderecoCompleto || dados.empresa.enderecoResumido}
+              </Typography>
 
+              <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '0.8rem', mt: 1 }}>
+                  #{dados.rastreabilidade.codigoRef || dados.rastreabilidade.idInterno.substring(0, 8).toUpperCase()}
+              </Typography>
+          </Box>
+
+          <Box sx={{ minWidth: '70px', pt: 0.5 }}>
+              <img src={qrUrl} alt="QR" style={{ width: '65px', height: '65px' }} />
+          </Box>
       </Box>
     </Paper>
   );
 }
+
+

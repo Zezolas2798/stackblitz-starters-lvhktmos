@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Dialog, DialogContent, Typography, Box, IconButton, 
   Stack, Chip, Avatar, Button, TextField, Divider, Paper, alpha,
@@ -34,24 +34,13 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
   
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (open && taskId) {
-      loadTaskDetails();
-    } else {
-      setTask(null);
-      setLoading(true);
-      setError('');
-    }
-  }, [taskId, open]);
-
-  async function loadTaskDetails() {
+  const loadTaskDetails = useCallback(async () => {
     setLoading(true);
     setError('');
     
     try {
       // 1. Busca Tarefa + Responsável
-      const { data: dataTask, error: errTask } = await supabase
-        .from('operacao_tarefas')
+      const { data: dataTask, error: errTask } = await (supabase as any).from('operacao_tarefas')
         .select(`*, responsavel:responsavel_id(full_name)`)
         .eq('id', taskId)
         .single();
@@ -59,8 +48,7 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
       if (errTask) throw new Error(`Erro ao carregar tarefa: ${errTask.message}`);
       
       // 2. Busca Subtarefas
-      const { data: dataSubs } = await supabase
-        .from('operacao_subtarefas')
+      const { data: dataSubs } = await (supabase as any).from('operacao_subtarefas')
         .select('*')
         .eq('tarefa_id', taskId)
         .order('ordem', { ascending: true });
@@ -69,8 +57,7 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
       setTask(fullTask);
 
       // 3. Busca Comentários
-      const { data: comments } = await supabase
-        .from('operacao_comentarios')
+      const { data: comments } = await (supabase as any).from('operacao_comentarios')
         .select('*, user:usuario_id(full_name)')
         .eq('tarefa_id', taskId)
         .order('created_at', { ascending: true });
@@ -83,14 +70,23 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [taskId]);
+
+  useEffect(() => {
+    if (open && taskId) {
+      loadTaskDetails();
+    } else {
+      setTask(null);
+      setLoading(true);
+      setError('');
+    }
+  }, [taskId, open, loadTaskDetails]);
 
   // === MUDANÇA MANUAL DE STATUS (Seletor) ===
   const handleManualStatusChange = async (newStatus: TarefaStatus) => {
     setTask({ ...task, status: newStatus }); // Otimista
 
-    const { error } = await supabase
-      .from('operacao_tarefas')
+    const { error } = await (supabase as any).from('operacao_tarefas')
       .update({ status: newStatus })
       .eq('id', taskId);
 
@@ -130,8 +126,7 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
       // A. Salva cada item do checklist modificado
       for (const item of novosItens) {
         if (item.id) {
-           await supabase
-             .from('operacao_subtarefas')
+           await (supabase as any).from('operacao_subtarefas')
              .update({ concluida: item.concluida })
              .eq('id', item.id);
         }
@@ -139,8 +134,7 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
 
       // B. Atualiza o Status da Tarefa Pai se mudou
       if (novoStatus !== task.status) {
-        await supabase
-          .from('operacao_tarefas')
+        await (supabase as any).from('operacao_tarefas')
           .update({ status: novoStatus })
           .eq('id', taskId);
         
@@ -164,8 +158,7 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
     const novoStatus = 'CONCLUIDA';
     setTask({ ...task, status: novoStatus });
 
-    await supabase
-      .from('operacao_tarefas')
+    await (supabase as any).from('operacao_tarefas')
       .update({ 
         status: novoStatus,
         concluida_em: new Date().toISOString() // Marca timestamp de conclusão
@@ -182,14 +175,13 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase.from('operacao_comentarios').insert([{
+    const { error } = await (supabase as any).from('operacao_comentarios').insert([{
       tarefa_id: taskId, texto: novoComentario, usuario_id: user.id
     }]);
 
     if (!error) {
       setNovoComentario('');
-      const { data } = await supabase
-        .from('operacao_comentarios')
+      const { data } = await (supabase as any).from('operacao_comentarios')
         .select('*, user:usuario_id(full_name)')
         .eq('tarefa_id', taskId)
         .order('created_at', { ascending: true });
@@ -386,3 +378,5 @@ export function TarefaDetalhesDialog({ taskId, open, onClose, onUpdate }: any) {
     </Dialog>
   );
 }
+
+

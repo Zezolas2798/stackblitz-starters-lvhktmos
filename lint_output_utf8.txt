@@ -1,0 +1,69 @@
+﻿
+> nutridev-manager@0.1.0 lint
+> next lint
+
+
+./app/config/tarefas/modelos/novo/page.tsx
+54:6  Warning: React Hook useEffect has missing dependencies: 'loadEquipe' and 'loadModeloParaEditar'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/config/tarefas/modelos/page.tsx
+22:6  Warning: React Hook useEffect has a missing dependency: 'fetchModelos'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/estoque/entrada/page.tsx
+142:6  Warning: React Hook useEffect has a missing dependency: 'loadPrevisoes'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+341:6  Warning: React Hook useEffect has a missing dependency: 'loadDados'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/estoque/page.tsx
+78:6  Warning: React Hook useEffect has missing dependencies: 'loadDescartes' and 'loadEstoque'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/login/page.tsx
+70:11  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./app/operacional/tarefas/page.tsx
+34:6  Warning: React Hook useEffect has a missing dependency: 'fetchTarefas'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/producao/nova/page.tsx
+59:6  Warning: React Hook useEffect has missing dependencies: 'loadReceitas' and 'loadSetores'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/producao/page.tsx
+43:6  Warning: React Hook useEffect has a missing dependency: 'loadProducao'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/producao/[id]/page.tsx
+106:6  Warning: React Hook useEffect has a missing dependency: 'loadOrdem'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+189:6  Warning: React Hook useEffect has missing dependencies: 'loadReceitasOpts' and 'loadSetoresOpts'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/qualidade/execucao/[id]/page.tsx
+44:6  Warning: React Hook useEffect has a missing dependency: 'loadDadosAuditoria'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/qualidade/historico/[id]/page.tsx
+28:6  Warning: React Hook useEffect has a missing dependency: 'loadDetails'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/qualidade/modelos/novo/page.tsx
+61:8  Warning: React Hook useEffect has a missing dependency: 'handleAddSecao'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/qualidade/modelos/page.tsx
+35:6  Warning: React Hook useEffect has a missing dependency: 'fetchModelos'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/qualidade/novo/page.tsx
+31:6  Warning: React Hook useEffect has a missing dependency: 'fetchModelosDisponiveis'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/qualidade/page.tsx
+28:8  Warning: React Hook useEffect has a missing dependency: 'fetchAuditorias'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/qualidade/relatorio/[id]/page.tsx
+27:6  Warning: React Hook useEffect has a missing dependency: 'loadRelatorio'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/receitas/[id]/page.tsx
+88:6  Warning: React Hook useEffect has a missing dependency: 'fetchDadosCompletos'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+95:6  Warning: React Hook useEffect has a missing dependency: 'verificarSeTemAlteracoes'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./app/relatorios/desempenho/page.tsx
+36:6  Warning: React Hook useEffect has a missing dependency: 'loadMetrics'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/AppHeader.tsx
+48:11  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./components/etiquetas/EtiquetaPreview.tsx
+101:18  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules

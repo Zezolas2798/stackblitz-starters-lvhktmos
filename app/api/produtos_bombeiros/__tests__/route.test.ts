@@ -21,8 +21,7 @@ describe('API de Inserção Regulada: /api/produtos_bombeiros', () => {
             };
 
             // Tenta inserir direto pelo cliente supabase ao inves de rota NEXT pra provar o banco caindo
-            const { data, error } = await supabase
-                .from('produtos_bombeiros')
+            const { data, error } = await (supabase as any).from('produtos_bombeiros')
                 .insert([requestPayloadBase])
                 .select();
 
@@ -40,8 +39,7 @@ describe('API de Inserção Regulada: /api/produtos_bombeiros', () => {
                 status_sivisa: "VISTORIA HACKEADA",
             };
 
-            const { error } = await supabase
-                .from('produtos_bombeiros')
+            const { error } = await (supabase as any).from('produtos_bombeiros')
                 .insert([payloadCheckViolation]);
 
             expect(error).not.toBeNull();
@@ -50,8 +48,7 @@ describe('API de Inserção Regulada: /api/produtos_bombeiros', () => {
 
         it('DEVE FALHAR (Ocultar RLS) ao tentar ler produtos com deleted_at = now() [Regra Governança Mdc]', async () => {
             // Prova de fogo do SOFT DELETE: Tentar buscar produtos marcados como deletados
-            const { data, error } = await supabase
-                .from('produtos_bombeiros')
+            const { data, error } = await (supabase as any).from('produtos_bombeiros')
                 .select('*')
                 .not('deleted_at', 'is', null);
 
@@ -61,3 +58,6 @@ describe('API de Inserção Regulada: /api/produtos_bombeiros', () => {
         });
     });
 });
+
+
+

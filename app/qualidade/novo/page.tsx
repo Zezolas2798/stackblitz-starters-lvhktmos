@@ -32,8 +32,7 @@ export default function NovaAuditoriaPage() {
 
   const fetchModelosDisponiveis = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('checklist_modelos')
+    const { data } = await (supabase as any).from('checklist_modelos')
       .select('*')
       .eq('cliente_id', activeClientId)
       .eq('ativo', true)
@@ -60,7 +59,7 @@ export default function NovaAuditoriaPage() {
     try {
         const user = (await supabase.auth.getUser()).data.user;
 
-        const { data, error } = await supabase.from('checklist_auditorias').insert({
+        const { data, error } = await (supabase as any).from('checklist_auditorias').insert({
             cliente_id: activeClientId,
             modelo_id: modeloSelecionado.id,
             titulo: nomeAuditoria, // Salva o nome personalizado
@@ -135,7 +134,7 @@ export default function NovaAuditoriaPage() {
           <DialogTitle>Iniciar Nova Auditoria</DialogTitle>
           <DialogContent>
             <DialogContentText sx={{ mb: 2 }}>
-                Defina um nome para identificar esta auditoria (ex: "Jantar Evento X" ou "Rotina Manhã").
+                Defina um nome para identificar esta auditoria (ex: &quot;Jantar Evento X&quot; ou &quot;Rotina Manhã&quot;).
             </DialogContentText>
             <TextField
                 autoFocus
@@ -164,3 +163,5 @@ export default function NovaAuditoriaPage() {
     </Container>
   );
 }
+
+

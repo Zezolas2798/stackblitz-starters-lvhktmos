@@ -15,9 +15,11 @@ declare global {
 interface EtiquetaPrinterProps {
   dados: DadosEtiqueta;
   disabled?: boolean;
+  quantidadeCopias?: number;
+  onPrintSuccess?: () => void;
 }
 
-export default function EtiquetaPrinter({ dados, disabled }: EtiquetaPrinterProps) {
+export default function EtiquetaPrinter({ dados, disabled, quantidadeCopias = 1, onPrintSuccess }: EtiquetaPrinterProps) {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{tipo: 'success'|'error', text: string} | null>(null);
 
@@ -40,7 +42,7 @@ export default function EtiquetaPrinter({ dados, disabled }: EtiquetaPrinterProp
       await device.claimInterface(0);
 
       // 2. Geração do Payload ZPL
-      const zplCode = gerarZPL(dados);
+      const zplCode = gerarZPL(dados, quantidadeCopias);
       const encoder = new TextEncoder();
       const dataBuffer = encoder.encode(zplCode);
 
@@ -60,7 +62,8 @@ export default function EtiquetaPrinter({ dados, disabled }: EtiquetaPrinterProp
       if (!impresso) throw new Error('Falha ao comunicar com endpoints da impressora.');
 
       await device.close();
-      setMsg({ tipo: 'success', text: 'Etiqueta enviada para impressão!' });
+      setMsg({ tipo: 'success', text: 'Etiqueta(s) enviada(s) para impressão!' });
+      if (onPrintSuccess) onPrintSuccess();
 
     } catch (err: any) {
       console.error(err);
@@ -92,3 +95,5 @@ export default function EtiquetaPrinter({ dados, disabled }: EtiquetaPrinterProp
     </>
   );
 }
+
+

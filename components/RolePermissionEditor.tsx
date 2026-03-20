@@ -63,15 +63,13 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
   useEffect(() => {
     async function loadData() {
       // Catálogo completo
-      const { data: allPerms } = await supabase
-        .from('app_permissions')
+      const { data: allPerms } = await (supabase as any).from('app_permissions')
         .select('*')
         .order('modulo', { ascending: false }) // Sistema/Qualidade primeiro geralmente
         .order('descricao', { ascending: true });
 
       // O que o cargo já tem
-      const { data: currentRolePerms } = await supabase
-        .from('app_role_permissions')
+      const { data: currentRolePerms } = await (supabase as any).from('app_role_permissions')
         .select('permission_slug')
         .eq('role_id', roleId);
 
@@ -106,7 +104,7 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
     setSaving(true);
 
     // Transação manual: Limpar -> Inserir
-    const { error: delErr } = await supabase.from('app_role_permissions').delete().eq('role_id', roleId);
+    const { error: delErr } = await (supabase as any).from('app_role_permissions').delete().eq('role_id', roleId);
     if (delErr) {
       alert('Erro ao limpar: ' + delErr.message);
       setSaving(false);
@@ -119,7 +117,7 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
     }));
 
     if (inserts.length > 0) {
-      const { error: insErr } = await supabase.from('app_role_permissions').insert(inserts);
+      const { error: insErr } = await (supabase as any).from('app_role_permissions').insert(inserts);
       if (insErr) {
         alert('Erro ao salvar: ' + insErr.message);
         setSaving(false);
@@ -240,3 +238,5 @@ export default function RolePermissionEditor({ roleId, roleName, onClose }: Role
     </Dialog>
   );
 }
+
+

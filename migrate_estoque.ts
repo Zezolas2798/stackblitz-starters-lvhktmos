@@ -13,7 +13,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 async function migrate() {
     console.log('Fetching old lotes from estoque_lotes...');
-    const { data: oldLotes, error: getErr } = await supabase.from('estoque_lotes').select('*');
+    const { data: oldLotes, error: getErr } = await (supabase as any).from('estoque_lotes').select('*');
     if (getErr) throw getErr;
 
     if (!oldLotes || oldLotes.length === 0) {
@@ -56,7 +56,7 @@ async function migrate() {
     console.log('Sample of translated payload:', newLotes[0]);
 
     // Check if they already exist to avoid duplicates
-    const { data: existingLotes } = await supabase.from('lotes_estoque').select('id, numero_lote_fabricante');
+    const { data: existingLotes } = await (supabase as any).from('lotes_estoque').select('id, numero_lote_fabricante');
     const existingIds = new Set(existingLotes?.map((l: any) => l.numero_lote_fabricante) || []);
 
     const lotesToInsert = newLotes.filter((newLote: any) => !existingIds.has(newLote.numero_lote_fabricante));
@@ -64,7 +64,7 @@ async function migrate() {
     console.log(`Inserting ${lotesToInsert.length} new lotes...`);
 
     if (lotesToInsert.length > 0) {
-        const { error: insertErr } = await supabase.from('lotes_estoque').insert(lotesToInsert);
+        const { error: insertErr } = await (supabase as any).from('lotes_estoque').insert(lotesToInsert);
         if (insertErr) {
             console.error('Failed to insert lotes:', insertErr);
         } else {
@@ -76,3 +76,4 @@ async function migrate() {
 }
 
 migrate().catch(console.error);
+

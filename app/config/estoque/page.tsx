@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -42,46 +42,41 @@ export default function ConfiguracaoEstoquePage() {
     // Feedback visual
     const [msg, setMsg] = useState({ open: false, text: '', type: 'success' as 'success' | 'error' });
 
+
+    const loadDados = useCallback(async () => {
+        setLoading(true);
+        try {
+            // CORREÇÃO 2: Buscamos Locais da UNIDADE e Categorias do CLIENTE
+            const [locaisRes, catRes, setoresRes] = await Promise.all([
+                (supabase as any).from('cliente_locais_estoque')
+                    .select('*')
+                    .eq('unidade_id', unidadeId as string)
+                    .order('nome'),
+
+                (supabase as any).from('cliente_categorias_produto')
+                    .select('*')
+                    .eq('cliente_id', activeClientId as string)
+                    .order('nome'),
+
+                (supabase as any).from('cliente_setores_producao').select('*').eq('cliente_id', activeClientId as string).order('nome')
+            ]);
+            setLocais(locaisRes.data || []);
+            setCategorias(catRes.data || []);
+            setSetores(setoresRes.data || []);
+        } catch (err: any) {
+            console.error(err);
+            setMsg({ open: true, text: 'Erro ao carregar dados auxiliares.', type: 'error' });
+        } finally {
+            setLoading(false);
+        }
+    }, [unidadeId, activeClientId]);
+
     useEffect(() => {
         // Só carrega se tiver Unidade selecionada (para Locais) e Cliente (para Categorias)
         if (unidadeId && activeClientId) {
             loadDados();
         }
-    }, [unidadeId, activeClientId]);
-
-    const loadDados = async () => {
-        setLoading(true);
-        try {
-            // CORREÇÃO 2: Buscamos Locais da UNIDADE e Categorias do CLIENTE
-            const [locaisRes, catRes, setoresRes] = await Promise.all([
-                supabase
-                    .from('cliente_locais_estoque')
-                    .select('*')
-                    .eq('unidade_id', unidadeId) // Filtro por Unidade Física
-                    .order('nome'),
-
-                supabase
-                    .from('cliente_categorias_produto')
-                    .select('*')
-                    .eq('cliente_id', activeClientId) // Filtro por Empresa (Categorias globais)
-                    .order('nome'),
-
-                supabase
-                    .from('cliente_setores_producao')
-                    .select('*')
-                    .eq('cliente_id', activeClientId)
-                    .order('nome')
-            ]);
-
-            if (locaisRes.data) setLocais(locaisRes.data);
-            if (catRes.data) setCategorias(catRes.data);
-            if (setoresRes.data) setSetores(setoresRes.data);
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [unidadeId, activeClientId, loadDados]);
 
     // --- FUNÇÕES DE LOCAIS (VINCULADOS À UNIDADE) ---
     const handleAddLocal = async () => {
@@ -94,8 +89,7 @@ export default function ConfiguracaoEstoquePage() {
 
         try {
             // CORREÇÃO 3: Insert enviando unidade_id (Satisfaz a constraint NOT NULL)
-            const { error } = await supabase
-                .from('cliente_locais_estoque')
+            const { error } = await (supabase as any).from('cliente_locais_estoque')
                 .insert({
                     unidade_id: unidadeId, // O vínculo físico correto
                     nome: novoLocal.trim(),
@@ -116,7 +110,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleRemoveLocal = async (id: string) => {
         if (!confirm('Deseja excluir este local?')) return;
         try {
-            const { error } = await supabase.from('cliente_locais_estoque').delete().eq('id', id);
+            const { error } = await (supabase as any).from('cliente_locais_estoque').delete().eq('id', id);
             if (error) throw error;
             loadDados();
         } catch (err: any) {
@@ -135,8 +129,7 @@ export default function ConfiguracaoEstoquePage() {
 
         try {
             // Categorias continuam globais para a empresa
-            const { error } = await supabase
-                .from('cliente_categorias_produto')
+            const { error } = await (supabase as any).from('cliente_categorias_produto')
                 .insert({ cliente_id: activeClientId, nome: novaCategoria.trim() });
 
             if (error) throw error;
@@ -152,7 +145,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleRemoveCategoria = async (id: string) => {
         if (!confirm('Deseja excluir esta categoria?')) return;
         try {
-            const { error } = await supabase.from('cliente_categorias_produto').delete().eq('id', id);
+            const { error } = await (supabase as any).from('cliente_categorias_produto').delete().eq('id', id);
             if (error) throw error;
             loadDados();
         } catch (err: any) {
@@ -170,8 +163,7 @@ export default function ConfiguracaoEstoquePage() {
         }
 
         try {
-            const { error } = await supabase
-                .from('cliente_setores_producao')
+            const { error } = await (supabase as any).from('cliente_setores_producao')
                 .insert({ cliente_id: activeClientId, nome: novoSetor.trim() });
 
             if (error) throw error;
@@ -187,7 +179,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleRemoveSetor = async (id: string) => {
         if (!confirm('Deseja excluir este setor de produção?')) return;
         try {
-            const { error } = await supabase.from('cliente_setores_producao').delete().eq('id', id);
+            const { error } = await (supabase as any).from('cliente_setores_producao').delete().eq('id', id);
             if (error) throw error;
             loadDados();
         } catch (err: any) {
@@ -261,7 +253,7 @@ export default function ConfiguracaoEstoquePage() {
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddSetor()}
                                     disabled={!activeClientId}
                                     InputProps={{
-                                        startAdornment: <InputAdornment position="start"><Settings size={16} opacity={0.5} /></InputAdornment>
+                                        startAdornment: <InputAdornment position="start"><Settings size={16} style={{ opacity: 0.5 }} /></InputAdornment>
                                     }}
                                 />
                                 <Button variant="contained" color="warning" onClick={handleAddSetor} disabled={!novoSetor.trim() || !activeClientId} sx={{ minWidth: 50, px: 0 }}>
@@ -341,7 +333,7 @@ export default function ConfiguracaoEstoquePage() {
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddLocal()}
                                     disabled={!unidadeId}
                                     InputProps={{
-                                        startAdornment: <InputAdornment position="start"><Settings size={16} opacity={0.5} /></InputAdornment>
+                                        startAdornment: <InputAdornment position="start"><Settings size={16} style={{ opacity: 0.5 }} /></InputAdornment>
                                     }}
                                 />
                                 <Button variant="contained" onClick={handleAddLocal} disabled={!novoLocal.trim() || !unidadeId} sx={{ minWidth: 50, px: 0 }}>
@@ -421,7 +413,7 @@ export default function ConfiguracaoEstoquePage() {
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddCategoria()}
                                     disabled={!activeClientId}
                                     InputProps={{
-                                        startAdornment: <InputAdornment position="start"><PackageSearch size={16} opacity={0.5} /></InputAdornment>
+                                        startAdornment: <InputAdornment position="start"><PackageSearch size={16} style={{ opacity: 0.5 }} /></InputAdornment>
                                     }}
                                 />
                                 <Button variant="contained" color="success" onClick={handleAddCategoria} disabled={!novaCategoria.trim() || !activeClientId} sx={{ minWidth: 50, px: 0 }}>
@@ -479,3 +471,5 @@ export default function ConfiguracaoEstoquePage() {
         </Container>
     );
 }
+
+

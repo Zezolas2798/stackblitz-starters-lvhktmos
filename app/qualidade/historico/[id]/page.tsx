@@ -174,7 +174,7 @@ export default function DetalheChecklistPage() {
                                 {resp.observacao && (
                                     <Box sx={{ mt: 2, display: 'flex', gap: 1, alignItems: 'flex-start', color: 'text.secondary' }}>
                                         <MessageSquare size={16} style={{ marginTop: 3 }} />
-                                        <Typography variant="body2" fontStyle="italic">"{resp.observacao}"</Typography>
+                                        <Typography variant="body2" fontStyle="italic">&quot;{resp.observacao}&quot;</Typography>
                                     </Box>
                                 )}
                             </Box>

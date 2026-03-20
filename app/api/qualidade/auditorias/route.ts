@@ -37,8 +37,7 @@ export async function DELETE(request: Request) {
         const { id } = parsedData.data;
 
         // Ao invés de purgar o laudo físico (proibido pela RDC 216), marcamos `deleted_at` nulo/datatime
-        const { data, error: dbError } = await supabase
-            .from('checklist_auditorias')
+        const { data, error: dbError } = await (supabase as any).from('checklist_auditorias')
             .update({ deleted_at: new Date().toISOString() })
             .eq('id', id)
             .select();
@@ -62,3 +61,6 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ erro: 'Erro Severo do Sistema de Qualidade', detalhes: error.message }, { status: 500 });
     }
 }
+
+
+

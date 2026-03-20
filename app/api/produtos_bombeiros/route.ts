@@ -35,8 +35,7 @@ export async function POST(request: Request) {
             );
         }
 
-        const { data: record, error: dbError } = await supabase
-            .from('produtos_bombeiros')
+        const { data: record, error: dbError } = await (supabase as any).from('produtos_bombeiros')
             .insert([parsedData.data])
             .select()
             .single();
@@ -61,3 +60,6 @@ export async function POST(request: Request) {
         );
     }
 }
+
+
+

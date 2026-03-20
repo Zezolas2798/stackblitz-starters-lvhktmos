@@ -560,3 +560,5 @@ export default function NutritionalLabel({ tabela, modelo = 'VERTICAL' }: { tabe
     </Box>
   );
 }
+
+

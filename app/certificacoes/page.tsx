@@ -54,8 +54,7 @@ export default function CertificacoesPage() {
     const fetchCertificacoes = async () => {
         setLoading(true);
         // Graças ao RLS e ao soft delete que implementamos na etapa 1, isto é seguro
-        const { data, error } = await supabase
-            .from('produtos_bombeiros')
+        const { data, error } = await (supabase as any).from('produtos_bombeiros')
             .select('*')
             .is('deleted_at', null)
             .order('data_validade', { ascending: true }); // Prioriza os mais próximos de vencer
@@ -117,8 +116,7 @@ export default function CertificacoesPage() {
         if (!confirm('Deseja realmente remover esta certificação? Ela será ocultada dos relatórios oficiais (Soft Delete).')) return;
 
         setLoading(true);
-        const { error } = await supabase
-            .from('produtos_bombeiros')
+        const { error } = await (supabase as any).from('produtos_bombeiros')
             .update({ deleted_at: new Date().toISOString() })
             .eq('id', id);
 
@@ -354,3 +352,6 @@ export default function CertificacoesPage() {
         </Box>
     );
 }
+
+
+

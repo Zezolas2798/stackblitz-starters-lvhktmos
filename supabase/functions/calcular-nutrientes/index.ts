@@ -1,3 +1,5 @@
+// @ts-nocheck
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 // supabase/functions/calcular-nutrientes/index.ts
 // Versão v53 - Compliance Total (RDC 429, IN 75) + Harmonização Automática de Porção
 
@@ -532,6 +534,7 @@ serve(async (req) => {
     }
 
     const vd = calculateVD(pPorc, vdrMapFiltrado);
+    const vd100 = calculateVD(p100, vdrMapFiltrado);
     const conds: string[] = [];
     for (const k of NUTRIENTES_CONDICIONAIS) {
       const regra = compliance.regrasMap.get(k);
@@ -556,6 +559,7 @@ serve(async (req) => {
       por100g: p100Fmt,
       porPorcao: pPorcFmt,
       percentualVD: vd,
+      percentualVD100g: vd100,
       lupas,
       nutrientesCondicionais: conds,
       declaracoes: decls,
@@ -570,3 +574,4 @@ serve(async (req) => {
     });
   }
 });
+

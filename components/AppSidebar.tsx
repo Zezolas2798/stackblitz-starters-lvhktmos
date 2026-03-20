@@ -40,7 +40,11 @@ import {
   TrendingUp,
   ExitToApp,
   LocalShipping,
-  AdminPanelSettings
+  AdminPanelSettings,
+  ShoppingCart,
+  Restaurant,
+  EventNote,
+  Tag
 } from '@mui/icons-material';
 
 interface AppSidebarProps {
@@ -79,11 +83,17 @@ export function AppSidebar({ width }: AppSidebarProps) {
           visible: true // Público
         },
         {
+          label: 'Planejamento',
+          href: '/planejamento',
+          icon: <EventNote />,
+          visible: can('production.order.create')
+        },
+        {
           label: 'Produção',
           href: '/producao',
-          icon: <TrendingUp />,
-          // Visível se puder criar OP (Nutri) OU ver separação (Estoque/Chef)
-          visible: can('production.order.create') || can('production.picking.view')
+          icon: <Restaurant />,
+          // Visível se puder ver separação (Cozinha) ou criar OP
+          visible: can('production.picking.view') || can('production.order.create')
         },
         {
           label: 'Recebimento de Entrada',
@@ -98,6 +108,18 @@ export function AppSidebar({ width }: AppSidebarProps) {
           visible: can('stock.balance.view')
         },
         {
+          label: 'Compras',
+          href: '/compras',
+          icon: <ShoppingCart />,
+          visible: can('stock.balance.view') || can('production.order.create') || can('production.picking.view')
+        },
+        {
+          label: 'Fornecedores',
+          href: '/fornecedores',
+          icon: <VerifiedUser />,
+          visible: can('stock.suppliers.manage')
+        },
+        {
           label: 'Documentos e GED',
           href: '/documentos',
           icon: <Description />,
@@ -108,6 +130,12 @@ export function AppSidebar({ width }: AppSidebarProps) {
           href: '/operacional/tarefas',
           icon: <Assignment />,
           visible: can('production.picking.view') || can('quality.checklist.execute')
+        },
+        {
+          label: 'Etiquetas',
+          href: '/etiquetas',
+          icon: <Tag />,
+          visible: can('production.picking.view') || can('stock.balance.view')
         },
       ]
     },
@@ -316,3 +344,5 @@ export function AppSidebar({ width }: AppSidebarProps) {
     </Box>
   );
 }
+
+

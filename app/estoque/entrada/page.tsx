@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { format } from 'date-fns';
 import {
   Box, Typography, Button, Paper, TextField,
   MenuItem, Autocomplete, InputAdornment,
   FormControl, InputLabel, Select, Tooltip, Container,
   useTheme, alpha, Alert, Grid, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions, Divider, Chip,
+  Dialog, DialogTitle, DialogContent, DialogActions, Chip,
   Tabs, Tab
 } from '@mui/material';
 import {
-  Save, Thermometer, Scale, FileText, MapPin, Plus, History, PackageCheck, AlertTriangle, CheckCircle, Printer, Eye
+  Save, Thermometer, Scale, FileText, MapPin, Plus, History, PackageCheck, CheckCircle, ChevronLeft, Copy
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -20,7 +21,7 @@ import QuickIngredienteDialog from '@/components/QuickIngredienteDialog';
 
 // --- NOVOS IMPORTS (FASE 2 e 3 DO MASTERPLAN) ---
 import EtiquetaPrinter from '@/components/etiquetas/EtiquetaPrinter';
-import EtiquetaPreview from '@/components/etiquetas/EtiquetaPreview'; // <--- O NOVO COMPONENTE
+import EtiquetaPreview from '@/components/etiquetas/EtiquetaPreview';
 import { calcularValidade } from '@/lib/legislacao/calculadoraValidade';
 import { DadosEtiqueta } from '@/lib/iot/zplGenerator';
 import { differenceInCalendarDays } from 'date-fns';
@@ -74,7 +75,7 @@ export default function EntradaEstoquePage() {
   const [isReadingOcr, setIsReadingOcr] = useState(false);
   const [ocrItemToLink, setOcrItemToLink] = useState<number | null>(null);
 
-  // Função p/ Teste do fluxo da interface (Substituirá para API GxP Real depois)
+  // Função p/ Teste do fluxo da interface
   const handleOcrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -87,7 +88,6 @@ export default function EntradaEstoquePage() {
       ];
 
       const comMatch = extraidos.map(item => {
-        // Simulação de Auto-match Otimizado: Busca nome parecido + a marca
         const match = ingredientes.find(ing => ing.nome.toLowerCase().includes(item.nomeExtracao.split(' ')[0].toLowerCase()) || ing.fonte?.toLowerCase() === item.marca.toLowerCase());
         return {
           ...item,
@@ -109,6 +109,231 @@ export default function EntradaEstoquePage() {
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [dadosEtiqueta, setDadosEtiqueta] = useState<DadosEtiqueta | null>(null);
   const [validadeStatus, setValidadeStatus] = useState<any>(null);
+
+  // -- ESTADOS DE PREVISÕES (TAB 2) --
+  const [previsoes, setPrevisoes] = useState<any[]>([]);
+  const [loadingPreviso, setLoadingPreviso] = useState(false);
+  const [nfSelecionada, setNfSelecionada] = useState<string | null>(null);
+
+  // Estados para edição física dos itens da NF durante a conferência
+  const [itensConferencia, setItensConferencia] = useState<any[]>([]);
+
+  const previsoesAgrupadas = useMemo(() => {
+    const grupos: { [key: string]: any } = {};
+    previsoes.forEach(lote => {
+      const nf = lote.nota_fiscal || 'Sem NF';
+      if (!grupos[nf]) {
+        grupos[nf] = {
+          nota_fiscal: nf,
+          fornecedor: lote.fornecedores?.razao_social || 'Desconhecido',
+          data_criacao: lote.created_at,
+          itens: []
+        };
+      }
+      grupos[nf].itens.push(lote);
+    });
+    return Object.values(grupos);
+  }, [previsoes]);
+
+  useEffect(() => {
+    if (activeTab === 2 && clienteId && unidadeId) {
+      loadPrevisoes();
+    }
+  }, [activeTab, clienteId, unidadeId]);
+
+  async function loadPrevisoes() {
+    setLoadingPreviso(true);
+    const { data: lotesData } = await (supabase as any)
+      .from('lotes_estoque')
+      .select('*, ingredientes(nome), fornecedores(razao_social)')
+      .eq('unidade_id', unidadeId!)
+      .eq('status', 'PREVISTO')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (lotesData) setPrevisoes(lotesData);
+    setLoadingPreviso(false);
+  }
+
+  const openConferenciaNf = (nf: string) => {
+    const itensNf = previsoes.filter(p => (p.nota_fiscal || 'Sem NF') === nf);
+    // Inicializa o estado de conferência com os dados que já temos, permitindo edição
+    setItensConferencia(itensNf.map(item => ({
+      ...item,
+      loteEdit: item.numero_lote_fabricante || '',
+      tempEdit: '',
+      sifEdit: item.registro_sif || '',
+      validadeEdit: item.data_validade_rotulo || '',
+      localEdit: item.local_estoque_id || '',
+      estadoProdutoEdit: item.estado_produto || 'CONFORME',
+      qtdPacotesEdit: item.qtd_embalagens?.toString() || '',
+      pesoPacoteEdit: item.peso_unitario_embalagem?.toString() || '',
+      unidadePesoEdit: item.unidade_peso_embalagem || 'KG'
+    })));
+    setNfSelecionada(nf);
+  };
+
+  const duplicarItemConferencia = (index: number) => {
+    const itemOriginal = itensConferencia[index];
+    const novoClone = {
+      ...itemOriginal,
+      id: `clone-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      loteEdit: '',
+      qtdPacotesEdit: '',
+    };
+    const novosItens = [...itensConferencia];
+    novosItens.splice(index + 1, 0, novoClone);
+    setItensConferencia(novosItens);
+  };
+
+  const confirmarItemConferencia = async (index: number) => {
+    const item = itensConferencia[index];
+    if (!item.localEdit) {
+      alert('Selecione o local de destino para este item.');
+      return;
+    }
+
+    setLoadingPreviso(true);
+    try {
+      let novaQtdInicial = item.quantidade_inicial_g_ml;
+      if (item.qtdPacotesEdit && item.pesoPacoteEdit) {
+        const qtdEmb = parseFloat(item.qtdPacotesEdit);
+        const pesoEmb = parseFloat(item.pesoPacoteEdit);
+        novaQtdInicial = qtdEmb * pesoEmb;
+        if (item.unidadePesoEdit === 'KG' || item.unidadePesoEdit === 'L') {
+          novaQtdInicial *= 1000;
+        }
+      }
+
+      if (item.id.toString().startsWith('clone-')) {
+        // INSERÇÃO (Clone)
+        const { error } = await (supabase as any).from('lotes_estoque').insert({
+          unidade_id: item.unidade_id,
+          ingrediente_id: item.ingrediente_id,
+          fornecedor_id: item.fornecedor_id,
+          numero_lote_fabricante: item.loteEdit || `INT-${Date.now()}`,
+          nota_fiscal: item.nota_fiscal,
+          data_fabricacao: item.data_fabricacao,
+          data_validade_rotulo: item.validadeEdit,
+          quantidade_inicial_g_ml: novaQtdInicial,
+          quantidade_atual_g_ml: novaQtdInicial,
+          status: 'APROVADO',
+          registro_sif: item.sifEdit,
+          local_estoque_id: item.localEdit,
+          temperatura_recebimento: item.tempEdit ? parseFloat(item.tempEdit) : null,
+          estado_produto: item.estadoProdutoEdit,
+          qtd_embalagens: item.qtdPacotesEdit ? parseFloat(item.qtdPacotesEdit) : null,
+          peso_unitario_embalagem: item.pesoPacoteEdit ? parseFloat(item.pesoPacoteEdit) : null,
+          unidade_peso_embalagem: item.unidade_peso_embalagem
+        });
+        if (error) throw error;
+      } else {
+        // ATUALIZAÇÃO (Original)
+        const { error } = await (supabase as any).from('lotes_estoque').update({
+          status: 'APROVADO',
+          numero_lote_fabricante: item.loteEdit,
+          registro_sif: item.sifEdit,
+          data_validade_rotulo: item.validadeEdit,
+          local_estoque_id: item.localEdit,
+          quantidade_inicial_g_ml: novaQtdInicial,
+          quantidade_atual_g_ml: novaQtdInicial,
+          temperatura_recebimento: item.tempEdit ? parseFloat(item.tempEdit) : null,
+          estado_produto: item.estadoProdutoEdit,
+          qtd_embalagens: item.qtdPacotesEdit ? parseFloat(item.qtdPacotesEdit) : null,
+          peso_unitario_embalagem: item.pesoPacoteEdit ? parseFloat(item.pesoPacoteEdit) : null,
+          unidade_peso_embalagem: item.unidadePesoEdit
+        }).eq('id', item.id);
+        if (error) throw error;
+      }
+
+      // Remove o item da lista local de conferência
+      const novosItens = [...itensConferencia];
+      novosItens.splice(index, 1);
+      setItensConferencia(novosItens);
+
+      // Se não houver mais itens, volta para a lista de NFs
+      if (novosItens.length === 0) {
+        setNfSelecionada(null);
+        await loadPrevisoes();
+      }
+    } catch (err: any) {
+      alert('Erro ao confirmar item: ' + err.message);
+    } finally {
+      setLoadingPreviso(false);
+    }
+  };
+
+  const confirmarTodosDaNf = async () => {
+    if (itensConferencia.some(item => !item.localEdit)) {
+      alert('Todos os itens precisam de um destino definido (Local Destino).');
+      return;
+    }
+
+    setLoadingPreviso(true);
+    try {
+      for (const item of itensConferencia) {
+        let novaQtdInicial = item.quantidade_inicial_g_ml;
+        if (item.qtdPacotesEdit && item.pesoPacoteEdit) {
+          const qtdEmb = parseFloat(item.qtdPacotesEdit);
+          const pesoEmb = parseFloat(item.pesoPacoteEdit);
+          novaQtdInicial = qtdEmb * pesoEmb;
+          if (item.unidadePesoEdit === 'KG' || item.unidadePesoEdit === 'L') {
+            novaQtdInicial *= 1000;
+          }
+        }
+
+        if (item.id.toString().startsWith('clone-')) {
+          // INSERÇÃO (Clone)
+          const { error } = await (supabase as any).from('lotes_estoque').insert({
+            unidade_id: item.unidade_id,
+            ingrediente_id: item.ingrediente_id,
+            fornecedor_id: item.fornecedor_id,
+            numero_lote_fabricante: item.loteEdit || `INT-${Date.now()}`,
+            nota_fiscal: item.nota_fiscal,
+            data_fabricacao: item.data_fabricacao,
+            data_validade_rotulo: item.validadeEdit,
+            quantidade_inicial_g_ml: novaQtdInicial,
+            quantidade_atual_g_ml: novaQtdInicial,
+            status: 'APROVADO',
+            registro_sif: item.sifEdit,
+            local_estoque_id: item.localEdit,
+            temperatura_recebimento: item.tempEdit ? parseFloat(item.tempEdit) : null,
+            estado_produto: item.estadoProdutoEdit,
+            qtd_embalagens: item.qtdPacotesEdit ? parseFloat(item.qtdPacotesEdit) : null,
+            peso_unitario_embalagem: item.pesoPacoteEdit ? parseFloat(item.pesoPacoteEdit) : null,
+            unidade_peso_embalagem: item.unidadePesoEdit
+          });
+          if (error) throw error;
+        } else {
+          // ATUALIZAÇÃO (Original)
+          const { error } = await (supabase as any).from('lotes_estoque').update({
+            status: 'APROVADO',
+            numero_lote_fabricante: item.loteEdit,
+            registro_sif: item.sifEdit,
+            data_validade_rotulo: item.validadeEdit,
+            local_estoque_id: item.localEdit,
+            quantidade_inicial_g_ml: novaQtdInicial,
+            quantidade_atual_g_ml: novaQtdInicial,
+            temperatura_recebimento: item.tempEdit ? parseFloat(item.tempEdit) : null,
+            estado_produto: item.estadoProdutoEdit,
+            qtd_embalagens: item.qtdPacotesEdit ? parseFloat(item.qtdPacotesEdit) : null,
+            peso_unitario_embalagem: item.pesoPacoteEdit ? parseFloat(item.pesoPacoteEdit) : null,
+            unidade_peso_embalagem: item.unidadePesoEdit
+          }).eq('id', item.id);
+          if (error) throw error;
+        }
+      }
+
+      setItensConferencia([]);
+      setNfSelecionada(null);
+      await loadPrevisoes();
+      alert('Todos os itens da Nota Fiscal foram recebidos com sucesso!');
+    } catch (err: any) {
+      alert('Erro ao confirmar NF em lote: ' + err.message);
+    } finally {
+      setLoadingPreviso(false);
+    }
+  };
 
   // Carregamento Inicial
   useEffect(() => {
@@ -163,28 +388,28 @@ export default function EntradaEstoquePage() {
   async function loadDados() {
     if (!clienteId || !unidadeId) return;
 
-    const { data: ingData } = await supabase
+    const { data: ingData } = await (supabase as any)
       .from('ingredientes')
       .select('id, nome, fonte, peso_unitario_g')
       .eq('cliente_id', clienteId)
       .order('nome');
     if (ingData) setIngredientes(ingData);
 
-    const { data: locaisData } = await supabase
+    const { data: locaisData } = await (supabase as any)
       .from('cliente_locais_estoque')
       .select('*')
       .eq('unidade_id', unidadeId)
       .order('nome');
     if (locaisData) setLocaisDisponiveis(locaisData);
 
-    const { data: catData } = await supabase
+    const { data: catData } = await (supabase as any)
       .from('cliente_categorias_produto')
       .select('*')
       .eq('cliente_id', clienteId)
       .order('nome');
     if (catData) setCategoriasDisponiveis(catData);
 
-    const { data: fornData } = await supabase
+    const { data: fornData } = await (supabase as any)
       .from('fornecedores')
       .select('*')
       .eq('cliente_id', clienteId)
@@ -193,7 +418,6 @@ export default function EntradaEstoquePage() {
   }
 
   const handleIngredienteCriado = (novoIngrediente: any, categoriaSugerida?: string) => {
-    // Flagar como OCR (opcionalmente passaremos via API)
     setIngredientes(prev => [{ ...novoIngrediente, pre_cadastro: true }, ...prev]);
 
     if (activeTab === 0) {
@@ -207,7 +431,6 @@ export default function EntradaEstoquePage() {
         setCategoria(categoriaSugerida);
       }
     } else if (ocrItemToLink !== null) {
-      // Associa a Caixa do Lote ao novo Cadastro automaticamente
       setOcrItems(prev => prev.map(i => i.id === ocrItemToLink ? { ...i, ingrediente_id: novoIngrediente.id } : i));
       setOcrItemToLink(null);
     }
@@ -225,14 +448,19 @@ export default function EntradaEstoquePage() {
   };
   const estoqueCalculado = calcularTotalEstoque();
 
-  const handleSalvar = async () => {
-    if (!clienteId || !unidadeId || !ingredienteSelecionado || !validade || !qtdPacotes || !pesoPacote || !local) {
+  const handleSalvar = async (comoPrevisto: boolean = false) => {
+    if (!clienteId || !unidadeId || !ingredienteSelecionado || !validade || !qtdPacotes || !pesoPacote) {
       alert('Preencha os campos obrigatórios (*).');
       return;
     }
 
     if (!fornecedorSelecionado) {
       alert('Atenção: Selecione um Fornecedor Homologado para garantir a rastreabilidade.');
+      return;
+    }
+
+    if (!comoPrevisto && !local) {
+      alert('Para recebimento físico imediato, preencha o Destino (Local).');
       return;
     }
 
@@ -249,16 +477,13 @@ export default function EntradaEstoquePage() {
       );
 
       const diasRestantes = differenceInCalendarDays(validadeCalculada.dataValidadeFinal, new Date());
-      const statusFinal = estadoProduto === 'AVARIADO' ? 'REJEITADO' : (diasRestantes < 0 ? 'VENCIDO' : 'QUARENTENA');
+      const statusFinal = comoPrevisto ? 'PREVISTO' : (estadoProduto === 'AVARIADO' ? 'REJEITADO' : (diasRestantes < 0 ? 'VENCIDO' : 'QUARENTENA'));
 
-      // GxP: Calculando totais com base na unidade selecionada.
-      // A tabela Phase 2 assume 'quantidade_atual_g_ml' que unifica tudo em a G/ML
       let qtdReal = estoqueCalculado.valor;
       if (estoqueCalculado.unidade === 'KG' || estoqueCalculado.unidade === 'L') {
         qtdReal = estoqueCalculado.valor * 1000;
       }
 
-      // NOVA API BLINDADA (Fase 2 de Governança GxP)
       const { data: { session } } = await supabase.auth.getSession();
 
       const res = await fetch('/api/estoque/entrada', {
@@ -271,26 +496,32 @@ export default function EntradaEstoquePage() {
           unidade_id: unidadeId,
           ingrediente_id: ingredienteSelecionado.id,
           fornecedor_id: fornecedorSelecionado.id,
-          numero_lote_fabricante: codigoLote.trim() === '' ? `INT-${Date.now()}` : codigoLote,
+          numero_lote_fabricante: (!codigoLote || codigoLote.trim() === '') ? null : codigoLote,
           nota_fiscal: notaFiscal || null,
-          data_fabricacao: new Date(dataRecebimento).toISOString(),
-          data_validade_rotulo: validade,
+          data_fabricacao: dataRecebimento ? new Date(dataRecebimento).toISOString() : null,
+          data_validade_rotulo: validade || null,
           data_validade_interna: validadeCalculada.dataValidadeFinal.toISOString(),
           quantidade_inicial_g_ml: qtdReal,
           status: statusFinal,
           registro_sif: registroSif || null,
+          local_estoque_id: local || null,
+          categoria_produto: categoria || null,
+          qtd_embalagens: qtdPacotes ? Number(qtdPacotes) : null,
+          peso_unitario_embalagem: pesoPacote ? Number(pesoPacote) : null,
+          unidade_peso_embalagem: unidadePeso || null,
         })
       });
 
       if (!res.ok) {
         const errorData = await res.json();
-        const msgDb = errorData.detalhes?.message ? ` - Detalhes do Banco: ${errorData.detalhes.message}` : '';
+        console.error("Zod Validation Error Details:", errorData.detalhes);
+        const msgDb = Array.isArray(errorData.detalhes) 
+          ? ` - Campos inválidos: ${errorData.detalhes.map((d: any) => d.path.join('.') + ' (' + d.message + ')').join(', ')}`
+          : (errorData.detalhes?.message ? ` - Detalhes do Banco: ${errorData.detalhes.message}` : '');
         throw new Error((errorData.erro || 'Falha ao processar entrada de lote') + msgDb);
       }
 
       const lote = await res.json();
-
-      // Registro de Movimento de Log de Estoque (Estoque Log/Movimentação ainda no front, idealmente estaria no BD via trigger)
 
       const dadosParaEtiqueta: DadosEtiqueta = {
         empresa: {
@@ -324,9 +555,87 @@ export default function EntradaEstoquePage() {
     }
   };
 
+  const handleSalvarBatch = async (comoPrevisto: boolean = false) => {
+    if (!fornecedorSelecionado) {
+      alert('Selecione o Fornecedor Homologado.');
+      return;
+    }
+
+    if (ocrItems.length === 0) return;
+
+    if (!comoPrevisto) {
+      if (ocrItems.some(i => !i.lido)) {
+        alert('Para entrada física, todas as caixas precisam ser conferidas e aprovadas.');
+        return;
+      }
+      if (ocrItems.some(i => !i.local)) {
+        alert('Para entrada física, todas as caixas precisam de um Destino (Local) definido.');
+        return;
+      }
+    } else {
+      if (ocrItems.some(i => !i.ingrediente_id)) {
+        alert('Para salvar a previsão, certifique-se de que todos os itens foram vinculados a um Produto do Sistema.');
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      for (const item of ocrItems) {
+
+        let qtdReal = item.qtd * item.peso;
+        if (item.unid === 'KG' || item.unid === 'L') {
+          qtdReal = qtdReal * 1000;
+        }
+
+        const res = await fetch('/api/estoque/entrada', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': session ? `Bearer ${session.access_token}` : ''
+          },
+          body: JSON.stringify({
+            unidade_id: unidadeId,
+            ingrediente_id: item.ingrediente_id,
+            fornecedor_id: fornecedorSelecionado.id,
+            numero_lote_fabricante: item.lote,
+            nota_fiscal: notaFiscal || null,
+            data_fabricacao: dataRecebimento ? new Date(dataRecebimento).toISOString() : null,
+            data_validade_rotulo: item.validade || null,
+            data_validade_interna: item.validade ? new Date(item.validade).toISOString() : null, // Simplificação
+            quantidade_inicial_g_ml: qtdReal,
+            status: comoPrevisto ? 'PREVISTO' : 'QUARENTENA',
+            registro_sif: item.sif?.trim() ? item.sif.trim() : null,
+            local_estoque_id: item.local?.trim()?.length > 10 ? item.local.trim() : null,
+            categoria_produto: null, // Pode ser inferido ou adicionado no futuro OCR
+            qtd_embalagens: item.qtd ? parseFloat(item.qtd) : null,
+            peso_unitario_embalagem: item.peso ? parseFloat(item.peso) : null,
+            unidade_peso_embalagem: item.unid || null,
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          const detailMsg = errData?.detalhes ? JSON.stringify(errData.detalhes) : (errData?.erro || 'Erro desconhecido');
+          throw new Error('Falha ao processar item: ' + item.nomeExtracao + ' | Detalhes Zod: ' + detailMsg);
+        }
+      }
+
+      alert(comoPrevisto ? 'Nota Fiscal salva como Previsão de Recebimento com sucesso!' : 'Lotes físicos registrados com sucesso!');
+
+      setOcrItems([]);
+      setNotaFiscal('');
+    } catch (err: any) {
+      alert('Erro: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCloseModal = () => {
     setPrintModalOpen(false);
-    // Em vez de voltar pro Estoque (que agora é longe da Doca), apenas limpa o form pra nova entrada
     window.location.reload();
   };
 
@@ -336,7 +645,6 @@ export default function EntradaEstoquePage() {
       {/* HEADER */}
       <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-
           <Box>
             <Typography variant="h4" fontWeight="800" sx={{ color: 'text.primary', letterSpacing: '-0.02em' }}>
               Recebimento de Mercadoria
@@ -360,12 +668,28 @@ export default function EntradaEstoquePage() {
         <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} textColor="primary" indicatorColor="primary">
           <Tab label="Entrada Unitária (Convencional)" icon={<PackageCheck size={18} />} iconPosition="start" />
           <Tab label="Recebimento em Lote (Inteligência Artificial)" icon={<FileText size={18} />} iconPosition="start" />
+          <Tab
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                Aguardando Desembarque
+                {previsoes.length > 0 && (
+                  <Chip
+                    label={previsoes.length}
+                    size="small"
+                    color="primary"
+                    sx={{ height: 20, fontSize: '0.7rem', fontWeight: 'bold' }}
+                  />
+                )}
+              </Box>
+            }
+            icon={<MapPin size={18} />}
+            iconPosition="start"
+          />
         </Tabs>
       </Box>
 
-      {activeTab === 0 ? (
+      {activeTab === 0 && (
         <Grid container spacing={3}>
-
           {/* COLUNA ESQUERDA: DADOS FISCAIS E PRODUTO */}
           <Grid item xs={12} md={8}>
 
@@ -535,7 +859,7 @@ export default function EntradaEstoquePage() {
                   <FormControl fullWidth size="small" required>
                     <InputLabel>Destino</InputLabel>
                     <Select value={local} label="Destino" onChange={e => setLocal(e.target.value)}>
-                      {locaisDisponiveis.map((loc) => (<MenuItem key={loc.id} value={loc.nome}><Box sx={{ display: 'flex', gap: 1 }}><MapPin size={16} /> {loc.nome}</Box></MenuItem>))}
+                      {locaisDisponiveis.map((loc) => (<MenuItem key={loc.id} value={loc.id}><Box sx={{ display: 'flex', gap: 1 }}><MapPin size={16} /> {loc.nome}</Box></MenuItem>))}
                     </Select>
                   </FormControl>
                 </Box>
@@ -548,22 +872,37 @@ export default function EntradaEstoquePage() {
               </Box>
             </Paper>
 
-            <Button
-              variant="contained"
-              size="large"
-              fullWidth
-              startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
-              onClick={handleSalvar}
-              disabled={loading}
-              sx={{ mt: 3, height: 56, fontWeight: 'bold', boxShadow: 3 }}
-            >
-              {loading ? 'Registrando...' : 'Confirmar Entrada'}
-            </Button>
+            <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Button
+                variant="outlined"
+                color="primary"
+                size="large"
+                fullWidth
+                startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
+                onClick={() => handleSalvar(true)}
+                disabled={loading}
+                sx={{ height: 50, fontWeight: 'bold' }}
+              >
+                Salvar como Recebimento Previsto
+              </Button>
+              <Button
+                variant="contained"
+                size="large"
+                fullWidth
+                startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
+                onClick={() => handleSalvar(false)}
+                disabled={loading}
+                sx={{ height: 56, fontWeight: 'bold', boxShadow: 3 }}
+              >
+                {loading ? 'Registrando...' : 'Confirmar Entrada Física'}
+              </Button>
+            </Box>
 
           </Grid>
         </Grid>
-      ) : (
-        /* ABA DE RECEBIMENTO INTELIGENTE (OCR BATCH) */
+      )}
+
+      {activeTab === 1 && (
         <Box sx={{ mt: 2 }}>
           {ocrItems.length === 0 ? (
             <Paper elevation={0} sx={{ p: 6, textAlign: 'center', border: '2px dashed', borderColor: 'divider', borderRadius: 3, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
@@ -590,7 +929,6 @@ export default function EntradaEstoquePage() {
             </Paper>
           ) : (
             <Box>
-              {/* HEADER DA NOTA FISCAL (GLOBAL PARA O LOTE/CAMINHÃO) */}
               <Paper elevation={0} sx={{ p: 3, mb: 4, border: '1px solid', borderColor: 'primary.light', borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
                 <Typography variant="h6" color="primary.main" fontWeight="bold" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                   <FileText size={20} /> 1. Vínculo da Nota Fiscal
@@ -629,7 +967,6 @@ export default function EntradaEstoquePage() {
                     <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: item.lido ? 'success.main' : 'divider', bgcolor: item.lido ? alpha(theme.palette.success.main, 0.05) : 'background.paper' }}>
 
                       <Grid container spacing={2} alignItems="center">
-                        {/* INFO DO OCR */}
                         <Grid item xs={12} md={3}>
                           <Typography variant="caption" color="text.secondary" fontWeight="bold">Lido da NFe:</Typography>
                           <Typography variant="subtitle2" fontWeight="bold" noWrap title={item.nomeExtracao}>{item.nomeExtracao}</Typography>
@@ -639,7 +976,6 @@ export default function EntradaEstoquePage() {
                           </Typography>
                         </Grid>
 
-                        {/* DE-PARA: PRODUTO */}
                         <Grid item xs={12} md={4}>
                           <Typography variant="caption" color={item.ingrediente_id ? "text.secondary" : "error.main"} fontWeight="bold">1. Qual é o Produto? *</Typography>
                           <Box sx={{ display: 'flex', gap: 1 }}>
@@ -677,7 +1013,6 @@ export default function EntradaEstoquePage() {
                           </Box>
                         </Grid>
 
-                        {/* DE-PARA: DESTINO FÍSICO */}
                         <Grid item xs={12} md={2}>
                           <Typography variant="caption" color={item.local ? "text.secondary" : "error.main"} fontWeight="bold">2. Local de Guarda *</Typography>
                           <Select
@@ -689,11 +1024,10 @@ export default function EntradaEstoquePage() {
                             sx={{ bgcolor: 'white' }}
                           >
                             <MenuItem value="" disabled>Local...</MenuItem>
-                            {locaisDisponiveis.map(loc => <MenuItem key={loc.id} value={loc.nome}>{loc.nome}</MenuItem>)}
+                            {locaisDisponiveis.map(loc => <MenuItem key={loc.id} value={loc.id}>{loc.nome}</MenuItem>)}
                           </Select>
                         </Grid>
 
-                        {/* FISCALIZAÇÃO */}
                         <Grid item xs={12} md={3}>
                           {!item.lido ? (
                             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mt: 2 }}>
@@ -728,14 +1062,24 @@ export default function EntradaEstoquePage() {
 
               <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
                 <Button
+                  variant="outlined"
+                  size="large"
+                  startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
+                  disabled={ocrItems.some(i => !i.ingrediente_id) || !fornecedorSelecionado || loading}
+                  sx={{ px: 4, py: 1.5, fontWeight: 'bold', fontSize: '1.1rem' }}
+                  onClick={() => handleSalvarBatch(true)}
+                >
+                  {loading ? 'Salvando...' : 'Salvar NF como Previsão'}
+                </Button>
+                <Button
                   variant="contained"
                   size="large"
                   startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
                   disabled={ocrItems.some(i => !i.lido) || !fornecedorSelecionado || loading}
                   sx={{ px: 4, py: 1.5, fontWeight: 'bold', fontSize: '1.1rem' }}
-                  onClick={() => alert("Simulação Frontend Concluída! Integração com API Zod em Breve.")}
+                  onClick={() => handleSalvarBatch(false)}
                 >
-                  {loading ? 'Gravando Lotes...' : 'Processar Recebimento do Caminhão'}
+                  {loading ? 'Gravando Lotes...' : 'Processar Recebimento Físico'}
                 </Button>
               </Box>
             </Box>
@@ -743,7 +1087,251 @@ export default function EntradaEstoquePage() {
         </Box>
       )}
 
-      {/* --- MODAL DE SUCESSO, PREVIEW E IMPRESSÃO --- */}
+      {activeTab === 2 && (
+        <Paper elevation={0} sx={{ width: '100%', overflow: 'hidden', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+          {loadingPreviso ? (
+            <Box sx={{ p: 8, textAlign: 'center' }}><CircularProgress /></Box>
+          ) : previsoes.length === 0 ? (
+            <Box sx={{ p: 8, textAlign: 'center' }}>
+              <PackageCheck size={64} className="mx-auto text-gray-300 mb-4" strokeWidth={1} />
+              <Typography variant="h6" color="text.secondary">Nenhuma carga prevista</Typography>
+              <Typography variant="body2" color="text.secondary">Os recebimentos agendados aparecerão aqui.</Typography>
+            </Box>
+          ) : !nfSelecionada ? (
+            <Box sx={{ p: 2 }}>
+              <Typography variant="h6" sx={{ mb: 2, px: 2, pt: 1, fontWeight: 'bold' }}>
+                Notas Fiscais Aguardando Desembarque
+              </Typography>
+              <Grid container spacing={2}>
+                {previsoesAgrupadas.map((grupo) => (
+                  <Grid item xs={12} key={grupo.nota_fiscal}>
+                    <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <FileText size={20} color={theme.palette.primary.main} />
+                          <Typography variant="subtitle1" fontWeight="bold">
+                            Nota Fiscal: {grupo.nota_fiscal}
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" color="text.secondary">
+                          Fornecedor: {grupo.fornecedor}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Cadastrado em: {format(new Date(grupo.data_criacao), "dd/MM/yyyy 'às' HH:mm")} • {grupo.itens.length} {grupo.itens.length === 1 ? 'item' : 'itens'} a receber
+                        </Typography>
+                      </Box>
+                      <Button
+                        variant="contained"
+                        startIcon={<PackageCheck size={18} />}
+                        onClick={() => openConferenciaNf(grupo.nota_fiscal)}
+                      >
+                        Conferir Itens
+                      </Button>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+          ) : (
+            <Box sx={{ p: 3 }}>
+              <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Button
+                    startIcon={<ChevronLeft size={18} />}
+                    onClick={() => setNfSelecionada(null)}
+                    sx={{ mb: 1 }}
+                  >
+                    Voltar para lista de Notas
+                  </Button>
+                  <Typography variant="h5" fontWeight="bold">
+                    Conferência Física: NF {nfSelecionada}
+                  </Typography>
+                </Box>
+                <Chip label={`${itensConferencia.length} itens restantes`} color="primary" />
+              </Box>
+
+              <Grid container spacing={3}>
+                {itensConferencia.map((item, index) => (
+                  <Grid item xs={12} key={item.id}>
+                    <Paper elevation={0} sx={{ p: 3, borderLeft: '6px solid', borderLeftColor: 'primary.main', border: '1px solid', borderColor: 'divider' }}>
+                      <Typography variant="h6" fontWeight="bold" gutterBottom color="primary.main">
+                        {item.ingredientes?.nome}
+                      </Typography>
+
+                      <Grid container spacing={2} sx={{ mt: 1 }}>
+                        <Grid item xs={12} md={3}>
+                          <TextField
+                            label="Lote Fornecedor *"
+                            size="small"
+                            fullWidth
+                            value={item.loteEdit}
+                            onChange={(e) => {
+                              const v = [...itensConferencia];
+                              v[index].loteEdit = e.target.value;
+                              setItensConferencia(v);
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                          <TextField
+                            label="Temp. (°C)"
+                            size="small"
+                            type="number"
+                            fullWidth
+                            value={item.tempEdit}
+                            onChange={(e) => {
+                              const v = [...itensConferencia];
+                              v[index].tempEdit = e.target.value;
+                              setItensConferencia(v);
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                          <TextField
+                            label="S.I.F / S.I.M"
+                            size="small"
+                            fullWidth
+                            value={item.sifEdit}
+                            onChange={(e) => {
+                              const v = [...itensConferencia];
+                              v[index].sifEdit = e.target.value;
+                              setItensConferencia(v);
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                          <TextField
+                            label="Validade *"
+                            type="date"
+                            size="small"
+                            fullWidth
+                            InputLabelProps={{ shrink: true }}
+                            value={item.validadeEdit}
+                            onChange={(e) => {
+                              const v = [...itensConferencia];
+                              v[index].validadeEdit = e.target.value;
+                              setItensConferencia(v);
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={3}>
+                          <FormControl fullWidth size="small">
+                            <InputLabel>Local Destino *</InputLabel>
+                            <Select
+                              value={item.localEdit}
+                              label="Local Destino *"
+                              onChange={(e) => {
+                                const v = [...itensConferencia];
+                                v[index].localEdit = e.target.value;
+                                setItensConferencia(v);
+                              }}
+                            >
+                              {locaisDisponiveis.map(loc => (
+                                <MenuItem key={loc.id} value={loc.id}>{loc.nome}</MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                      </Grid>
+
+                      <Grid container spacing={2} sx={{ mt: 1 }}>
+                        <Grid item xs={12} md={3}>
+                          <TextField
+                            label="Qtd. Embalagens" size="small" type="number" fullWidth
+                            value={item.qtdPacotesEdit}
+                            onChange={(e) => {
+                              const v = [...itensConferencia];
+                              v[index].qtdPacotesEdit = e.target.value;
+                              setItensConferencia(v);
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={3}>
+                          <TextField
+                            label="Peso Unitário" size="small" type="number" fullWidth
+                            value={item.pesoPacoteEdit}
+                            onChange={(e) => {
+                              const v = [...itensConferencia];
+                              v[index].pesoPacoteEdit = e.target.value;
+                              setItensConferencia(v);
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={2}>
+                          <TextField
+                            select label="Unidade" size="small" fullWidth
+                            value={item.unidadePesoEdit}
+                            onChange={(e) => {
+                              const v = [...itensConferencia];
+                              v[index].unidadePesoEdit = e.target.value;
+                              setItensConferencia(v);
+                            }}
+                          >
+                            <MenuItem value="KG">KG</MenuItem><MenuItem value="G">G</MenuItem><MenuItem value="L">L</MenuItem><MenuItem value="ML">ML</MenuItem><MenuItem value="UN">UN</MenuItem>
+                          </TextField>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <TextField
+                            select label="Avaliação Visual" size="small" fullWidth
+                            value={item.estadoProdutoEdit}
+                            onChange={(e) => {
+                              const v = [...itensConferencia];
+                              v[index].estadoProdutoEdit = e.target.value;
+                              setItensConferencia(v);
+                            }}
+                          >
+                            <MenuItem value="CONFORME">✅ Conforme (Aprovado)</MenuItem>
+                            <MenuItem value="EMBALAGEM_DANIFICADA">⚠️ Emb. Danificada</MenuItem>
+                            <MenuItem value="AVARIADO">🚫 Avariado (Rejeitado)</MenuItem>
+                          </TextField>
+                        </Grid>
+                      </Grid>
+
+                      <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<Copy size={16} />}
+                          onClick={() => duplicarItemConferencia(index)}
+                        >
+                          Duplicar Insumo (Dividir Lote)
+                        </Button>
+                        <Button
+                          variant="contained"
+                          color="success"
+                          startIcon={<CheckCircle size={18} />}
+                          onClick={() => confirmarItemConferencia(index)}
+                        >
+                          Confirmar Recebimento Deste Item
+                        </Button>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+
+              {itensConferencia.length > 1 && (
+                <Box sx={{ mt: 4, pt: 3, borderTop: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Revise todos os {itensConferencia.length} itens acima antes de confirmar.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="large"
+                    startIcon={loadingPreviso ? <CircularProgress size={20} color="inherit" /> : <Save size={20} />}
+                    onClick={confirmarTodosDaNf}
+                    disabled={loadingPreviso}
+                  >
+                    Confirmar Todos os Itens da NF
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
+        </Paper>
+      )}
+
       <Dialog open={printModalOpen} onClose={() => { }} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2, bgcolor: 'success.main', color: 'white' }}>
           <CheckCircle size={28} />
@@ -758,7 +1346,6 @@ export default function EntradaEstoquePage() {
 
             {dadosEtiqueta && (
               <Box sx={{ mt: 1, mb: 3, display: 'flex', justifyContent: 'center' }}>
-                {/* PREVIEW VISUAL DA ETIQUETA */}
                 <EtiquetaPreview dados={dadosEtiqueta} />
               </Box>
             )}
@@ -779,7 +1366,8 @@ export default function EntradaEstoquePage() {
           </Button>
         </DialogActions>
       </Dialog>
-
     </Container>
   );
 }
+
+

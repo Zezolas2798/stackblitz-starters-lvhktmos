@@ -42,8 +42,7 @@ export default function ModelosPage() {
 
   async function loadModelos() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('checklist_modelos')
+    const { data, error } = await (supabase as any).from('checklist_modelos')
       .select('*')
       .order('created_at', { ascending: false });
     
@@ -108,7 +107,7 @@ export default function ModelosPage() {
           <Box sx={{ mb: 3, color: 'text.disabled' }}><ListChecks size={64} strokeWidth={1} /></Box>
           <Typography variant="h6" color="text.secondary" gutterBottom>Nenhum modelo cadastrado</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 4, maxWidth: 400, mx: 'auto' }}>
-            Crie seu primeiro checklist (ex: "Recebimento de Mercadorias" ou "Higiene Pessoal") para começar a aplicar auditorias.
+            Crie seu primeiro checklist (ex: &quot;Recebimento de Mercadorias&quot; ou &quot;Higiene Pessoal&quot;) para começar a aplicar auditorias.
           </Typography>
           <Link href="/consultoria/modelos/criar" passHref style={{ textDecoration: 'none' }}>
             <Button variant="outlined" size="large" startIcon={<Plus size={18}/>}>Criar Primeiro Checklist</Button>
@@ -163,7 +162,7 @@ export default function ModelosPage() {
                           sx={{ height: 20, fontSize: '0.65rem', fontWeight: 'bold', mb: 0.5 }} 
                         />
                         <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                            {modelo.nome}
+                            {modelo.titulo}
                         </Typography>
                     </Box>
                   </Box>
@@ -185,7 +184,7 @@ export default function ModelosPage() {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <CheckCircle2 size={16} color={theme.palette.text.secondary} />
                   <Typography variant="caption" color="text.secondary">
-                    Versão {modelo.versao}
+                    Versão {modelo.versao || 1}
                   </Typography>
                 </Box>
               </Box>
@@ -196,3 +195,5 @@ export default function ModelosPage() {
     </Container>
   );
 }
+
+

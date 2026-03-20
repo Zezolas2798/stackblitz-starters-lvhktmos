@@ -42,7 +42,10 @@ import { Cliente } from '@/lib/types';
 type FormCliente = Omit<Cliente, 'id'>;
 
 const clienteInicial: FormCliente = {
-  nome_cliente: '',
+  razao_social: '',
+  nome_fantasia: '',
+  cnpj_raiz: '',
+  ativo: true
 };
 
 export default function ClientesPage() {
@@ -59,10 +62,9 @@ export default function ClientesPage() {
   // Busca inicial
   async function fetchClientes() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('clientes')
+    const { data, error } = await (supabase as any).from('clientes')
       .select('*')
-      .order('nome_cliente', { ascending: true });
+      .order('razao_social', { ascending: true });
 
     if (error) {
       console.error('Erro ao buscar clientes:', error);
@@ -85,14 +87,14 @@ export default function ClientesPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.nome_cliente.trim()) {
-      alert('O nome da unidade é obrigatório.');
+    if (!formData.razao_social.trim() || !formData.cnpj_raiz.trim()) {
+      alert('Razão Social e CNPJ Raiz são obrigatórios.');
       return;
     }
 
     const { error } = editingId
-      ? await supabase.from('clientes').update(formData).eq('id', editingId)
-      : await supabase.from('clientes').insert(formData);
+      ? await (supabase as any).from('clientes').update(formData).eq('id', editingId)
+      : await (supabase as any).from('clientes').insert(formData);
 
     if (error) {
       alert('Erro ao salvar: ' + error.message);
@@ -104,7 +106,7 @@ export default function ClientesPage() {
 
   async function handleDelete(id: string) {
     if (window.confirm('ATENÇÃO CRÍTICA:\n\nExcluir esta unidade apagará TODAS as receitas, fichas técnicas e estoques vinculados a ela.\n\nEsta ação é irreversível. Deseja continuar?')) {
-      const { error } = await supabase.from('clientes').delete().eq('id', id);
+      const { error } = await (supabase as any).from('clientes').delete().eq('id', id);
       if (error) alert('Erro ao excluir: ' + error.message);
       else fetchClientes();
     }
@@ -112,7 +114,12 @@ export default function ClientesPage() {
 
   function startEditing(cliente: Cliente) {
     setEditingId(cliente.id);
-    setFormData({ nome_cliente: cliente.nome_cliente });
+    setFormData({ 
+      razao_social: cliente.razao_social,
+      nome_fantasia: cliente.nome_fantasia || '',
+      cnpj_raiz: cliente.cnpj_raiz,
+      ativo: cliente.ativo
+    });
     // Scroll suave para o topo em mobile
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -124,7 +131,8 @@ export default function ClientesPage() {
 
   // Filtragem
   const clientesFiltrados = clientes.filter(c => 
-    c.nome_cliente.toLowerCase().includes(searchTerm.toLowerCase())
+    c.razao_social.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.nome_fantasia && c.nome_fantasia.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   if (loading) {
@@ -215,7 +223,7 @@ export default function ClientesPage() {
                   <ListItemText 
                     primary={
                         <Typography variant="body1" fontWeight={editingId === cliente.id ? 700 : 500}>
-                            {cliente.nome_cliente}
+                            {cliente.nome_fantasia || cliente.razao_social}
                         </Typography>
                     }
                     secondary={
@@ -264,14 +272,34 @@ export default function ClientesPage() {
                 </Typography>
 
                 <TextField
-                  name="nome_cliente"
-                  label="Nome da Unidade / Cliente"
-                  placeholder="Ex: Restaurante Central, Filial Sul..."
-                  value={formData.nome_cliente}
+                  name="razao_social"
+                  label="Razão Social"
+                  placeholder="Ex: Empresa de Alimentos LTDA"
+                  value={formData.razao_social}
                   onChange={handleFormChange}
                   required
                   fullWidth
-                  autoFocus={!!editingId}
+                  sx={{ mb: 2 }}
+                />
+
+                <TextField
+                  name="nome_fantasia"
+                  label="Nome Fantasia (Opcional)"
+                  placeholder="Ex: Restaurante do Porto"
+                  value={formData.nome_fantasia || ''}
+                  onChange={handleFormChange}
+                  fullWidth
+                  sx={{ mb: 2 }}
+                />
+
+                <TextField
+                  name="cnpj_raiz"
+                  label="CNPJ Raiz"
+                  placeholder="Ex: 12.345.678"
+                  value={formData.cnpj_raiz}
+                  onChange={handleFormChange}
+                  required
+                  fullWidth
                   InputProps={{
                     startAdornment: <InputAdornment position="start"><Building2 size={18} color="gray"/></InputAdornment>
                   }}
@@ -312,3 +340,5 @@ export default function ClientesPage() {
     </Container>
   );
 }
+
+

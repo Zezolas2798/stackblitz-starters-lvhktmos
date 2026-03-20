@@ -204,7 +204,7 @@ export function KanbanBoard({ tarefas, onMoveTask, onAddTask, onUpdate }: Kanban
                           {tarefa.responsavel ? (
                              <Tooltip title={tarefa.responsavel.full_name}>
                                <Avatar sx={{ width: 22, height: 22, fontSize: '0.7rem', bgcolor: 'primary.main' }}>
-                                 {tarefa.responsavel.full_name.charAt(0)}
+                                 {tarefa.responsavel.full_name?.charAt(0) || '?'}
                                </Avatar>
                              </Tooltip>
                           ) : (
@@ -263,3 +263,5 @@ export function KanbanBoard({ tarefas, onMoveTask, onAddTask, onUpdate }: Kanban
     </>
   );
 }
+
+

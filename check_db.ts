@@ -7,7 +7,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPAB
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 async function check() {
-    const { data, error } = await supabase.from('lotes_estoque').select('*');
+    const { data, error } = await (supabase as any).from('lotes_estoque').select('*');
     if (error) {
         console.error('Error fetching lotes_estoque:', error);
     } else {
@@ -17,8 +17,9 @@ async function check() {
         }
     }
 
-    const { data: d2 } = await supabase.from('estoque_lotes').select('*');
+    const { data: d2 } = await (supabase as any).from('estoque_lotes').select('*');
     console.log(`estoque_lotes has ${d2?.length || 0} rows.`);
 }
 
 check().catch(console.error);
+

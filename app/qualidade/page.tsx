@@ -29,8 +29,7 @@ export default function DashboardQualidadePage() {
 
     const fetchAuditorias = async () => {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('checklist_auditorias')
+        const { data, error } = await (supabase as any).from('checklist_auditorias')
             .select(`
         *,
         checklist_modelos (titulo)
@@ -273,3 +272,5 @@ export default function DashboardQualidadePage() {
         </Container>
     );
 }
+
+

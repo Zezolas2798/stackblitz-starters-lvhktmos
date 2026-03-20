@@ -6,16 +6,16 @@ import {
   TableContainer, TableHead, TableRow, Chip, IconButton, Container,
   Grid, List, ListItemButton, ListItemIcon, ListItemText, Divider,
   Collapse, Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Tooltip, Breadcrumbs, Link, Skeleton
+  Tooltip, Breadcrumbs, Link, Skeleton, FormControlLabel, Checkbox, Select, FormControl, InputLabel
 } from '@mui/material';
 import {
   Folder, InsertDriveFile, Warning, CheckCircle,
   UploadFile, CreateNewFolder, MoreVert, ExpandLess, ExpandMore,
-  Add, Edit, Delete, ArrowBack, NavigateNext, Download, Link as LinkIcon, DriveFileMove
+  Add, Edit, Delete, ArrowBack, NavigateNext, Download, Link as LinkIcon, DriveFileMove, Visibility
 } from '@mui/icons-material';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
-import { format, isBefore } from 'date-fns';
+import { format, isBefore, addMonths, addYears } from 'date-fns';
 
 interface Categoria {
   id: string;
@@ -35,6 +35,7 @@ interface Arquivo {
   data_emissao: string | null;
   data_validade: string | null;
   url_storage: string | null;
+  frequencia_verificacao?: string | null;
 }
 
 export default function GEDPage() {
@@ -86,6 +87,8 @@ export default function GEDPage() {
   const [docNome, setDocNome] = useState('');
   const [docEmissao, setDocEmissao] = useState('');
   const [docValidade, setDocValidade] = useState('');
+  const [docIndeterminado, setDocIndeterminado] = useState(false);
+  const [docFrequencia, setDocFrequencia] = useState('Anual');
 
   const toggleCategory = (id: string) => {
     setExpandedCategories(prev => ({ ...prev, [id]: !prev[id] }));
@@ -243,15 +246,13 @@ export default function GEDPage() {
 
   async function fetchEstruturaRaiz() {
     setLoading(true);
-    const { data: catData } = await supabase
-      .from('documentos_categorias')
+    const { data: catData } = await (supabase as any).from('documentos_categorias')
       .select('*')
-      .order('ordem');
+      .order('nome', { ascending: true });
 
-    const { data: pastData } = await supabase
-      .from('documentos_pastas')
+    const { data: pastData } = await (supabase as any).from('documentos_pastas')
       .select('*')
-      .order('ordem');
+      .order('nome', { ascending: true });
 
     if (catData) setCategorias(catData);
     if (pastData) setPastas(pastData);
@@ -259,8 +260,7 @@ export default function GEDPage() {
   }
 
   async function fetchArquivos(pastaId: string) {
-    const { data } = await supabase
-      .from('documentos_arquivos')
+    const { data } = await (supabase as any).from('documentos_arquivos')
       .select('*')
       .eq('pasta_id', pastaId)
       .is('deleted_at', null)
@@ -280,6 +280,8 @@ export default function GEDPage() {
     setDocNome('');
     setDocEmissao('');
     setDocValidade('');
+    setDocIndeterminado(false);
+    setDocFrequencia('Anual');
     setUploadDialogOpen(true);
   };
 
@@ -301,18 +303,19 @@ export default function GEDPage() {
       if (uploadError) throw uploadError;
 
       // 3. Registra os MetaDados Padrão GxP na Tabela SQl
-      const { error: dbError } = await supabase.from('documentos_arquivos' as any).insert({
+      const { error: insertError } = await (supabase as any).from('documentos_arquivos').insert({
         pasta_id: activePastaId,
-        nome_arquivo: docNome || fileToUpload.name, // Nome customizado ou nativo
-        url_storage: uploadData.path, // O caminho relativo no bucket
+        nome_arquivo: docNome,
         data_emissao: docEmissao || null,
-        data_validade: docValidade || null,
+        data_validade: docIndeterminado ? null : (docValidade || null),
+        frequencia_verificacao: docIndeterminado ? docFrequencia : null,
+        url_storage: uploadData!.path
       });
 
-      if (dbError) {
+      if (insertError) {
         // Fallback: se der erro no SQL, tentar deletar a sujeira no Bucket (Boas práticas GxP)
         await supabase.storage.from('ged_documentos').remove([uploadData.path]);
-        throw dbError;
+        throw insertError;
       }
 
       setUploadDialogOpen(false);
@@ -340,15 +343,19 @@ export default function GEDPage() {
     if (!inputValue.trim()) return;
 
     if (dialogMode === 'create_cat') {
-      await supabase.from('documentos_categorias' as any).insert({ cliente_id: activeClientId, nome: inputValue });
+      await (supabase as any).from('documentos_categorias' as any).insert({ cliente_id: activeClientId, nome: inputValue });
     } else if (dialogMode === 'edit_cat') {
-      await supabase.from('documentos_categorias' as any).update({ nome: inputValue }).eq('id', targetCatId);
+      await (supabase as any).from('documentos_categorias' as any).update({ nome: inputValue }).eq('id', targetCatId);
     } else if (dialogMode === 'create_folder') {
-      await supabase.from('documentos_pastas' as any).insert({ categoria_id: targetCatId, parent_id: targetPastaId, nome: inputValue });
+      const { error } = await (supabase as any).from('documentos_pastas').insert({
+        nome: inputValue,
+        categoria_id: targetCatId,
+        parent_id: targetPastaId
+      });
     } else if (dialogMode === 'edit_folder') {
-      await supabase.from('documentos_pastas' as any).update({ nome: inputValue }).eq('id', targetPastaId);
+      await (supabase as any).from('documentos_pastas' as any).update({ nome: inputValue }).eq('id', targetPastaId);
     } else if (dialogMode === 'edit_file') {
-      await supabase.from('documentos_arquivos' as any).update({ nome_arquivo: inputValue }).eq('id', targetFileId);
+      await (supabase as any).from('documentos_arquivos' as any).update({ nome_arquivo: inputValue }).eq('id', targetFileId);
     }
 
     setDialogOpen(false);
@@ -375,12 +382,12 @@ export default function GEDPage() {
       if (nodeToMove.id === moveTargetPastaId) {
         alert('Não é possível mover uma pasta para dentro de si mesma.'); return;
       }
-      await supabase.from('documentos_pastas' as any).update({ categoria_id: moveTargetCategoriaId, parent_id: moveTargetPastaId }).eq('id', nodeToMove.id);
+      await (supabase as any).from('documentos_pastas' as any).update({ categoria_id: moveTargetCategoriaId, parent_id: moveTargetPastaId }).eq('id', nodeToMove.id);
     } else if (nodeToMove.type === 'arquivo') {
       if (!moveTargetPastaId) {
         alert('Selecione uma pasta de destino válida para o arquivo.'); return;
       }
-      await supabase.from('documentos_arquivos' as any).update({ pasta_id: moveTargetPastaId }).eq('id', nodeToMove.id);
+      await (supabase as any).from('documentos_arquivos' as any).update({ pasta_id: moveTargetPastaId }).eq('id', nodeToMove.id);
     }
 
     setMoveDialogOpen(false);
@@ -394,6 +401,8 @@ export default function GEDPage() {
     setEditDocNome(file.nome_arquivo);
     setEditDocEmissao(file.data_emissao ? new Date(file.data_emissao).toISOString().split('T')[0] : '');
     setEditDocValidade(file.data_validade ? new Date(file.data_validade).toISOString().split('T')[0] : '');
+    setDocIndeterminado(!file.data_validade && !!file.frequencia_verificacao);
+    setDocFrequencia(file.frequencia_verificacao || 'Anual');
     setEditFileOpen(true);
     setFileMenuAnchorEl(null);
   };
@@ -402,10 +411,11 @@ export default function GEDPage() {
     if (!editDocNome.trim() || !targetFileId) return;
 
     try {
-      const { error } = await supabase.from('documentos_arquivos' as any).update({
+      const { error } = await (supabase as any).from('documentos_arquivos' as any).update({
         nome_arquivo: editDocNome,
         data_emissao: editDocEmissao || null,
-        data_validade: editDocValidade || null
+        data_validade: docIndeterminado ? null : (editDocValidade || null),
+        frequencia_verificacao: docIndeterminado ? docFrequencia : null
       }).eq('id', targetFileId);
 
       if (error) throw error;
@@ -424,9 +434,9 @@ export default function GEDPage() {
     if (!confirm) return;
 
     if (activeNodeForMenu.type === 'categoria') {
-      await supabase.from('documentos_categorias' as any).delete().eq('id', activeNodeForMenu.id);
+      await (supabase as any).from('documentos_categorias' as any).delete().eq('id', activeNodeForMenu.id);
     } else {
-      await supabase.from('documentos_pastas' as any).delete().eq('id', activeNodeForMenu.id);
+      await (supabase as any).from('documentos_pastas' as any).delete().eq('id', activeNodeForMenu.id);
     }
 
     setMenuAnchorEl(null);
@@ -468,6 +478,26 @@ export default function GEDPage() {
     }
   };
 
+  const handleViewFile = async () => {
+    if (!activeFileForMenu?.url_storage) return;
+
+    try {
+      const { data } = supabase.storage
+        .from('ged_documentos')
+        .getPublicUrl(activeFileForMenu.url_storage);
+
+      if (data?.publicUrl) {
+        window.open(data.publicUrl, '_blank');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao abrir o documento.');
+    } finally {
+      setFileMenuAnchorEl(null);
+      setActiveFileForMenu(null);
+    }
+  };
+
   const handleCopyLinkFile = async () => {
     if (!activeFileForMenu?.url_storage) return;
 
@@ -501,8 +531,7 @@ export default function GEDPage() {
 
     try {
       // Soft Delete: Insere Data Atual no deleted_at (Mantém rastro visual no BD de auditoria GxP)
-      const { error } = await supabase
-        .from('documentos_arquivos')
+      const { error } = await (supabase as any).from('documentos_arquivos')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', activeFileForMenu.id);
 
@@ -524,7 +553,7 @@ export default function GEDPage() {
     <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h4" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Folder size={32} /> Central de Documentos (GED)
+          <Folder sx={{ fontSize: 32 }} /> Central de Documentos (GED)
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           {/* Botão Dinâmico: Cria Categoria se na raiz, Cria Pasta se dentro */}
@@ -546,67 +575,8 @@ export default function GEDPage() {
       </Box>
 
       <Grid container spacing={3}>
-        {/* SIDEBAR: NAVEGAÇÃO RÁPIDA DE PASTAS */}
-        <Grid item xs={12} md={3} lg={3}>
-          <Paper elevation={0} sx={{
-            border: '1px solid',
-            borderColor: 'divider',
-            minHeight: '600px',
-            maxHeight: 'calc(100vh - 180px)',
-            overflowY: 'auto',
-            '&::-webkit-scrollbar': { width: '6px' },
-            '&::-webkit-scrollbar-thumb': { backgroundColor: '#e0e0e0', borderRadius: '4px' }
-          }}>
-            <List component="nav" dense>
-              {categorias.map(cat => {
-                const isCatExpanded = !!expandedCategories[cat.id]; // Inicialmente Fechadas
-                return (
-                  <Box key={cat.id}>
-                    <ListItemButton
-                      selected={activeCategoriaId === cat.id && !activePastaId}
-                      onClick={() => {
-                        toggleCategory(cat.id);
-                        setActiveCategoriaId(cat.id);
-                        setActivePastaId(null);
-                      }}
-                      sx={{ bgcolor: 'grey.100', mt: 1, '&:hover': { bgcolor: 'grey.200' }, pr: 1 }}
-                    >
-                      <ListItemText
-                        primary={
-                          <Typography fontWeight="bold" variant="overline" sx={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            display: 'block'
-                          }}>
-                            {cat.nome}
-                          </Typography>
-                        }
-                      />
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveNodeForMenu({ id: cat.id, type: 'categoria', catId: cat.id });
-                          setMenuAnchorEl(e.currentTarget);
-                        }}
-                      >
-                        <MoreVert fontSize="small" />
-                      </IconButton>
-                      {isCatExpanded ? <ExpandLess /> : <ExpandMore />}
-                    </ListItemButton>
-                    <Collapse in={isCatExpanded} timeout="auto" unmountOnExit>
-                      {renderPastasSidebar(cat.id, null, 0)}
-                    </Collapse>
-                  </Box>
-                );
-              })}
-            </List>
-          </Paper>
-        </Grid>
-
         {/* MAIN: QUADRADO PRINCIPAL GOOGLE DRIVE */}
-        <Grid item xs={12} md={9}>
+        <Grid item xs={12}>
           <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', minHeight: '600px', p: 3, display: 'flex', flexDirection: 'column' }}>
 
             {/* CABEÇALHO DO DRIVE: BREADCRUMBS */}
@@ -716,7 +686,7 @@ export default function GEDPage() {
               <Box textAlign="center" py={10} color="text.secondary" flex={1} display="flex" flexDirection="column" justifyContent="center" alignItems="center">
                 <Folder sx={{ fontSize: 64, opacity: 0.2, mb: 2 }} />
                 <Typography variant="h6">Categoria vazia.</Typography>
-                <Typography variant="body2">Clique em "Nova Pasta Aqui" acima para organizar seus documentos.</Typography>
+                <Typography variant="body2">Clique em &quot;Nova Pasta Aqui&quot; acima para organizar seus documentos.</Typography>
               </Box>
             )}
 
@@ -741,7 +711,24 @@ export default function GEDPage() {
                         <TableRow><TableCell colSpan={4} align="center" sx={{ py: 6, color: 'text.secondary' }}>Nenhum documento encontrado nesta pasta.</TableCell></TableRow>
                       )}
                       {arquivosAtuais.map((arq) => {
-                        const vencido = checkVencido(arq.data_validade);
+                        let vencido = false;
+                        let dataLimite: Date | null = null;
+
+                        if (arq.data_validade) {
+                          vencido = isBefore(new Date(arq.data_validade), new Date());
+                        } else if (arq.data_emissao && arq.frequencia_verificacao) {
+                          const emissao = new Date(arq.data_emissao);
+                          if (arq.frequencia_verificacao === 'Mensal') dataLimite = addMonths(emissao, 1);
+                          else if (arq.frequencia_verificacao === 'Trimestral') dataLimite = addMonths(emissao, 3);
+                          else if (arq.frequencia_verificacao === 'Semestral') dataLimite = addMonths(emissao, 6);
+                          else if (arq.frequencia_verificacao === 'Anual') dataLimite = addYears(emissao, 1);
+                          else if (arq.frequencia_verificacao === 'Bienal') dataLimite = addYears(emissao, 2);
+                          
+                          if (dataLimite) {
+                            vencido = isBefore(dataLimite, new Date());
+                          }
+                        }
+
                         return (
                           <TableRow key={arq.id} hover>
                             <TableCell>
@@ -751,7 +738,9 @@ export default function GEDPage() {
                               </Box>
                             </TableCell>
                             <TableCell>
-                              {arq.data_validade ? format(new Date(arq.data_validade), 'dd/MM/yyyy') : 'Sem Vencimento'}
+                              {arq.data_validade 
+                                ? format(new Date(arq.data_validade), 'dd/MM/yyyy') 
+                                : (arq.frequencia_verificacao ? `Periódico: ${arq.frequencia_verificacao}` : 'Sem Vencimento')}
                             </TableCell>
                             <TableCell>
                               {arq.data_validade ? (
@@ -761,6 +750,18 @@ export default function GEDPage() {
                                   size="small"
                                   icon={vencido ? <Warning fontSize="small" /> : <CheckCircle fontSize="small" />}
                                 />
+                              ) : arq.frequencia_verificacao ? (
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                  <Chip
+                                    label={vencido ? 'Vencido' : 'Vigente'}
+                                    color={vencido ? 'error' : 'success'}
+                                    size="small"
+                                    icon={vencido ? <Warning fontSize="small" /> : <CheckCircle fontSize="small" />}
+                                  />
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                    Verificação Periódica
+                                  </Typography>
+                                </Box>
                               ) : (
                                 <Chip label="Permanente" size="small" variant="outlined" />
                               )}
@@ -852,8 +853,13 @@ export default function GEDPage() {
 
         <Divider />
 
+        <MenuItem onClick={handleViewFile}>
+          <ListItemIcon><Visibility fontSize="small" /></ListItemIcon>
+          <ListItemText>Visualizar</ListItemText>
+        </MenuItem>
         <MenuItem onClick={handleDownloadFile}>
-          <ListItemIcon><Download fontSize="small" /></ListItemIcon> Baixar Arquivo Exato
+          <ListItemIcon><Download fontSize="small" /></ListItemIcon>
+          <ListItemText>Baixar Arquivo</ListItemText>
         </MenuItem>
 
         <MenuItem onClick={handleCopyLinkFile}>
@@ -919,7 +925,36 @@ export default function GEDPage() {
                 InputLabelProps={{ shrink: true }}
                 value={editDocValidade}
                 onChange={(e) => setEditDocValidade(e.target.value)}
+                disabled={docIndeterminado}
               />
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox 
+                    checked={docIndeterminado} 
+                    onChange={(e) => setDocIndeterminado(e.target.checked)} 
+                  />
+                }
+                label="Validade Indeterminada"
+              />
+              {docIndeterminado && (
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>Frequência de Verificação</InputLabel>
+                  <Select
+                    value={docFrequencia}
+                    label="Frequência de Verificação"
+                    onChange={(e) => setDocFrequencia(e.target.value)}
+                  >
+                    <MenuItem value="Mensal">Mensal</MenuItem>
+                    <MenuItem value="Trimestral">Trimestral (3 meses)</MenuItem>
+                    <MenuItem value="Semestral">Semestral (6 meses)</MenuItem>
+                    <MenuItem value="Anual">Anual (1 ano)</MenuItem>
+                    <MenuItem value="Bienal">Bienal (2 anos)</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
             </Box>
           </Box>
         </DialogContent>
@@ -932,7 +967,7 @@ export default function GEDPage() {
       {/* DIALOG DE MOVER */}
       <Dialog open={moveDialogOpen} onClose={() => setMoveDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
-          Mover "{nodeToMove?.nome}"
+          Mover &quot;{nodeToMove?.nome}&quot;
         </DialogTitle>
         <DialogContent dividers>
           <Box display="flex" flexDirection="column" gap={3} py={1}>
@@ -1037,10 +1072,38 @@ export default function GEDPage() {
                 InputLabelProps={{ shrink: true }}
                 value={docValidade}
                 onChange={(e) => setDocValidade(e.target.value)}
-                disabled={isUploading}
+                disabled={isUploading || docIndeterminado}
               />
             </Box>
 
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox 
+                    checked={docIndeterminado} 
+                    onChange={(e) => setDocIndeterminado(e.target.checked)} 
+                    disabled={isUploading}
+                  />
+                }
+                label="Validade Indeterminada"
+              />
+              {docIndeterminado && (
+                <FormControl size="small" sx={{ minWidth: 200 }} disabled={isUploading}>
+                  <InputLabel>Frequência de Verificação</InputLabel>
+                  <Select
+                    value={docFrequencia}
+                    label="Frequência de Verificação"
+                    onChange={(e) => setDocFrequencia(e.target.value)}
+                  >
+                    <MenuItem value="Mensal">Mensal</MenuItem>
+                    <MenuItem value="Trimestral">Trimestral (3 meses)</MenuItem>
+                    <MenuItem value="Semestral">Semestral (6 meses)</MenuItem>
+                    <MenuItem value="Anual">Anual (1 ano)</MenuItem>
+                    <MenuItem value="Bienal">Bienal (2 anos)</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
@@ -1059,3 +1122,5 @@ export default function GEDPage() {
     </Container >
   );
 }
+
+

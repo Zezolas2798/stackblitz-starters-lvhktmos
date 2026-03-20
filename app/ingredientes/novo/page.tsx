@@ -101,28 +101,37 @@ export default function NovoIngredientePage() {
     vitamina_b9_mcg: null, vitamina_b12_mcg: null,
 
     // Minerais Completos
-    calcio_mg: null, ferro_mg: null, sodio_mg: null, // Sódio repetido intencionalmente no grupo principal
+    calcio_mg: null, ferro_mg: null, // Sódio repetido intencionalmente no grupo principal
     magnesio_mg: null, fosforo_mg: null, potassio_mg: null, zinco_mg: null,
     cobre_mcg: null, selenio_mcg: null, iodo_mcg: null, manganes_mg: null,
-    fluor_mg: null, cromo_mcg: null, molibdenio_mcg: null, cloreto_mg: null
+    fluor_mg: null, cromo_mcg: null, molibdenio_mcg: null, cloreto_mg: null,
+    grupo_estoque_id: null,
+    classificacao_nova: null
   });
 
   const [alergenosSelecionados, setAlergenosSelecionados] = useState<AlergenicoTag[]>([]);
+  const [opcoesGrupos, setOpcoesGrupos] = useState<{id: string, nome: string}[]>([]);
 
   // Carga Inicial
   useEffect(() => {
     async function loadMasters() {
-      const { data: alergenicosData } = await supabase.from('anvisa_alergenicos').select('id, nome').order('nome');
+      const { data: alergenicosData } = await (supabase as any).from('anvisa_alergenicos').select('id, nome').order('nome');
       if (alergenicosData) setListaMestraAlergenicos(alergenicosData);
 
-      const { data: aditivosData } = await supabase.from('anvisa_aditivos').select('*').order('ins');
+      const { data: aditivosData } = await (supabase as any).from('anvisa_aditivos').select('*').order('ins');
       if (aditivosData) setListaAditivosMestre(aditivosData);
 
-      const { data: funcoesData } = await supabase.from('anvisa_funcoes_aditivos').select('nome').order('nome');
+      const { data: funcoesData } = await (supabase as any).from('anvisa_funcoes_aditivos').select('nome').order('nome');
       if (funcoesData) setOpcoesFuncaoDinamicas(funcoesData.map((f: any) => f.nome));
     }
+    async function loadGroups() {
+      if (!activeClientId) return;
+      const { data } = await (supabase as any).from('ingredientes_grupos').select('id, nome').eq('cliente_id', activeClientId).order('nome');
+      if (data) setOpcoesGrupos(data);
+    }
     loadMasters();
-  }, []);
+    loadGroups();
+  }, [activeClientId]);
 
   const handleChange = (field: keyof Ingrediente, value: any) => {
     let finalValue = value;
@@ -130,7 +139,8 @@ export default function NovoIngredientePage() {
         finalValue = null;
     } else if (
         field !== 'nome' && field !== 'fonte' && field !== 'tipo_ingrediente' && 
-        field !== 'funcao_aditivo' && field !== 'ins_code' && field !== 'declaracao_ingredientes_fornecedor'
+        field !== 'funcao_aditivo' && field !== 'ins_code' && field !== 'declaracao_ingredientes_fornecedor' &&
+        field !== 'classificacao_nova'
     ) {
         const num = Number(value);
         if (!isNaN(num)) finalValue = num;
@@ -183,7 +193,7 @@ export default function NovoIngredientePage() {
         created_at: new Date().toISOString()
       };
 
-      const { error } = await supabase.from('ingredientes').insert([payload]);
+      const { error } = await (supabase as any).from('ingredientes').insert([payload]);
       if (error) throw error;
 
       alert(`Ingrediente "${formData.nome}" salvo com sucesso!`);
@@ -261,11 +271,80 @@ export default function NovoIngredientePage() {
                   </>
               )}
 
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={4}>
                 <TextField label="Marca / Fonte" fullWidth value={formData.fonte || ''} onChange={e => handleChange('fonte', e.target.value)} />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={4}>
                 <TextField label="Peso Médio Unitário (g)" type="number" fullWidth value={formData.peso_unitario_g ?? ''} onChange={e => handleChange('peso_unitario_g', e.target.value)} InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} />
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <Autocomplete
+                  freeSolo
+                  options={opcoesGrupos}
+                  getOptionLabel={(option: any) => typeof option === 'string' ? option : option.nome}
+                  value={opcoesGrupos.find(g => g.id === formData.grupo_estoque_id) || null}
+                  onChange={async (_, newValue) => {
+                    if (typeof newValue === 'string') {
+                      // Handle free text (new group)
+                      if (!activeClientId) return;
+                      try {
+                        setLoading(true);
+                        const { data, error } = await (supabase as any).from('ingredientes_grupos').insert([{ cliente_id: activeClientId, nome: newValue }]).select().single();
+                        if (error) throw error;
+                        setOpcoesGrupos(prev => [...prev, data]);
+                        handleChange('grupo_estoque_id', data.id);
+                      } catch (err: any) {
+                        console.error('Erro ao criar grupo:', err);
+                        alert('Erro ao criar grupo de estoque.');
+                      } finally {
+                        setLoading(false);
+                      }
+                    } else if (newValue && newValue.id) {
+                      handleChange('grupo_estoque_id', newValue.id);
+                    } else {
+                      handleChange('grupo_estoque_id', null);
+                    }
+                  }}
+                  renderInput={(params) => <TextField {...params} label="Grupo de Estoque (Para Agrupar Marcas)" placeholder="Ex: Farinha de Trigo" helperText="Ingredientes do mesmo grupo compartilham estoques na produção." />}
+                />
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <TextField
+                  select
+                  label="Classificação NOVA"
+                  fullWidth
+                  value={formData.classificacao_nova ?? ''}
+                  onChange={e => handleChange('classificacao_nova', e.target.value === '' ? null : Number(e.target.value))}
+                  helperText="Grau de processamento (USP/Nupens)"
+                >
+                  <MenuItem value=""><em>Não classificado</em></MenuItem>
+                  <MenuItem value={1}>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#4CAF50' }} />
+                      G1 — In Natura / Minimamente Processado
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value={2}>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#2196F3' }} />
+                      G2 — Ingrediente Culinário Processado
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value={3}>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#FF9800' }} />
+                      G3 — Alimento Processado
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value={4}>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#F44336' }} />
+                      G4 — Ultraprocessado
+                    </Box>
+                  </MenuItem>
+                </TextField>
               </Grid>
 
               {formData.tipo_ingrediente === 'COMPOSTO' && (
@@ -425,3 +504,6 @@ export default function NovoIngredientePage() {
     </Box>
   );
 }
+
+
+

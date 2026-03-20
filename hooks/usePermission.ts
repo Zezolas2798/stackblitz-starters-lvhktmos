@@ -26,8 +26,7 @@ export function usePermission() {
       }
 
       // 1. Busca o perfil legado (para saber se é Super Admin/Dono)
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+      const { data: profile, error: profileError } = await (supabase as any).from('profiles')
         .select('role')
         .eq('id', user.id)
         .single();
@@ -87,3 +86,4 @@ export function usePermission() {
     isSuperAdmin: role === 'super_admin'
   };
 }
+

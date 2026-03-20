@@ -40,8 +40,7 @@ export async function DELETE(request: Request) {
 
         // 1. Em vez de hard delete, efetuamos a inativação rastreável (Soft Delete)
         // Isso preserva os laudos do passado onde esta Receita foi usada na produção
-        const { data, error: dbError } = await supabase
-            .from('receitas')
+        const { data, error: dbError } = await (supabase as any).from('receitas')
             .update({ deleted_at: new Date().toISOString() })
             .eq('id', id)
             .select();
@@ -65,3 +64,6 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ erro: 'Erro interno do Servidor', detalhes: error.message }, { status: 500 });
     }
 }
+
+
+

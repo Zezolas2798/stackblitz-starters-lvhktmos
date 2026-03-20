@@ -10,7 +10,8 @@ import {
   Paper, Grid, List, ListItem, ListItemText, Chip, 
   FormControl, InputLabel, Select, MenuItem, Stack, Tooltip, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  IconButton, Badge, Drawer, useTheme, alpha
+  IconButton, Badge, Drawer, useTheme, alpha, Card, CardMedia,
+  Tabs, Tab, Table, TableBody, TableCell, TableContainer, TableHead, TableRow
 } from '@mui/material';
 
 // Ícones
@@ -23,8 +24,13 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import LockIcon from '@mui/icons-material/Lock';
 import RestoreIcon from '@mui/icons-material/Restore';
 import { 
-  ChefHat, Scale, Settings, LayoutTemplate, FlaskConical, ScanEye, AlertTriangle, FileCheck, CheckCircle 
+  ChefHat, Scale, Settings, LayoutTemplate, FlaskConical, ScanEye, AlertTriangle, FileCheck, CheckCircle,
+  Image as ImageIcon, BarChart3
 } from 'lucide-react';
+import {
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, 
+  ResponsiveContainer, Legend, CartesianGrid
+} from 'recharts';
 
 import LoadingButton from '@mui/lab/LoadingButton';
 import CalculateIcon from '@mui/icons-material/Calculate';
@@ -45,6 +51,7 @@ type ComposicaoDisplayItem = {
   tipo_ingrediente?: string; 
   funcao_aditivo?: string | null;
   ins_code?: string | null;
+  classificacao_nova?: number | null;
 };
 
 export default function DetalhesReceitaPage() {
@@ -79,6 +86,8 @@ export default function DetalhesReceitaPage() {
   const [error, setError] = useState<string | null>(null);
   const [layoutTabela, setLayoutTabela] = useState<TabelaLayout>('VERTICAL');
   const [lupaLayout, setLupaLayout] = useState<LupaLayout>('VERTICAL');
+  const [abaAtiva, setAbaAtiva] = useState(0);
+  const [abaSubGrafico, setAbaSubGrafico] = useState(1); // 0: 100g, 1: Porção
  
   // === 1. CARREGAMENTO DE DADOS ===
   useEffect(() => {
@@ -97,18 +106,18 @@ export default function DetalhesReceitaPage() {
   const fetchDadosCompletos = async () => {
     setLoading(true);
     try {
-      const { data: recData, error: recError } = await supabase
+      const { data: recData, error: recError } = await (supabase as any)
         .from('receitas')
         .select('*, anvisa_categorias(*), composicao_receitas(*), tipos_receita(*)')
         .eq('id', recipeId)
-        .eq('cliente_id', activeClientId)
+        .eq('cliente_id', activeClientId!)
         .single();
 
       if (recError) throw recError;
       setReceitaAtual(recData);
       setReceitaExibida(recData);
 
-      const { data: verData } = await supabase
+      const { data: verData } = await (supabase as any)
         .from('receitas_versoes')
         .select('*')
         .eq('receita_id', recipeId)
@@ -195,7 +204,7 @@ export default function DetalhesReceitaPage() {
     const receitaIds = composicao.filter((c: any) => c.item_type === 'receita').map((c: any) => c.item_id);
     
     const [ingData, recData] = await Promise.all([
-      ingredienteIds.length > 0 ? supabase.from('ingredientes').select('id, nome, peso_unitario_g, tipo_ingrediente, funcao_aditivo, ins_code').in('id', ingredienteIds) : Promise.resolve({ data: [] }),
+      ingredienteIds.length > 0 ? supabase.from('ingredientes').select('id, nome, peso_unitario_g, tipo_ingrediente, funcao_aditivo, ins_code, classificacao_nova').in('id', ingredienteIds) : Promise.resolve({ data: [] }),
       receitaIds.length > 0 ? supabase.from('receitas').select('id, nome').in('id', receitaIds) : Promise.resolve({ data: [] })
     ]);
     
@@ -215,7 +224,8 @@ export default function DetalhesReceitaPage() {
         peso_unitario_g: info.peso_unitario_g,
         tipo_ingrediente: info.tipo_ingrediente,
         funcao_aditivo: info.funcao_aditivo,
-        ins_code: info.ins_code
+        ins_code: info.ins_code,
+        classificacao_nova: info.classificacao_nova ?? null
       };
     });
 
@@ -373,169 +383,524 @@ export default function DetalhesReceitaPage() {
           </Alert>
       )}
 
-      <Grid container spacing={4}>
+      <Stack spacing={4}>
         
-        {/* COLUNA ESQUERDA: HISTÓRICO + DADOS */}
-        <Grid item xs={12} md={4}>
-          <Stack spacing={3}>
-             
-             {/* Menu Suspenso de Versões */}
-             <Paper elevation={0} sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <HistoryIcon color="action" />
-                    <Typography variant="subtitle2" fontWeight="bold">Controle de Versão</Typography>
+        {/* 1. FOTO DA RECEITA (Estilo Estúdio) */}
+        <Paper elevation={0} sx={{ 
+            p: 0, 
+            border: '1px solid #e0e0e0', 
+            borderRadius: 2, 
+            overflow: 'hidden', 
+            height: 280,
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: '#000'
+        }}>
+            {receitaExibida.foto_url ? (
+                <>
+                    {/* Fundo Desfocado (Blur) */}
+                    <Box sx={{ 
+                        position: 'absolute',
+                        top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundImage: `url(${receitaExibida.foto_url})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        filter: 'blur(25px) brightness(0.6)',
+                        transform: 'scale(1.1)', // Evita vazamento de bordas do blur
+                        opacity: 0.8
+                    }} />
+                    
+                    {/* Foto Focal (Contain) */}
+                    <CardMedia
+                        component="img"
+                        image={receitaExibida.foto_url}
+                        alt={receitaExibida.nome}
+                        sx={{ 
+                            position: 'relative',
+                            zIndex: 2,
+                            maxHeight: '100%',
+                            maxWidth: '100%',
+                            width: 'auto',
+                            objectFit: 'contain',
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+                        }}
+                    />
+                </>
+            ) : (
+                <Box sx={{ 
+                    height: '100%', 
+                    width: '100%',
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    bgcolor: '#f5f5f5',
+                    color: 'text.secondary',
+                    gap: 1
+                }}>
+                    <ImageIcon size={48} strokeWidth={1} />
+                    <Typography variant="body1">Nenhuma foto cadastrada.</Typography>
                 </Box>
+            )}
+        </Paper>
 
-                <TextField
-                    select
-                    fullWidth
-                    size="small"
-                    label="Selecione a Versão"
-                    value={versaoSelecionadaId || 'ATUAL'}
-                    onChange={(e) => handleSelecionarVersao(e.target.value)}
-                >
-                    <MenuItem value="ATUAL">
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                            <Typography variant="body2" fontWeight="bold">Versão Atual (Trabalho)</Typography>
-                            {receitaAtual.status === 'RASCUNHO' && <Chip label="Rascunho" size="small" sx={{ height: 20 }} />}
-                        </Box>
-                    </MenuItem>
-                    
-                    {historicoVersoes.length > 0 && <Divider />}
-                    
-                    {historicoVersoes.map((v) => (
-                        <MenuItem key={v.id} value={v.id}>
-                            <Box>
-                                <Typography variant="body2">Versão {v.versao} - {new Date(v.data_aprovacao).toLocaleDateString()}</Typography>
+        {/* 2. COMPOSIÇÃO (Lista Compacta) */}
+        <Paper elevation={0} sx={{ p: 3, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+            <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 'bold', color: 'primary.main' }}>
+                <Scale size={24} /> Composição {isHistorico && '(Snapshot)'}
+            </Typography>
+            <Divider sx={{ mb: 1 }} />
+            <List dense disablePadding>
+                {composicaoDisplay.map(item => (
+                    <ListItem key={item.id} divider sx={{ px: 1 }}>
+                        <ListItemText
+                            primary={
+                                <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Typography variant="body2" fontWeight={600}>{item.nome}</Typography>
+                                    {item.tipo_ingrediente === 'ADITIVO' && (
+                                        <Chip label={item.funcao_aditivo || 'Aditivo'} size="small" color="warning" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
+                                    )}
+                                </Box>
+                            }
+                        />
+                        <Typography variant="body2" fontWeight={600} color="primary" sx={{ whiteSpace: 'nowrap' }}>{item.peso_liquido_g}g</Typography>
+                    </ListItem>
+                ))}
+            </List>
+        </Paper>
+
+        {/* 3. MODO DE PREPARO */}
+        <Paper elevation={0} sx={{ p: 4, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+            <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 'bold', color: 'primary.main' }}>
+                <ChefHat size={24} /> Modo de Preparo
+            </Typography>
+            <Divider sx={{ mb: 3 }} />
+            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', color: 'text.primary', textAlign: 'justify', lineHeight: 1.8 }}>
+                {receitaExibida.modo_preparo || "Nenhum modo de preparo cadastrado."}
+            </Typography>
+        </Paper>
+
+        {/* 4. CONTROLE DE VERSÃO */}
+        <Paper elevation={0} sx={{ p: 4, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+                <HistoryIcon color="primary" sx={{ fontSize: 28 }} />
+                <Typography variant="h5" fontWeight="bold" color="primary.main">Controle de Versão</Typography>
+            </Box>
+            
+            <Grid container spacing={3} alignItems="flex-start">
+                <Grid item xs={12} md={6}>
+                    <TextField
+                        select
+                        fullWidth
+                        size="medium"
+                        label="Versão em Visualização"
+                        value={versaoSelecionadaId || 'ATUAL'}
+                        onChange={(e) => handleSelecionarVersao(e.target.value)}
+                    >
+                        <MenuItem value="ATUAL">
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                                <Typography variant="body1" fontWeight="bold">Versão Atual (Trabalho)</Typography>
+                                {receitaAtual.status === 'RASCUNHO' && <Chip label="Rascunho" size="small" />}
                             </Box>
                         </MenuItem>
-                    ))}
-                </TextField>
+                        
+                        {historicoVersoes.length > 0 && <Divider />}
+                        
+                        {historicoVersoes.map((v) => (
+                            <MenuItem key={v.id} value={v.id}>
+                                <Typography variant="body1">Versão {v.versao} - {new Date(v.data_aprovacao).toLocaleDateString()}</Typography>
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                </Grid>
 
                 {versaoDetalhes && (
-                    <Box sx={{ mt: 2, p: 2, bgcolor: '#fffde7', border: '1px solid #fff9c4', borderRadius: 1 }}>
-                         <Typography variant="caption" fontWeight="bold" display="block" gutterBottom color="warning.dark">
-                             DETALHES DO SNAPSHOT:
-                         </Typography>
-                         <Typography variant="caption" display="block"><b>Data:</b> {new Date(versaoDetalhes.data_aprovacao).toLocaleString()}</Typography>
-                         <Typography variant="caption" display="block"><b>Motivo:</b> {versaoDetalhes.motivo_alteracao}</Typography>
+                    <Grid item xs={12} md={6}>
+                        <Box sx={{ p: 2, bgcolor: alpha(theme.palette.warning.main, 0.05), border: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`, borderRadius: 1 }}>
+                            <Typography variant="subtitle2" fontWeight="bold" gutterBottom color="warning.dark">
+                                DETALHES DO SNAPSHOT:
+                            </Typography>
+                            <Typography variant="body2" display="block"><b>Data:</b> {new Date(versaoDetalhes.data_aprovacao).toLocaleString()}</Typography>
+                            <Typography variant="body2" display="block"><b>Motivo:</b> {versaoDetalhes.motivo_alteracao}</Typography>
+                        </Box>
+                    </Grid>
+                )}
+            </Grid>
+        </Paper>
+
+        {/* 5. ROTULAGEM & GRÁFICOS (TABS) */}
+        <Paper elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+            <Tabs 
+              value={abaAtiva} 
+              onChange={(_, v) => setAbaAtiva(v)} 
+              variant="fullWidth"
+              sx={{ borderBottom: '1px solid #e0e0e0', bgcolor: alpha(theme.palette.primary.main, 0.03) }}
+            >
+              <Tab icon={<ScanEye size={18} />} iconPosition="start" label={isHistorico ? 'Rótulo (Snapshot)' : 'Rotulagem IN 75'} />
+              <Tab icon={<BarChart3 size={18} />} iconPosition="start" label="Gráficos Nutricionais" />
+            </Tabs>
+
+            <Box sx={{ p: 4 }}>
+
+            {/* === ABA 0: RÓTULO === */}
+            {abaAtiva === 0 && (
+              <Box>
+                {isHistorico && <Chip label="Arquivo Morto" color="warning" variant="outlined" sx={{ mb: 2 }} />}
+
+                {!tabela && !isHistorico && (
+                    <Box sx={{ textAlign: 'center', py: 8, bgcolor: '#f9f9f9', border: '2px dashed #eee', borderRadius: 2 }}>
+                        <LoadingButton onClick={handleCalculate} loading={calculating} startIcon={<CalculateIcon />} variant="contained" size="large">
+                            Gerar Rótulo Nutricional
+                        </LoadingButton>
                     </Box>
                 )}
-             </Paper>
 
-            {/* MODO DE PREPARO */}
-            <Paper elevation={0} sx={{ p: 3, border: '1px solid #e0e0e0', borderRadius: 2 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 'bold' }}>
-                  <ChefHat color={theme.palette.primary.main} size={20} /> Modo de Preparo
-              </Typography>
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: 'text.secondary', textAlign: 'justify', lineHeight: 1.6 }}>
-                  {receitaExibida.modo_preparo || "Nenhum modo de preparo cadastrado."}
-              </Typography>
-            </Paper>
-            
-            {/* COMPOSIÇÃO */}
-            <Paper elevation={0} sx={{ p: 3, border: '1px solid #e0e0e0', borderRadius: 2 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 'bold' }}>
-                  <Scale color={theme.palette.primary.main} size={20} /> Composição {isHistorico && '(Snapshot)'}
-              </Typography>
-              <List dense sx={{ bgcolor: 'background.default', borderRadius: 1 }}>
-                {composicaoDisplay.map(item => (
-                  <ListItem key={item.id} divider>
-                    <ListItemText 
-                      primary={
-                        <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2" fontWeight={600}>{item.nome}</Typography>
-                          {item.tipo_ingrediente === 'ADITIVO' && (
-                               <Chip label={item.funcao_aditivo || 'Aditivo'} size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-                          )}
-                        </Box>
-                      } 
-                      secondary={`${item.peso_liquido_g}g`} 
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          </Stack>
-        </Grid>
+                {tabela && (
+                  <Box>
+                    <Paper variant="outlined" sx={{ p: 3, mb: 4, bgcolor: alpha(theme.palette.primary.main, 0.02), '@media print': { display: 'none' } }}>
+                      <Grid container spacing={3} alignItems="center">
+                        <Grid item xs={12} sm={4}>
+                          <FormControl size="small" fullWidth>
+                            <InputLabel>Formato da Tabela</InputLabel>
+                            <Select value={layoutTabela} label="Formato da Tabela" onChange={(e) => setLayoutTabela(e.target.value as TabelaLayout)}>
+                              <MenuItem value="VERTICAL">Vertical</MenuItem>
+                              <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+                              <MenuItem value="LINEAR">Linear</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid item xs={12} sm={4}>
+                          <FormControl size="small" fullWidth>
+                            <InputLabel>Layout da Lupa</InputLabel>
+                            <Select value={lupaLayout} label="Layout da Lupa" onChange={(e) => setLupaLayout(e.target.value as LupaLayout)}>
+                              <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+                              <MenuItem value="VERTICAL">Vertical</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid item xs={12} sm={4}>
+                            <Button fullWidth variant="contained" color="secondary" startIcon={<DownloadIcon />} onClick={handleDownloadJPEG}>
+                                Baixar Rótulo
+                            </Button>
+                        </Grid>
+                      </Grid>
+                    </Paper>
 
-        {/* COLUNA DIREITA: ROTULAGEM */}
-        <Grid item xs={12} md={8}>
-          <Paper elevation={2} sx={{ p: 3, bgcolor: '#fff', border: '1px solid #ddd', minHeight: '80vh' }}>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <ScanEye color={isHistorico ? theme.palette.warning.main : theme.palette.success.main} /> 
-                  {isHistorico ? 'Tabela Nutricional (Arquivo Morto)' : 'Rotulagem IN 75 (Ao Vivo)'}
-              </Typography>
-              {isHistorico && <Chip label="Visualização Apenas" color="default" size="small" />}
-            </Box>
-
-            {!tabela && !isHistorico && (
-                <Box sx={{ textAlign: 'center', py: 8, bgcolor: '#f9f9f9', border: '2px dashed #eee', borderRadius: 2 }}>
-                    <LoadingButton onClick={handleCalculate} loading={calculating} startIcon={<CalculateIcon />} variant="contained" size="large">
-                        Gerar Rótulo Nutricional
-                    </LoadingButton>
-                </Box>
-            )}
-
-            {tabela && (
-              <Box sx={{ mt: 3 }}>
-                <Paper variant="outlined" sx={{ p: 2, mb: 3, bgcolor: alpha(theme.palette.primary.main, 0.05), '@media print': { display: 'none' } }}>
-                  <Grid container spacing={3} alignItems="center">
-                    <Grid item xs={12} sm={4}>
-                      <FormControl size="small" fullWidth>
-                        <InputLabel>Formato da Tabela</InputLabel>
-                        <Select value={layoutTabela} label="Formato da Tabela" onChange={(e) => setLayoutTabela(e.target.value as TabelaLayout)}>
-                          <MenuItem value="VERTICAL">Vertical</MenuItem>
-                          <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
-                          <MenuItem value="LINEAR">Linear</MenuItem>
-                        </Select>
-                      </FormControl>
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                      <FormControl size="small" fullWidth>
-                        <InputLabel>Layout da Lupa</InputLabel>
-                        <Select value={lupaLayout} label="Layout da Lupa" onChange={(e) => setLupaLayout(e.target.value as LupaLayout)}>
-                          <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
-                          <MenuItem value="VERTICAL">Vertical</MenuItem>
-                        </Select>
-                      </FormControl>
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                        <Button fullWidth variant="contained" color="secondary" startIcon={<DownloadIcon />} onClick={handleDownloadJPEG}>
-                            Baixar JPG
-                        </Button>
-                    </Grid>
-                  </Grid>
-                </Paper>
-
-                <Box 
-                    sx={{ 
-                        bgcolor: 'background.paper', p: 4, border: '1px solid #ccc', borderRadius: 1, 
-                        display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        opacity: isHistorico ? 0.9 : 1,
-                        position: 'relative'
-                    }} 
-                    ref={tabelaRef}
-                >
-                  {isHistorico && (
-                      <Box sx={{ position: 'absolute', top: 10, right: 10, border: '2px solid red', color: 'red', p: 1, transform: 'rotate(15deg)', fontWeight: 'bold', fontSize: '1.2rem', opacity: 0.3 }}>
-                          CÓPIA CONTROLADA
+                    <Box 
+                        sx={{ 
+                            bgcolor: '#fff', p: 4, border: '1px solid #eee', borderRadius: 2, 
+                            display: 'flex', flexDirection: 'column', alignItems: 'center',
+                            opacity: isHistorico ? 0.9 : 1,
+                            position: 'relative',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+                        }} 
+                        ref={tabelaRef}
+                    >
+                      {isHistorico && (
+                          <Box sx={{ position: 'absolute', top: 20, right: 20, border: '2px solid red', color: 'red', p: 1, transform: 'rotate(15deg)', fontWeight: 'bold', fontSize: '1.5rem', opacity: 0.2, zIndex: 10 }}>
+                              CÓPIA CONTROLADA
+                          </Box>
+                      )}
+                      <Box sx={{ mb: 4, width: '100%', display: 'flex', justifyContent: 'center' }}>
+                          <LupaFrontalANVISA lupas={tabela.lupas} areaPainelCm2={receitaExibida.area_painel_principal_cm2} layout={lupaLayout} />
                       </Box>
-                  )}
-                  <Box sx={{ mb: 4, width: '100%', display: 'flex', justifyContent: 'center' }}>
-                      <LupaFrontalANVISA lupas={tabela.lupas} areaPainelCm2={receitaExibida.area_painel_principal_cm2} layout={lupaLayout} />
+                      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                        <NutritionalLabel tabela={tabela} modelo={layoutTabela} />
+                      </Box>
+                    </Box>
                   </Box>
-                  <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-                    <NutritionalLabel tabela={tabela} modelo={layoutTabela} />
-                  </Box>
-                </Box>
+                )}
               </Box>
             )}
-          </Paper>
-        </Grid>
-      </Grid>
+
+            {/* === ABA 1: GRÁFICOS === */}
+            {abaAtiva === 1 && (
+              <Box>
+                {!tabela ? (
+                    <Box sx={{ textAlign: 'center', py: 8, bgcolor: '#f9f9f9', border: '2px dashed #eee', borderRadius: 2 }}>
+                        <Typography variant="body1" color="text.secondary" gutterBottom>Gere o rótulo nutricional primeiro para visualizar os gráficos.</Typography>
+                        {!isHistorico && (
+                          <LoadingButton onClick={handleCalculate} loading={calculating} startIcon={<CalculateIcon />} variant="contained" size="large" sx={{ mt: 2 }}>
+                              Gerar Rótulo Nutricional
+                          </LoadingButton>
+                        )}
+                    </Box>
+                ) : (() => {
+                    const sourceData = abaSubGrafico === 0 ? tabela.por100g : tabela.porPorcao;
+                    const carbVal = parseFloat(sourceData?.carboidrato_g || '0');
+                    const protVal = parseFloat(sourceData?.proteina_g || '0');
+                    const lipVal = parseFloat(sourceData?.lipideos_g || '0');
+                    
+                    const macroData = [
+                      { name: 'Carboidratos', value: carbVal, color: '#4FC3F7' },
+                      { name: 'Proteínas', value: protVal, color: '#81C784' },
+                      { name: 'Lipídeos', value: lipVal, color: '#FFB74D' },
+                    ].filter(d => d.value > 0);
+
+                    const NUTRIENT_LABELS: Record<string, string> = {
+                      energia_kcal: 'Energia',
+                      carboidrato_g: 'Carboidratos',
+                      acucar_total_g: 'Açúcares Totais',
+                      acucar_adicionado_g: 'Açúc. Adicionados',
+                      proteina_g: 'Proteínas',
+                      lipideos_g: 'Gorduras Totais',
+                      gordura_saturada_g: 'Gord. Saturadas',
+                      gordura_trans_g: 'Gord. Trans',
+                      fibra_alimentar_g: 'Fibra Alimentar',
+                      sodio_mg: 'Sódio',
+                    };
+                    
+                    const vdSource = abaSubGrafico === 0 ? (tabela.percentualVD100g || {}) : (tabela.percentualVD || {});
+                    const vdData = Object.entries(vdSource)
+                      .filter(([key]) => NUTRIENT_LABELS[key])
+                      .map(([key, val]) => ({
+                        nutriente: NUTRIENT_LABELS[key] || key,
+                        vd: parseFloat(val || '0'),
+                      }))
+                      .filter(d => d.vd > 0)
+                      .sort((a, b) => b.vd - a.vd);
+
+                    return (
+                      <Stack spacing={4}>
+                        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                          <Tabs 
+                            value={abaSubGrafico} 
+                            onChange={(_, v) => setAbaSubGrafico(v)}
+                            indicatorColor="primary"
+                            textColor="primary"
+                            centered
+                          >
+                            <Tab label="Dados p/ 100g" />
+                            <Tab label={`Dados p/ Porção (${tabela.infoPorcao?.porcao_g_ml}${receitaExibida?.estado_alimento === 'liquido' ? 'ml' : 'g'})`} />
+                          </Tabs>
+                        </Box>
+
+                        {/* MACROS: TABELA + PIZZA */}
+                        <Typography variant="h6" fontWeight="bold" color="primary.main">
+                          Divisão de Macronutrientes ({abaSubGrafico === 0 ? '100g' : 'Porção'})
+                        </Typography>
+                        <Grid container spacing={3} alignItems="center">
+                          <Grid item xs={12} md={7}>
+                            <TableContainer component={Paper} variant="outlined">
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
+                                    <TableCell sx={{ fontWeight: 700 }}>Macro</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 700 }}>Gramas</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 700 }}>Kcal</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 700 }}>% Kcal</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 700 }}>%VD</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {(() => {
+                                    const totalKcal = carbVal * 4 + protVal * 4 + lipVal * 9;
+                                    const macroVdKeys: Record<string, string> = {
+                                      'Carboidratos': 'carboidrato_g',
+                                      'Proteínas': 'proteina_g',
+                                      'Lipídeos': 'lipideos_g',
+                                    };
+                                    return [
+                                      { nome: 'Carboidratos', g: carbVal, kcal: carbVal * 4, color: '#4FC3F7' },
+                                      { nome: 'Proteínas', g: protVal, kcal: protVal * 4, color: '#81C784' },
+                                      { nome: 'Lipídeos', g: lipVal, kcal: lipVal * 9, color: '#FFB74D' },
+                                    ].map(row => {
+                                      const vdKey = macroVdKeys[row.nome];
+                                      const vdVal = vdSource[vdKey];
+                                      return (
+                                        <TableRow key={row.nome}>
+                                          <TableCell>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                              <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: row.color }} />
+                                              {row.nome}
+                                            </Box>
+                                          </TableCell>
+                                          <TableCell align="right">{row.g.toFixed(1)}g</TableCell>
+                                          <TableCell align="right">{row.kcal.toFixed(0)}</TableCell>
+                                          <TableCell align="right">{totalKcal > 0 ? ((row.kcal / totalKcal) * 100).toFixed(0) : 0}%</TableCell>
+                                          <TableCell align="right">{vdVal ? `${vdVal}%` : '-'}</TableCell>
+                                        </TableRow>
+                                      );
+                                    });
+                                  })()}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          </Grid>
+                          <Grid item xs={12} md={5}>
+                            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                              <ResponsiveContainer width="100%" height={260}>
+                                <PieChart title="Macros">
+                                  <Pie data={macroData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value" label={({ percent }: any) => percent ? `${(percent * 100).toFixed(0)}%` : ''} labelLine={false}>
+                                    {macroData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                                  </Pie>
+                                  <RechartsTooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(1)}g` : value} />
+                                  <Legend verticalAlign="bottom" height={36}/>
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </Box>
+                          </Grid>
+                        </Grid>
+
+                        <Divider />
+
+                        {/* BARRAS: %VD */}
+                        <Typography variant="h6" fontWeight="bold" color="primary.main">Nutrientes vs. Valor Diário (%VD)</Typography>
+                        {vdData.length > 0 ? (
+                          <ResponsiveContainer width="100%" height={Math.max(300, vdData.length * 45)}>
+                            <BarChart data={vdData} layout="vertical" margin={{ left: 20, right: 30, top: 5, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                              <XAxis type="number" domain={[0, (max: number) => Math.max(max + 10, 100)]} tickFormatter={(v) => `${v}%`} />
+                              <YAxis type="category" dataKey="nutriente" width={130} tick={{ fontSize: 12 }} />
+                              <RechartsTooltip formatter={(value: any) => typeof value === 'number' ? `${value.toFixed(1)}%` : value} />
+                              <Bar dataKey="vd" name="% VD" radius={[0, 6, 6, 0]} barSize={20}>
+                                {vdData.map((entry, i) => (
+                                  <Cell key={i} fill={entry.vd > 100 ? '#EF5350' : entry.vd > 50 ? '#FFA726' : '#66BB6A'} />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">Nenhum dado de %VD disponível.</Typography>
+                        )}
+                      </Stack>
+                    );
+                })()}
+
+                {/* === CLASSIFICAÇÃO NOVA === */}
+                {composicaoDisplay.length > 0 && (() => {
+                  const NOVA_LABELS: Record<number, string> = {
+                    1: 'In Natura / Min. Processado',
+                    2: 'Ingred. Culinário Processado',
+                    3: 'Alimento Processado',
+                    4: 'Ultraprocessado',
+                  };
+                  const NOVA_COLORS: Record<number, string> = {
+                    1: '#4CAF50',
+                    2: '#2196F3',
+                    3: '#FF9800',
+                    4: '#F44336',
+                  };
+
+                  const pesoTotal = composicaoDisplay.reduce((s, i) => s + (i.peso_liquido_g || 0), 0);
+                  const grupoMap: Record<number, number> = {};
+                  let pesoNaoClassificado = 0;
+
+                  composicaoDisplay.forEach(item => {
+                    const g = item.classificacao_nova;
+                    if (g && g >= 1 && g <= 4) {
+                      grupoMap[g] = (grupoMap[g] || 0) + (item.peso_liquido_g || 0);
+                    } else {
+                      pesoNaoClassificado += (item.peso_liquido_g || 0);
+                    }
+                  });
+
+                  const novaData = Object.entries(grupoMap).map(([g, peso]) => ({
+                    name: NOVA_LABELS[Number(g)],
+                    value: peso,
+                    pct: pesoTotal > 0 ? (peso / pesoTotal) * 100 : 0,
+                    color: NOVA_COLORS[Number(g)],
+                    grupo: Number(g),
+                  })).sort((a, b) => a.grupo - b.grupo);
+
+                  if (pesoNaoClassificado > 0) {
+                    novaData.push({
+                      name: 'Não classificado',
+                      value: pesoNaoClassificado,
+                      pct: pesoTotal > 0 ? (pesoNaoClassificado / pesoTotal) * 100 : 0,
+                      color: '#BDBDBD',
+                      grupo: 0,
+                    });
+                  }
+
+                  const pctUltra = grupoMap[4] ? ((grupoMap[4] / pesoTotal) * 100) : 0;
+
+                  return (
+                    <Box sx={{ mt: 4 }}>
+                      <Divider sx={{ mb: 4 }} />
+                      <Typography variant="h6" fontWeight="bold" color="primary.main" sx={{ mb: 2 }}>
+                        Classificação NOVA (Grau de Processamento)
+                      </Typography>
+
+                      {pctUltra > 0 && (
+                        <Alert severity="warning" sx={{ mb: 3 }} icon={<AlertTriangle size={20} />}>
+                          <strong>{pctUltra.toFixed(1)}%</strong> do peso desta receita é composto por ingredientes <strong>ultraprocessados</strong> (Grupo 4 NOVA).
+                        </Alert>
+                      )}
+
+                      {novaData.length === 0 ? (
+                        <Alert severity="info">Nenhum ingrediente desta receita possui classificação NOVA cadastrada.</Alert>
+                      ) : (
+                        <Grid container spacing={3} alignItems="center">
+                          <Grid item xs={12} md={5}>
+                            <ResponsiveContainer width="100%" height={280}>
+                              <PieChart>
+                                <Pie
+                                  data={novaData}
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={55}
+                                  outerRadius={90}
+                                  paddingAngle={3}
+                                  dataKey="value"
+                                  label={({ pct }: any) => pct > 0 ? `${pct.toFixed(0)}%` : ''}
+                                  labelLine={false}
+                                >
+                                  {novaData.map((entry, i) => (
+                                    <Cell key={i} fill={entry.color} stroke={entry.grupo === 4 ? '#B71C1C' : undefined} strokeWidth={entry.grupo === 4 ? 2 : 0} />
+                                  ))}
+                                </Pie>
+                                <RechartsTooltip formatter={(value: any, name: any) => [`${typeof value === 'number' ? value.toFixed(1) : value}g`, name]} />
+                                <Legend verticalAlign="bottom" height={50} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </Grid>
+                          <Grid item xs={12} md={7}>
+                            <TableContainer component={Paper} variant="outlined">
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
+                                    <TableCell sx={{ fontWeight: 700 }}>Grupo NOVA</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 700 }}>Peso (g)</TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: 700 }}>% Receita</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {novaData.map(row => (
+                                    <TableRow key={row.grupo} sx={row.grupo === 4 ? { bgcolor: alpha('#F44336', 0.05) } : {}}>
+                                      <TableCell>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                          <Box sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: row.color, flexShrink: 0 }} />
+                                          <Typography variant="body2" fontWeight={row.grupo === 4 ? 700 : 400}>
+                                            {row.grupo > 0 ? `G${row.grupo}` : ''} {row.name}
+                                          </Typography>
+                                        </Box>
+                                      </TableCell>
+                                      <TableCell align="right">{row.value.toFixed(1)}g</TableCell>
+                                      <TableCell align="right">
+                                        <Typography fontWeight={row.grupo === 4 ? 800 : 400} color={row.grupo === 4 ? 'error.main' : 'text.primary'}>
+                                          {row.pct.toFixed(1)}%
+                                        </Typography>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          </Grid>
+                        </Grid>
+                      )}
+                    </Box>
+                  );
+                })()}
+              </Box>
+            )}
+
+            </Box>
+        </Paper>
+      </Stack>
 
       <Dialog open={modalAprovacaoOpen} onClose={() => setModalAprovacaoOpen(false)}>
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

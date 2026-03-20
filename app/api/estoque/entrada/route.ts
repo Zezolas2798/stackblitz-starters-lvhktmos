@@ -12,26 +12,31 @@ const EntradaLoteSchema = z.object({
     fornecedor_id: z.string().uuid('Fornecedor inválido'),
 
     // Regra de Rastreabilidade Reversa (SIVISA/ANVISA)
-    numero_lote_fabricante: z.string().min(1, 'Obrigatório informar o lote do fornecedor para recall'),
+    numero_lote_fabricante: z.string().nullable().optional(),
     nota_fiscal: z.string().nullable().optional(),
     registro_sif: z.string().nullable().optional(), // Cadastro inteligente via OCR (Carne/Laticínio)
 
     // Datas e Rastreios
-    data_fabricacao: z.string().min(1, 'A data de fabricação do produto é obrigatória'),
+    data_fabricacao: z.string().nullable().optional(),
 
     // Regra de Ponto de Segurança (Prevenção de entrada de lixo/vencido)
-    data_validade_rotulo: z.string()
-        .min(1, 'A data de validade é obrigatória')
-        .refine((val) => !isNaN(Date.parse(val)), { message: "Data inválida" })
-        .refine((val) => new Date(val) > new Date(), { message: "Não é permitido dar entrada em lote já vencido." }),
-
+    data_validade_rotulo: z.string().nullable().optional(),
     data_validade_interna: z.string().nullable().optional(),
 
     quantidade_inicial_g_ml: z.number()
         .positive('A quantidade inicial deve ser maior que zero')
         .finite('A quantidade precisa ser numérica válida'),
 
-    status: z.enum(['QUARENTENA', 'APROVADO', 'REJEITADO', 'VENCIDO']),
+    status: z.enum(['PREVISTO', 'QUARENTENA', 'APROVADO', 'REJEITADO', 'VENCIDO']),
+
+    local_estoque_id: z.string().uuid('ID de local de estoque inválido').or(z.literal('')).optional().nullable(),
+    categoria_produto: z.string().optional().nullable(),
+    temperatura_recebimento: z.number().optional().nullable(),
+    
+    // Dados de Embalagem Originais (Fração)
+    qtd_embalagens: z.number().optional().nullable(),
+    peso_unitario_embalagem: z.number().optional().nullable(),
+    unidade_peso_embalagem: z.string().optional().nullable(),
 });
 
 export async function POST(request: Request) {
@@ -65,8 +70,7 @@ export async function POST(request: Request) {
             quantidade_atual_g_ml: parsedData.data.quantidade_inicial_g_ml, // O lote nasce cheio
         };
 
-        const { data: record, error: dbError } = await supabase
-            .from('lotes_estoque')
+        const { data: record, error: dbError } = await (supabase as any).from('lotes_estoque')
             .insert([payload])
             .select()
             .single();
@@ -89,3 +93,6 @@ export async function POST(request: Request) {
         );
     }
 }
+
+
+

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Dialog, DialogTitle, DialogContent, DialogActions, Button, 
   TextField, MenuItem, Stack, FormControlLabel, Switch, 
@@ -46,30 +46,21 @@ export function TarefaDialog({ open, onClose, onSuccess, initialStatus = 'A_FAZE
 
   const [subtarefas, setSubtarefas] = useState<SubtarefaItem[]>([]);
 
-  // Carregar Dados Iniciais (Modelos e Equipe)
-  useEffect(() => {
-    if (open && activeClientId) {
-      fetchDadosIniciais();
-    }
-  }, [open, activeClientId]);
-
-  async function fetchDadosIniciais() {
+  const fetchDadosIniciais = useCallback(async () => {
     setLoadingModelos(true);
     try {
       // 1. Buscar Modelos
-      const { data: dataModelos } = await supabase
-        .from('config_modelos_demandas')
+      const { data: dataModelos } = await (supabase as any).from('config_modelos_demandas')
         .select('*, config_modelo_subtarefas(*)')
-        .eq('cliente_id', activeClientId);
+        .eq('cliente_id', activeClientId!);
       
       if (dataModelos) setModelos(dataModelos);
 
       // 2. Buscar Equipe (Usuários vinculados ao Cliente/Empresa)
       // Nota: Ajuste 'company_id' se sua tabela profiles usar outro nome de coluna para o cliente
-      const { data: dataEquipe } = await supabase
-        .from('profiles') 
+      const { data: dataEquipe } = await (supabase as any).from('profiles') 
         .select('id, full_name, email')
-        .eq('company_id', activeClientId);
+        .eq('company_id', activeClientId!);
 
       if (dataEquipe) setEquipe(dataEquipe);
 
@@ -78,7 +69,14 @@ export function TarefaDialog({ open, onClose, onSuccess, initialStatus = 'A_FAZE
     } finally {
       setLoadingModelos(false);
     }
-  }
+  }, [activeClientId]);
+
+  // Carregar Dados Iniciais (Modelos e Equipe)
+  useEffect(() => {
+    if (open && activeClientId) {
+      fetchDadosIniciais();
+    }
+  }, [open, activeClientId, fetchDadosIniciais]);
 
   const aplicarModelo = (modeloId: string) => {
     const mod = modelos.find(m => m.id === modeloId);
@@ -108,8 +106,7 @@ export function TarefaDialog({ open, onClose, onSuccess, initialStatus = 'A_FAZE
     setLoading(true);
 
     try {
-      const { data: tarefaCriada, error: erroTarefa } = await supabase
-        .from('operacao_tarefas')
+      const { data: tarefaCriada, error: erroTarefa } = await (supabase as any).from('operacao_tarefas')
         .insert([{
           ...formData,
           cliente_id: activeClientId,
@@ -132,7 +129,7 @@ export function TarefaDialog({ open, onClose, onSuccess, initialStatus = 'A_FAZE
             ordem: index
           }));
 
-        await supabase.from('operacao_subtarefas').insert(itens);
+        await (supabase as any).from('operacao_subtarefas').insert(itens);
       }
 
       onSuccess();
@@ -304,3 +301,5 @@ export function TarefaDialog({ open, onClose, onSuccess, initialStatus = 'A_FAZE
     </Dialog>
   );
 }
+
+

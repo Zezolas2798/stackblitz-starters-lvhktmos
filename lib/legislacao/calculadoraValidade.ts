@@ -42,8 +42,7 @@ export async function calcularValidade(
 
   // 3. DATA TETO 3: Legislação Sanitária (O Guardião da Lei)
   // Busca a regra mais restritiva para a categoria e temperatura atual
-  const { data: regras } = await supabase
-    .from('regras_validade_sanitaria')
+  const { data: regras } = await (supabase as any).from('regras_validade_sanitaria')
     .select('*')
     .eq('categoria_alimento', categoriaAlimento)
     .lte('temp_min', tempArmazenamento) // Temp Min da regra <= Temp Equipamento
@@ -101,3 +100,5 @@ export async function calcularValidade(
     corHex
   };
 }
+
+

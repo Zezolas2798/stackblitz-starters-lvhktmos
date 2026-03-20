@@ -53,22 +53,20 @@ function NovoModeloContent() {
     }
   }, [activeClientId, editingId]);
 
-  async function loadEquipe() {
-    // Busca perfis vinculados à empresa (ajuste conforme sua tabela de perfis/membros)
-    const { data } = await supabase
-      .from('profiles') // ou a tabela correta de usuários da sua empresa
+  const loadEquipe = React.useCallback(async () => {
+    // Busca perfis vinculados à empresa
+    const { data } = await (supabase as any).from('profiles')
       .select('id, full_name')
-      .eq('company_id', activeClientId); // ou a lógica que você usa para filtrar por empresa
+      .eq('company_id', activeClientId as string);
     
     if (data) setEquipe(data);
-  }
+  }, [activeClientId]);
 
-  async function loadModeloParaEditar(id: string) {
+  const loadModeloParaEditar = React.useCallback(async (id: string) => {
     setLoading(true);
     try {
       // 1. Busca Modelo
-      const { data: modelo, error } = await supabase
-        .from('operacao_tarefa_modelos') // Certifique-se que esta tabela existe
+      const { data: modelo, error } = await (supabase as any).from('config_modelos_demandas')
         .select('*')
         .eq('id', id)
         .single();
@@ -76,10 +74,10 @@ function NovoModeloContent() {
       if (error) throw error;
       if (modelo) {
         setFormData({
-          titulo: modelo.titulo,
-          descricao: modelo.descricao || '',
-          tipo: modelo.tipo,
-          prioridade: modelo.prioridade,
+          titulo: modelo.titulo_padrao,
+          descricao: modelo.descricao_padrao || '',
+          tipo: (modelo.tipo_padrao as TarefaTipo) || 'ROTINA',
+          prioridade: (modelo.prioridade_padrao as TarefaPrioridade) || 'MEDIA',
           frequencia: modelo.frequencia || 'EVENTUAL',
           requer_foto: modelo.requer_evidencia_foto || false,
           responsavel_id: modelo.responsavel_padrao_id || ''
@@ -87,14 +85,13 @@ function NovoModeloContent() {
       }
 
       // 2. Busca Subtarefas do Modelo
-      const { data: subs } = await supabase
-        .from('operacao_modelo_subtarefas') // Certifique-se que esta tabela existe
+      const { data: subs } = await (supabase as any).from('config_modelo_subtarefas')
         .select('*')
         .eq('modelo_id', id)
         .order('ordem');
       
       if (subs) {
-        setSubtarefas(subs.map(s => ({ titulo: s.titulo, concluida: false, ordem: s.ordem })));
+        setSubtarefas(subs.map((s: any) => ({ titulo: s.titulo, concluida: false, ordem: s.ordem ?? 0 })));
       }
 
     } catch (err: any) {
@@ -103,7 +100,7 @@ function NovoModeloContent() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   // Handlers
   const handleChecklistChange = (novosItens: any[]) => {
@@ -121,10 +118,10 @@ function NovoModeloContent() {
       // 1. Salvar/Atualizar Modelo Pai
       const payload = {
         cliente_id: activeClientId,
-        titulo: formData.titulo,
-        descricao: formData.descricao,
-        tipo: formData.tipo,
-        prioridade: formData.prioridade,
+        titulo_padrao: formData.titulo,
+        descricao_padrao: formData.descricao,
+        tipo_padrao: formData.tipo,
+        prioridade_padrao: formData.prioridade,
         frequencia: formData.frequencia,
         requer_evidencia_foto: formData.requer_foto,
         responsavel_padrao_id: formData.responsavel_id || null
@@ -133,14 +130,12 @@ function NovoModeloContent() {
       let modeloId = editingId;
 
       if (editingId) {
-        const { error } = await supabase
-          .from('operacao_tarefa_modelos')
+        const { error } = await (supabase as any).from('config_modelos_demandas')
           .update(payload)
           .eq('id', editingId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase
-          .from('operacao_tarefa_modelos')
+        const { data, error } = await (supabase as any).from('config_modelos_demandas')
           .insert(payload)
           .select()
           .single();
@@ -152,17 +147,17 @@ function NovoModeloContent() {
       if (modeloId) {
         // Limpa anteriores
         if (editingId) {
-          await supabase.from('operacao_modelo_subtarefas').delete().eq('modelo_id', modeloId);
+          await (supabase as any).from('config_modelo_subtarefas').delete().eq('modelo_id', modeloId);
         }
 
         // Insere novas
         if (subtarefas.length > 0) {
           const subsPayload = subtarefas.map((s, idx) => ({
-             modelo_id: modeloId,
+             modelo_id: modeloId!, // Adicionado campo obrigatório modelo_id
              titulo: s.titulo,
              ordem: idx
           }));
-          const { error: subError } = await supabase.from('operacao_modelo_subtarefas').insert(subsPayload);
+          const { error: subError } = await (supabase as any).from('config_modelo_subtarefas').insert(subsPayload);
           if (subError) throw subError;
         }
       }
@@ -362,3 +357,6 @@ export default function NovoModeloPage() {
     </Suspense>
   );
 }
+
+
+

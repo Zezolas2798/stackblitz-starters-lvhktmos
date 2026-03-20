@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useClient } from '@/lib/ClientContext';
 import { supabase } from '@/lib/supabaseClient';
@@ -34,46 +34,51 @@ import {
   Science,
   Restaurant
 } from '@mui/icons-material';
+import { Package } from 'lucide-react';
+
+import GerenciarGruposDialog from '@/components/GerenciarGruposDialog';
 
 export default function IngredientesPage() {
   const { unidadeSelecionada, loading: loadingContext } = useClient();
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [mostrarIncompletos, setMostrarIncompletos] = useState(false);
+  const [openGerenciarGrupos, setOpenGerenciarGrupos] = useState(false);
 
-  // 1. Busca ingredientes sempre que a Unidade mudar
-  useEffect(() => {
-    if (unidadeSelecionada?.cliente_id) {
-      fetchIngredientes();
-    }
-  }, [unidadeSelecionada]);
 
-  const fetchIngredientes = async () => {
+  const fetchIngredientes = useCallback(async () => {
     try {
       setLoadingData(true);
 
       // REGRA DE OURO GxP:
       // Busca ingredientes do Cliente Atual OU Ingredientes do Sistema (cliente_id IS NULL)
       // Isso isola os dados para que um cliente não veja os dados do outro.
-      const { data, error } = await supabase
-        .from('ingredientes')
+      const { data, error } = await (supabase as any).from('ingredientes')
         .select('*')
         .or(`cliente_id.eq.${unidadeSelecionada!.cliente_id},cliente_id.is.null`)
         .order('nome');
 
       if (error) throw error;
-      setIngredientes(data || []);
+      setIngredientes((data || []) as unknown as Ingrediente[]);
     } catch (error) {
       console.error('Erro ao buscar ingredientes:', error);
     } finally {
       setLoadingData(false);
     }
-  };
+  }, [unidadeSelecionada]);
+
+  // 1. Busca ingredientes sempre que a Unidade mudar
+  useEffect(() => {
+    if (unidadeSelecionada?.cliente_id) {
+      fetchIngredientes();
+    }
+  }, [unidadeSelecionada, fetchIngredientes]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este ingrediente?')) return;
     try {
-      const { error } = await supabase.from('ingredientes').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+      const { error } = await (supabase as any).from('ingredientes').update({ deleted_at: new Date().toISOString() } as any).eq('id', id);
       if (error) throw error;
       fetchIngredientes(); // Atualiza a lista
     } catch (error: any) {
@@ -82,9 +87,16 @@ export default function IngredientesPage() {
   };
 
   // Filtragem local (Busca rápida no Frontend)
-  const filteredIngredientes = ingredientes.filter(ing =>
-    ing.nome.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredIngredientes = ingredientes.filter(ing => {
+    const matchesSearch = ing.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           (ing.fonte && ing.fonte.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const isIncompleto = ing.energia_kcal === null || ing.energia_kcal === undefined;
+
+    if (mostrarIncompletos && !isIncompleto) return false;
+
+    return matchesSearch;
+  });
 
   // Estados de Interface
   if (loadingContext) {
@@ -117,11 +129,20 @@ export default function IngredientesPage() {
             Gestão técnica para: <strong>{unidadeSelecionada.cliente?.nome_fantasia}</strong>
           </Typography>
         </Box>
-        <Link href="/ingredientes/novo" passHref>
-          <Button variant="contained" startIcon={<Add />} size="large">
-            Novo Ingrediente
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button 
+            variant="outlined" 
+            startIcon={<Package />} 
+            onClick={() => setOpenGerenciarGrupos(true)}
+          >
+            Gerenciar Grupos
           </Button>
-        </Link>
+          <Link href="/ingredientes/novo" passHref>
+            <Button variant="contained" startIcon={<Add />} size="medium">
+              Novo Ingrediente
+            </Button>
+          </Link>
+        </Box>
       </Box>
 
       {/* Barra de Busca e Filtros */}
@@ -140,8 +161,13 @@ export default function IngredientesPage() {
           }}
           size="small"
         />
-        <Button variant="outlined" startIcon={<FilterList />} sx={{ whiteSpace: 'nowrap' }}>
-          Filtros Avançados
+        <Button 
+           variant={mostrarIncompletos ? "contained" : "outlined"} 
+           color={mostrarIncompletos ? "warning" : "inherit"}
+           onClick={() => setMostrarIncompletos(!mostrarIncompletos)} 
+           sx={{ whiteSpace: 'nowrap' }}
+        >
+          {mostrarIncompletos ? "Mostrando Incompletos" : "Mostrar Incompletos"}
         </Button>
       </Paper>
 
@@ -174,76 +200,100 @@ export default function IngredientesPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredIngredientes.map((ing) => (
-                <TableRow key={ing.id} hover>
-                  <TableCell component="th" scope="row">
-                    <Typography variant="body2" fontWeight="medium">
-                      {ing.nome}
-                    </Typography>
-                    {ing.declaracao_ingredientes_fornecedor && (
-                      <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ maxWidth: 300 }}>
-                        Lista: {ing.declaracao_ingredientes_fornecedor.substring(0, 50)}...
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={ing.tipo_ingrediente || 'SIMPLES'}
-                      size="small"
-                      color={ing.tipo_ingrediente === 'COMPOSTO' ? 'info' : 'default'}
-                      variant="outlined"
-                      sx={{ fontSize: '0.7rem' }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {ing.cliente_id ? (
+              filteredIngredientes.map((ing) => {
+                const isIncompleto = ing.energia_kcal === null || ing.energia_kcal === undefined;
+
+                return (
+                  <TableRow key={ing.id} hover>
+                    <TableCell component="th" scope="row">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2" fontWeight="medium">
+                          {ing.nome}
+                        </Typography>
+                        {isIncompleto && (
+                          <Tooltip title="Faltam dados nutricionais. Clique em Editar para preencher.">
+                            <Chip label="Cadastro Incompleto" color="warning" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                          </Tooltip>
+                        )}
+                      </Box>
+                      {ing.declaracao_ingredientes_fornecedor && (
+                        <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ maxWidth: 300 }}>
+                          Lista: {ing.declaracao_ingredientes_fornecedor.substring(0, 50)}...
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Chip
-                        icon={<Restaurant style={{ fontSize: 14 }} />}
-                        label="Próprio"
+                        label={ing.tipo_ingrediente || 'SIMPLES'}
                         size="small"
-                        color="primary"
-                        sx={{ height: 24 }}
+                        color={ing.tipo_ingrediente === 'COMPOSTO' ? 'info' : 'default'}
+                        variant="outlined"
+                        sx={{ fontSize: '0.7rem' }}
                       />
-                    ) : (
-                      <Chip
-                        label="Sistema (TACO)"
-                        size="small"
-                        sx={{ bgcolor: 'grey.200', color: 'text.secondary' }}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    {ing.energia_kcal !== null ? ing.energia_kcal?.toFixed(0) : '-'}
-                  </TableCell>
-                  <TableCell align="center">
-                    {ing.alergenicos_ids && ing.alergenicos_ids.length > 0 ? (
-                      <Tooltip title="Contém Alergênicos">
-                        <Chip label="ALERTA" color="error" size="small" sx={{ fontWeight: 'bold', height: 20 }} />
+                    </TableCell>
+                    <TableCell>
+                      {ing.cliente_id ? (
+                        <Chip
+                          icon={<Restaurant style={{ fontSize: 14 }} />}
+                          label="Próprio"
+                          size="small"
+                          color="primary"
+                          sx={{ height: 24 }}
+                        />
+                      ) : (
+                        <Chip
+                          label="Sistema (TACO)"
+                          size="small"
+                          sx={{ bgcolor: 'grey.200', color: 'text.secondary' }}
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell align="right">
+                      {ing.energia_kcal !== null ? ing.energia_kcal?.toFixed(0) : '-'}
+                    </TableCell>
+                    <TableCell align="center">
+                      {ing.alergenicos_ids && ing.alergenicos_ids.length > 0 ? (
+                        <Tooltip title="Contém Alergênicos">
+                          <Chip label="ALERTA" color="error" size="small" sx={{ fontWeight: 'bold', height: 20 }} />
+                        </Tooltip>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">-</Typography>
+                      )}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="Editar">
+                        <Link href={`/ingredientes/${ing.id}/editar`} passHref>
+                          <IconButton size="small" color="primary" component="a">
+                            <Edit fontSize="small" />
+                          </IconButton>
+                        </Link>
                       </Tooltip>
-                    ) : (
-                      <Typography variant="caption" color="text.secondary">-</Typography>
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="Editar">
-                      <IconButton size="small" color="primary">
-                        <Edit fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    {ing.cliente_id && (
-                      <Tooltip title="Excluir">
-                        <IconButton size="small" color="error" onClick={() => handleDelete(ing.id)}>
-                          <Delete fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
+                      {ing.cliente_id && (
+                        <Tooltip title="Excluir">
+                          <IconButton size="small" color="error" onClick={() => handleDelete(ing.id)}>
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Modal de Gerenciamento de Grupos */}
+      {unidadeSelecionada?.cliente_id && (
+        <GerenciarGruposDialog
+          open={openGerenciarGrupos}
+          onClose={() => setOpenGerenciarGrupos(false)}
+          clienteId={unidadeSelecionada.cliente_id}
+        />
+      )}
     </Box>
   );
 }
+
+

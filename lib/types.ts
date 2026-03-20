@@ -13,8 +13,8 @@ export interface Cliente {
   razao_social: string;
   nome_fantasia: string | null;
   cnpj_raiz: string;
-  ativo: boolean;
-  created_at?: string;
+  ativo: boolean | null;
+  created_at?: string | null;
 }
 
 export interface ClienteUnidade {
@@ -138,6 +138,7 @@ export interface Ingrediente {
   vitamina_b7_mcg: number | null;
   vitamina_b9_mcg: number | null;
   vitamina_b12_mcg: number | null;
+  categoria_produto_id: string | null;
 
   calcio_mg: number | null;
   cloreto_mg: number | null;
@@ -153,6 +154,14 @@ export interface Ingrediente {
   potassio_mg: number | null;
   selenio_mcg: number | null;
   zinco_mg: number | null;
+
+  classificacao_nova: number | null; // NOVA: 1=In Natura, 2=Culinário, 3=Processado, 4=Ultraprocessado
+
+  grupo_estoque_id?: string | null;
+  grupo_estoque?: {
+    id: string;
+    nome: string;
+  } | null;
 
   created_at?: string;
 }
@@ -214,7 +223,7 @@ export interface Receita {
   medida_caseira_nome: string | null; 
   medida_caseira_quantidade?: number | null;
   medida_caseira_peso_g: number | null; 
-
+  
   anvisa_categoria_id: number | null;
   grupo_populacional_id: string | null;
   instrucoes_preparo_tabela: PreparoProntoConsumo | null;
@@ -295,6 +304,8 @@ export interface ResultadoCalculo {
   por100g: NutrientesFormatados;
   porPorcao: NutrientesFormatados;
   percentualVD: PercentuaisVD;
+  percentualVD100g?: PercentuaisVD;
+  porcaoContexto?: string;
   lupas: LupasFrontais;
   nutrientesCondicionais: string[];
   declaracoes: DeclaracoesObrigatorias; 
@@ -375,10 +386,11 @@ export interface ChecklistModelo {
   cliente_id: string;
   titulo: string;
   descricao?: string | null;
-  frequencia_sugerida?: string;
-  versao: number;
-  ativo: boolean;
-  created_at?: string;
+  frequencia_sugerida?: string | null;
+  versao: number | null;
+  ativo: boolean | null;
+  created_at?: string | null;
+  created_by?: string | null;
 }
 
 export interface ChecklistItem {
@@ -417,3 +429,43 @@ export interface AcaoCorretiva {
   responsavel_resolucao?: string;
   created_at: string;
 }
+
+// ==============================================================================
+// 7. TIPOS AUXILIARES & ENUMS
+// ==============================================================================
+
+export type TarefaStatus = 'A_FAZER' | 'EM_ANDAMENTO' | 'REVISAO' | 'CONCLUIDA' | 'CANCELADA';
+export type TarefaTipo = 'ROTINA' | 'CHECKLIST' | 'POP' | 'AVULSA' | 'LIMPEZA' | 'PRODUCAO';
+export type TarefaPrioridade = 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
+
+export interface OperacaoTarefa {
+  id: string;
+  cliente_id: string;
+  titulo: string;
+  descricao: string | null;
+  status: TarefaStatus;
+  tipo: TarefaTipo;
+  prioridade: TarefaPrioridade;
+  vencimento: string | null;
+  prazo_limite: string | null;
+  requer_evidencia_foto: boolean;
+  responsavel_id: string | null;
+  created_at: string;
+  responsavel?: {
+    full_name: string | null;
+    email: string | null;
+  };
+  subtarefas?: any[];
+}
+
+export interface Role {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  is_system_role: boolean | null;
+  ativo?: boolean | null;
+  cliente_id?: string | null;
+  created_at?: string | null;
+}
+
+

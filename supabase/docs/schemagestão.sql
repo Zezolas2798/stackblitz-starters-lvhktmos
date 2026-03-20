@@ -1,4 +1,4 @@
--- WARNING: This schema is for context only and is not meant to be run.
+﻿-- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
 CREATE TABLE public.acoes_corretivas (
@@ -759,21 +759,21 @@ CREATE TABLE public.user_units (
   CONSTRAINT user_units_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.units(id)
 );
 
--- ADICIONADO PELA FASE 2: WMS, ESTOQUE E CH�O DE F�BRICA
+-- ADICIONADO PELA FASE 2: WMS, ESTOQUE E CHÃO DE FÁBRICA
 
 
 -- ==========================================
--- FASE 2: WMS, ESTOQUE E CHÃO DE FÁBRICA
+-- FASE 2: WMS, ESTOQUE E CHÃƒO DE FÃBRICA
 -- Sistema: NutriDev Manager GxP
 -- Objetivo: Conformidade RDC 216 e RDC 429
 -- ==========================================
 
--- 1. Criação de Enums de Status
-CREATE TYPE status_lote_estoque AS ENUM ('QUARENTENA', 'APROVADO', 'REJEITADO', 'VENCIDO');
+-- 1. CriaÃ§Ã£o de Enums de Status
+CREATE TYPE status_lote_estoque AS ENUM ('PREVISTO', 'QUARENTENA', 'APROVADO', 'REJEITADO', 'VENCIDO');
 CREATE TYPE status_ordem_producao AS ENUM ('PENDENTE', 'EM_PREPARO', 'FINALIZADA', 'CANCELADA');
 
 -- ==========================================
--- MÓDULO 2: WMS E ESTOQUE
+-- MÃ“DULO 2: WMS E ESTOQUE
 -- ==========================================
 
 -- Tabela: Fornecedores
@@ -802,14 +802,22 @@ CREATE TABLE IF NOT EXISTS public.lotes_estoque (
     quantidade_inicial_g_ml NUMERIC NOT NULL CHECK (quantidade_inicial_g_ml > 0),
     quantidade_atual_g_ml NUMERIC NOT NULL CHECK (quantidade_atual_g_ml >= 0),
     status status_lote_estoque DEFAULT 'QUARENTENA',
+    
+    -- Colunas WMS (Fase 2+)
+    local_estoque_id UUID REFERENCES public.cliente_locais_estoque(id),
+    categoria_produto TEXT,
+    registro_sif TEXT,
+    temperatura_recebimento NUMERIC,
+    deleted_at TIMESTAMPTZ,
+
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ==========================================
--- MÓDULO 3: PRODUÇÃO / CHÃO DE FÁBRICA
+-- MÃ“DULO 3: PRODUÃ‡ÃƒO / CHÃƒO DE FÃBRICA
 -- ==========================================
 
--- Tabela: Ordens de Produção (OP)
+-- Tabela: Ordens de ProduÃ§Ã£o (OP)
 CREATE TABLE IF NOT EXISTS public.ordens_producao (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     unidade_id UUID NOT NULL REFERENCES public.cliente_unidades(id) ON DELETE CASCADE,
@@ -824,7 +832,7 @@ CREATE TABLE IF NOT EXISTS public.ordens_producao (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Tabela: Apontamentos de Produção (Baixa de Múltiplos Lotes)
+-- Tabela: Apontamentos de ProduÃ§Ã£o (Baixa de MÃºltiplos Lotes)
 CREATE TABLE IF NOT EXISTS public.apontamentos_producao (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ordem_producao_id UUID NOT NULL REFERENCES public.ordens_producao(id) ON DELETE CASCADE,
@@ -840,7 +848,7 @@ CREATE TABLE IF NOT EXISTS public.lotes_internos (
     ordem_producao_id UUID NOT NULL UNIQUE REFERENCES public.ordens_producao(id) ON DELETE RESTRICT,
     codigo_lote_interno TEXT UNIQUE NOT NULL,
     data_fabricacao TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    data_validade TIMESTAMPTZ NOT NULL, -- O menor vencimento entre os insumos ou regra própria
+    data_validade TIMESTAMPTZ NOT NULL, -- O menor vencimento entre os insumos ou regra prÃ³pria
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -870,13 +878,13 @@ CREATE POLICY "Estoque Isolado por Unidade" ON public.lotes_estoque
         SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
     ));
 
-CREATE POLICY "Produção Isolada por Unidade" ON public.ordens_producao
+CREATE POLICY "ProduÃ§Ã£o Isolada por Unidade" ON public.ordens_producao
     FOR ALL
     USING (unidade_id IN (
         SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
     ));
 
-CREATE POLICY "Apontamentos da Produção Local" ON public.apontamentos_producao
+CREATE POLICY "Apontamentos da ProduÃ§Ã£o Local" ON public.apontamentos_producao
     FOR ALL
     USING (ordem_producao_id IN (
         SELECT id FROM public.ordens_producao WHERE unidade_id IN (
