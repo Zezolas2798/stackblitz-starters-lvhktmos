@@ -309,13 +309,10 @@ async function loadDespesasData(
         break;
       case 'CMV_ALIMENTOS':
       case 'CMV_BEBIDAS':
-        // CMV vem do cálculo de vendas, não das despesas diretas
-        // Mas se houver CMV registrado pelo trigger de compra, contabilizar
-        if (origemModulo === 'ESTOQUE') {
-          // Já contabilizado pelo CMV de vendas, skip to avoid double counting
-          break;
-        }
-        outrasDespesas += valor;
+        // No USAR, o CMV é tratado separadamente das despesas operacionais.
+        // Como o dashboard utiliza o CMV Teórico (Vendas x Ficha Técnica), 
+        // as compras reais (Lançamento Manual) não devem somar nas despesas operacionais
+        // para evitar "dupla contagem" do custo.
         break;
       default:
         outrasDespesas += valor;
