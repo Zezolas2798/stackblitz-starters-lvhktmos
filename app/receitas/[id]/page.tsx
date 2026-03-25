@@ -46,12 +46,15 @@ type ComposicaoDisplayItem = {
   id: string; 
   nome: string; 
   peso_liquido_g: number; 
-  tipo: 'ingrediente' | 'receita'; 
+  tipo: 'ingrediente' | 'receita' | 'material'; 
   peso_unitario_g?: number | null;
   tipo_ingrediente?: string; 
   funcao_aditivo?: string | null;
   ins_code?: string | null;
   classificacao_nova?: number | null;
+  preco_ultima_compra?: number;
+  custo_medio?: number;
+  unidade_medida?: string;
 };
 
 export default function DetalhesReceitaPage() {
@@ -202,15 +205,18 @@ export default function DetalhesReceitaPage() {
 
     const ingredienteIds = composicao.filter((c: any) => c.item_type === 'ingrediente').map((c: any) => c.item_id);
     const receitaIds = composicao.filter((c: any) => c.item_type === 'receita').map((c: any) => c.item_id);
+    const materialIds = composicao.filter((c: any) => c.item_type === 'material').map((c: any) => c.item_id);
     
-    const [ingData, recData] = await Promise.all([
-      ingredienteIds.length > 0 ? supabase.from('ingredientes').select('id, nome, peso_unitario_g, tipo_ingrediente, funcao_aditivo, ins_code, classificacao_nova').in('id', ingredienteIds) : Promise.resolve({ data: [] }),
-      receitaIds.length > 0 ? supabase.from('receitas').select('id, nome').in('id', receitaIds) : Promise.resolve({ data: [] })
+    const [ingData, recData, matData] = await Promise.all([
+      ingredienteIds.length > 0 ? supabase.from('ingredientes').select('id, nome, peso_unitario_g, tipo_ingrediente, funcao_aditivo, ins_code, classificacao_nova, preco_ultima_compra, custo_medio').in('id', ingredienteIds) : Promise.resolve({ data: [] }),
+      receitaIds.length > 0 ? supabase.from('receitas').select('id, nome').in('id', receitaIds) : Promise.resolve({ data: [] }),
+      materialIds.length > 0 ? supabase.from('materiais').select('id, nome, tipo_material, unidade_medida, custo_medio, preco_ultima_compra').in('id', materialIds) : Promise.resolve({ data: [] })
     ]);
     
     const infoMap = new Map();
     ingData.data?.forEach((item: any) => infoMap.set(item.id, item));
     recData.data?.forEach((item: any) => infoMap.set(item.id, { nome: item.nome, tipo_ingrediente: 'RECEITA' }));
+    matData.data?.forEach((item: any) => infoMap.set(item.id, { ...item, tipo_ingrediente: 'MATERIAL' }));
     
     const listaMapeada = composicao.map((item: any) => {
       const nomeItem = item.nome_snapshot || infoMap.get(item.item_id)?.nome || 'Item desconhecido';
@@ -225,14 +231,18 @@ export default function DetalhesReceitaPage() {
         tipo_ingrediente: info.tipo_ingrediente,
         funcao_aditivo: info.funcao_aditivo,
         ins_code: info.ins_code,
-        classificacao_nova: info.classificacao_nova ?? null
+        classificacao_nova: info.classificacao_nova ?? null,
+        preco_ultima_compra: Number(info.preco_ultima_compra || 0),
+        custo_medio: Number(info.custo_medio || 0),
+        unidade_medida: info.unidade_medida || 'g'
       };
     });
 
-    const normais = listaMapeada.filter((i: any) => i.tipo_ingrediente !== 'ADITIVO').sort((a: any, b: any) => b.peso_liquido_g - a.peso_liquido_g);
+    const normais = listaMapeada.filter((i: any) => i.tipo_ingrediente !== 'ADITIVO' && i.tipo !== 'material').sort((a: any, b: any) => b.peso_liquido_g - a.peso_liquido_g);
     const aditivos = listaMapeada.filter((i: any) => i.tipo_ingrediente === 'ADITIVO').sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+    const materiais = listaMapeada.filter((i: any) => i.tipo === 'material').sort((a: any, b: any) => a.nome.localeCompare(b.nome));
 
-    setComposicaoDisplay([...normais, ...aditivos]);
+    setComposicaoDisplay([...normais, ...aditivos, ...materiais]);
   };
 
   const handleSelecionarVersao = (valor: string) => {
@@ -315,6 +325,19 @@ export default function DetalhesReceitaPage() {
 
   const isHistorico = versaoSelecionadaId !== null;
 
+  const custoTotalUltimo = composicaoDisplay.reduce((acc, item) => {
+      if (item.tipo === 'ingrediente' && item.peso_unitario_g && item.preco_ultima_compra) {
+          return acc + (item.peso_liquido_g / item.peso_unitario_g) * item.preco_ultima_compra;
+      }
+      if (item.tipo === 'material' && item.preco_ultima_compra) {
+          // Para materiais, peso_liquido_g age como a "quantidade" em 'unidades', 'pct', etc.
+          return acc + (item.peso_liquido_g * item.preco_ultima_compra);
+      }
+      return acc;
+  }, 0);
+
+  const formatoMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
       
@@ -330,6 +353,16 @@ export default function DetalhesReceitaPage() {
             
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
               <Chip label={`Rendimento: ${receitaExibida.rendimento_total_g}g`} size="small" variant="outlined" />
+              {custoTotalUltimo > 0 && (
+                <Tooltip title="Custo dos ingredientes baseado na última compra">
+                  <Chip 
+                    label={`Custo Receita: ${formatoMoeda.format(custoTotalUltimo)}`} 
+                    size="small" 
+                    color="primary" 
+                    variant="outlined" 
+                  />
+                </Tooltip>
+              )}
               {receitaExibida.status === 'APROVADA' && !isHistorico && <Chip icon={<VerifiedIcon />} label="Aprovada (Vigente)" color="success" size="small" />}
               {receitaExibida.status === 'RASCUNHO' && !isHistorico && <Chip icon={<EditIcon />} label="Rascunho (Em Edição)" color="default" size="small" />}
             </Stack>
@@ -464,8 +497,31 @@ export default function DetalhesReceitaPage() {
                                     )}
                                 </Box>
                             }
+                            secondary={
+                                item.tipo === 'ingrediente' && item.preco_ultima_compra ? (
+                                    <Typography variant="caption" color="text.secondary">
+                                        Custo Base: {formatoMoeda.format(item.preco_ultima_compra)} por {item.peso_unitario_g || 1000}g
+                                    </Typography>
+                                ) : null
+                            }
                         />
-                        <Typography variant="body2" fontWeight={600} color="primary" sx={{ whiteSpace: 'nowrap' }}>{item.peso_liquido_g}g</Typography>
+                        <Box sx={{ textAlign: 'right' }}>
+                            <Typography variant="body2" fontWeight={600} color="primary" sx={{ whiteSpace: 'nowrap' }}>
+                                {item.peso_liquido_g}{item.tipo === 'material' ? item.unidade_medida : 'g'}
+                            </Typography>
+                            {/* Custo Insumo */}
+                            {item.tipo === 'ingrediente' && item.preco_ultima_compra && item.peso_unitario_g ? (
+                                <Typography variant="caption" color="text.secondary">
+                                    {formatoMoeda.format((item.peso_liquido_g / item.peso_unitario_g) * item.preco_ultima_compra)}
+                                </Typography>
+                            ) : null}
+                            {/* Custo Material */}
+                            {item.tipo === 'material' && item.preco_ultima_compra ? (
+                                <Typography variant="caption" color="text.secondary">
+                                    {formatoMoeda.format(item.peso_liquido_g * item.preco_ultima_compra)}
+                                </Typography>
+                            ) : null}
+                        </Box>
                     </ListItem>
                 ))}
             </List>

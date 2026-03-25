@@ -166,6 +166,29 @@ export interface Ingrediente {
   created_at?: string;
 }
 
+export type TipoMaterial = 'EMBALAGEM' | 'UTENSILIO' | 'UTENSILIOS' | 'MANUTENCAO' | 'LIMPEZA' | 'EPI_EPC' | 'UNIFORMES' | 'PRIMEIROS_SOCORROS' | 'OUTROS';
+
+export interface Material {
+  id: string;
+  cliente_id: string;
+  nome: string;
+  tipo_material: TipoMaterial;
+  unidade_medida: string;
+  custo_medio: number;
+  preco_ultima_compra: number;
+  categoria_id?: string | null;
+  marca?: string | null;
+  ativo: boolean;
+  created_at?: string;
+  updated_at?: string;
+  
+  // Relação Virtual
+  categoria?: {
+    id: string;
+    nome: string;
+  } | null;
+}
+
 export interface AnvisaCategoria {
   id: number;
   grupo_anvisa: string;
@@ -330,7 +353,8 @@ export interface EstoqueLote {
   id: string;
   unidade_id: string;
   local_estoque_id?: string;
-  ingrediente_id: string;
+  ingrediente_id?: string | null;
+  material_id?: string | null;
   
   // ATUALIZADO: Relação com Fornecedor Real
   fornecedor_id?: string | null;
@@ -350,6 +374,7 @@ export interface EstoqueLote {
   
   // Joins
   ingrediente?: Ingrediente;
+  material?: Material; // Join Novo (Materiais)
   local_estoque?: LocalEstoque;
   fornecedor?: Fornecedor; // Join Novo
 }

@@ -136,7 +136,7 @@ export default function EditarIngredientePage() {
 
             let categorias: any[] = [];
             if (activeClientId) {
-                const { data: catData } = await supabase.from('cliente_categorias_produto').select('id, nome').eq('cliente_id', activeClientId).order('nome');
+                const { data: catData } = await supabase.from('cliente_categorias_produto').select('id, nome').eq('cliente_id', activeClientId).eq('modalidade', 'ALIMENTOS').order('nome');
                 if (catData) {
                     setCategoriasMestre(catData);
                     categorias = catData;

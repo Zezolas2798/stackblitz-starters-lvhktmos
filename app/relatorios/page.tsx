@@ -138,7 +138,7 @@ export default function RelatoriosPage() {
           const idsRec = comps.filter((c: any) => c.item_type === 'receita').map((c: any) => c.item_id);
 
           const [resIng, resRec] = await Promise.all([
-            idsIng.length > 0 ? (supabase as any).from('ingredientes').select('id, nome, fonte, peso_unitario_g').in('id', idsIng) : { data: [] },
+            idsIng.length > 0 ? (supabase as any).from('ingredientes').select('id, nome, fonte, peso_unitario_g').in('id', idsIng).is('deleted_at', null) : { data: [] },
             idsRec.length > 0 ? (supabase as any).from('receitas').select('id, nome').in('id', idsRec) : { data: [] }
           ]);
 

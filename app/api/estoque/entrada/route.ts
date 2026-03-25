@@ -7,7 +7,8 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
 // Schema Zod para DTO de Entrada de Lotes WMS (Rastreabilidade GxP)
 const EntradaLoteSchema = z.object({
-    ingrediente_id: z.string().uuid('ID de ingrediente inválido'),
+    ingrediente_id: z.string().uuid('ID de ingrediente inválido').nullable().optional(),
+    material_id: z.string().uuid('ID de material inválido').nullable().optional(),
     unidade_id: z.string().uuid('ID de unidade operacional inválido'),
     fornecedor_id: z.string().uuid('Fornecedor inválido'),
 
@@ -37,6 +38,9 @@ const EntradaLoteSchema = z.object({
     qtd_embalagens: z.number().optional().nullable(),
     peso_unitario_embalagem: z.number().optional().nullable(),
     unidade_peso_embalagem: z.string().optional().nullable(),
+}).refine(data => data.ingrediente_id || data.material_id, {
+    message: "É necessário informar o Ingrediente ou o Material",
+    path: ["ingrediente_id"]
 });
 
 export async function POST(request: Request) {

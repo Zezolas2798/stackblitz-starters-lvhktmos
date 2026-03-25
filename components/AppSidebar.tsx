@@ -44,7 +44,12 @@ import {
   ShoppingCart,
   Restaurant,
   EventNote,
-  Tag
+  Tag,
+  AccountBalance,
+  Payments,
+  Assessment,
+  AttachMoney,
+  Inventory2
 } from '@mui/icons-material';
 
 interface AppSidebarProps {
@@ -140,6 +145,41 @@ export function AppSidebar({ width }: AppSidebarProps) {
       ]
     },
     {
+      title: 'GESTÃO FINANCEIRA',
+      items: [
+        {
+          label: 'Dashboard Executivo',
+          href: '/financeiro/dashboard',
+          icon: <Assessment />,
+          visible: can('quality.audit.perform') || can('sys.roles.manage')
+        },
+        {
+          label: 'Vendas e Matriz BCG',
+          href: '/financeiro/vendas',
+          icon: <AccountBalance />,
+          visible: can('quality.audit.perform') || can('sys.roles.manage')
+        },
+        {
+          label: 'Conciliação e Taxas',
+          href: '/financeiro/conciliacao',
+          icon: <AttachMoney />,
+          visible: can('quality.audit.perform') || can('sys.roles.manage')
+        },
+        {
+          label: 'Lançamento de Despesas',
+          href: '/financeiro/despesas',
+          icon: <Payments />,
+          visible: can('quality.audit.perform') || can('sys.roles.manage')
+        },
+        {
+          label: 'Contas a pagar e Vencimentos',
+          href: '/financeiro/contas-pagar',
+          icon: <EventNote />,
+          visible: can('quality.audit.perform') || can('sys.roles.manage')
+        },
+      ]
+    },
+    {
       title: 'TÉCNICO & P&D',
       items: [
         {
@@ -154,6 +194,12 @@ export function AppSidebar({ width }: AppSidebarProps) {
           icon: <Description />,
           visible: can('nutrition.ingredient.view')
         },
+        {
+          label: 'Materiais (Embalagem)',
+          href: '/materiais',
+          icon: <Inventory2 />,
+          visible: can('stock.balance.view') // Aproveitando visão de estoque
+        },
       ]
     },
     {
@@ -164,6 +210,12 @@ export function AppSidebar({ width }: AppSidebarProps) {
           href: '/certificacoes',
           icon: <VerifiedUser />,
           visible: can('quality.audit.perform') || can('quality.action_plan.manage')
+        },
+        {
+          label: 'Controle Produção',
+          href: '/qualidade/controle-producao',
+          icon: <Assignment />,
+          visible: can('quality.checklist.execute') || can('quality.audit.perform')
         },
         {
           label: 'Auditorias',

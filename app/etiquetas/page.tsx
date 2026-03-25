@@ -24,7 +24,7 @@ export default function EtiquetasPage() {
   const theme = useTheme();
   const { activeClientId, unidadeId } = useClient();
   
-  const [activeTab, setActiveTab] = useState(0); // 0: Insumos, 1: Preparações/Produtos
+  const [activeTab, setActiveTab] = useState(0); // 0: Insumos/Sobras, 1: Preparações/Produtos
   const [loading, setLoading] = useState(false);
   const [unidadeInfo, setUnidadeInfo] = useState<any>(null);
   const [userName, setUserName] = useState('');
@@ -38,9 +38,11 @@ export default function EtiquetasPage() {
   const [lotes, setLotes] = useState<any[]>([]);
   const [selectedLote, setSelectedLote] = useState<any>(null);
 
-  // --- DETALHES DA OP (Preparações) ---
+  // --- DETALHES DA OP ---
   const [ops, setOps] = useState<any[]>([]);
   const [selectedOP, setSelectedOP] = useState<any>(null);
+  const [selectedOPForSobra, setSelectedOPForSobra] = useState<any>(null);
+  const [allActiveOps, setAllActiveOps] = useState<any[]>([]);
 
   // --- DESTINO ---
   const [destinoTipo, setDestinoTipo] = useState<'LOCAL' | 'SETOR'>('LOCAL');
@@ -59,8 +61,20 @@ export default function EtiquetasPage() {
       loadUnidadeInfo();
       loadUserName();
       loadDestinos();
+      loadAllActiveOps();
     }
   }, [unidadeId]);
+
+  async function loadAllActiveOps() {
+    if (!unidadeId) return;
+    const { data } = await (supabase as any)
+      .from('producao_ordens')
+      .select('*')
+      .eq('unidade_id', unidadeId)
+      .in('status', ['PENDENTE', 'EM_PREPARO', 'PLANEJADA', 'EM_PRODUCAO'])
+      .order('created_at', { ascending: false });
+    setAllActiveOps(data || []);
+  }
 
   async function loadDestinos() {
     // Busca locais de estoque
@@ -99,15 +113,21 @@ export default function EtiquetasPage() {
 
   // --- BUSCA DE ITENS (INGRED/RECEITA) ---
   const searchItems = async (val: string) => {
-    // Se val for vazio, busca os primeiros 10 itens
+    // Se houver OP selecionada na aba de sobras, usamos a busca filtrada por consumo
+    if (activeTab === 0 && selectedOPForSobra) {
+      loadItemsFromOP(selectedOPForSobra.id);
+      return;
+    }
+
     setSearchLoading(true);
     try {
       if (activeTab === 0) {
-        // Busca ingredientes
+        // Busca ingredientes geral
         let query = (supabase as any)
           .from('ingredientes')
-          .select('id, nome, grupo_estoque_id')
-          .eq('cliente_id', activeClientId)
+          .select('id, nome')
+          .is('deleted_at', null)
+          .or(`cliente_id.eq.${activeClientId},cliente_id.is.null`)
           .order('nome')
           .limit(20);
         
@@ -118,7 +138,7 @@ export default function EtiquetasPage() {
         const { data } = await query;
         setItens(data || []);
       } else {
-        // Busca receitas
+        // Busca receitas geral
         let query = (supabase as any)
           .from('receitas')
           .select('id, nome, rendimento_total_g')
@@ -140,16 +160,73 @@ export default function EtiquetasPage() {
     }
   };
 
-  // --- CARREGA LOTES (SE INSUMO SELECIONADO) ---
+  // --- CARREGA LOTES (SE ITEM SELECIONADO) ---
   useEffect(() => {
     if (activeTab === 0 && selectedItem && unidadeId) {
       loadLotes(selectedItem.id);
     } else if (activeTab === 1 && selectedItem && unidadeId) {
       loadOps(selectedItem.id);
     }
-  }, [selectedItem, activeTab, unidadeId]);
+  }, [selectedItem, activeTab, unidadeId, selectedOPForSobra]);
+
+  async function loadItemsFromOP(opId: string) {
+    setSearchLoading(true);
+    try {
+      // Busca ingredientes consumidos na OP via producao_consumos
+      const { data } = await (supabase as any)
+        .from('producao_consumos')
+        .select(`
+          quantidade_utilizada,
+          lotes_estoque (
+            id,
+            ingredientes ( id, nome, grupo_estoque_id )
+          )
+        `)
+        .eq('producao_id', opId);
+
+      if (data) {
+        const uniqueItems: any[] = [];
+        const seenIds = new Set();
+        data.forEach((c: any) => {
+          const ing = c.lotes_estoque?.ingredientes;
+          if (ing && !seenIds.has(ing.id)) {
+            seenIds.add(ing.id);
+            uniqueItems.push(ing);
+          }
+        });
+        setItens(uniqueItems);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSearchLoading(false);
+    }
+  }
 
   async function loadLotes(ingredienteId: string) {
+    // Se houver OP selecionada na aba de sobras, filtramos lotes usados nela
+    if (activeTab === 0 && selectedOPForSobra) {
+      const { data } = await (supabase as any)
+        .from('producao_consumos')
+        .select(`
+          estoque_lote_id,
+          lotes_estoque (
+            *,
+            fornecedores(razao_social)
+          )
+        `)
+        .eq('producao_id', selectedOPForSobra.id);
+      
+      const filteredLotes = data
+        ?.filter((c: any) => c.lotes_estoque?.ingrediente_id === ingredienteId)
+        .map((c: any) => c.lotes_estoque) || [];
+        
+      setLotes(filteredLotes);
+      if (filteredLotes.length > 0) setSelectedLote(filteredLotes[0]);
+      else setSelectedLote(null);
+      return;
+    }
+
     const { data } = await (supabase as any)
       .from('lotes_estoque')
       .select('*, fornecedores(razao_social)')
@@ -158,6 +235,7 @@ export default function EtiquetasPage() {
       .gt('quantidade_atual_g_ml', 0)
       .is('deleted_at', null)
       .order('data_validade_rotulo', { ascending: true });
+    
     setLotes(data || []);
     if (data && data.length > 0) {
       setSelectedLote(data[0]);
@@ -172,7 +250,7 @@ export default function EtiquetasPage() {
       .select('*')
       .eq('receita_id', receitaId)
       .eq('unidade_id', unidadeId)
-      .in('status', ['PLANEJADA', 'EM_PRODUCAO'])
+      .in('status', ['PLANEJADA', 'EM_PRODUCAO', 'EM_PREPARO'])
       .order('created_at', { ascending: false });
     setOps(data || []);
   }
@@ -207,7 +285,7 @@ export default function EtiquetasPage() {
           ? (selectedLote?.numero_lote_fabricante || 'EXT-INV') 
           : (selectedOP?.codigo || `INT-${new Date().getTime().toString().slice(-6)}`),
         marcaForn: activeTab === 0 ? (selectedLote?.fornecedores?.razao_social || 'N/A') : 'PRÓPRIA',
-        peso: formatarQuantidade(pesoUnitario), // Peso POR etiqueta
+        peso: formatarQuantidade(pesoUnitario),
         tipoArmazenamento: activeTab === 0 ? 'Refrigerado / Secos' : 'Pronto para Consumo'
       },
       datas: {
@@ -218,11 +296,11 @@ export default function EtiquetasPage() {
       rastreabilidade: {
         idInterno: activeTab === 0 ? (selectedLote?.id || 'NEW') : (selectedOP?.id || 'NEW'),
         responsavel: userName,
-        codigoRef: activeTab === 1 && selectedOP ? selectedOP.codigo : undefined,
+        codigoRef: activeTab === 1 && selectedOP ? selectedOP.codigo : (selectedOPForSobra?.codigo),
         destino: selectedDestinoId ? (destinoTipo === 'LOCAL' ? locais.find(l => l.id === selectedDestinoId)?.nome : setores.find(s => s.id === selectedDestinoId)?.nome) : undefined
       }
     };
-  }, [selectedItem, selectedLote, selectedOP, pesoGml, numEtiquetas, validade, activeTab, unidadeInfo, userName, selectedDestinoId, destinoTipo, locais, setores]);
+  }, [selectedItem, selectedLote, selectedOP, selectedOPForSobra, pesoGml, numEtiquetas, validade, activeTab, unidadeInfo, userName, selectedDestinoId, destinoTipo, locais, setores]);
 
   // --- AÇÃO PRINCIPAL: INTEGRAR E IMPRIMIR ---
   async function handleIntegrarEtiqueta() {
@@ -239,7 +317,7 @@ export default function EtiquetasPage() {
           lote_id: selectedLote.id,
           tipo_movimento: 'SAIDA',
           quantidade_movimentada: pesoGml,
-          justificativa: `ETIQUETA DE SOBRA - Destino: ${destinoTipo} (${destinoNome || 'N/A'})`,
+          justificativa: `ETIQUETA DE SOBRA - Destino: ${destinoTipo} (${destinoNome || 'N/A'})${selectedOPForSobra ? ` | OP: ${selectedOPForSobra.codigo}` : ''}`,
           responsavel_id: (await supabase.auth.getUser()).data.user?.id
         });
         
@@ -248,9 +326,6 @@ export default function EtiquetasPage() {
         const novaQtd = Math.max(0, selectedLote.quantidade_atual_g_ml - pesoGml);
         await (supabase as any).from('lotes_estoque').update({ 
           quantidade_atual_g_ml: novaQtd,
-          // Se o destino for um local de estoque, poderíamos atualizar o local_id do lote original?
-          // Mas como é uma SOBRA (fracionamento), geralmente o lote original continua onde está,
-          // e a sobra vai para outro lugar. Aqui apenas registramos a saída da sobra.
         }).eq('id', selectedLote.id);
       }
 
@@ -285,12 +360,11 @@ export default function EtiquetasPage() {
       </Box>
 
       <Grid container spacing={4}>
-        {/* LADO ESQUERDO: CONFIGURAÇÃO */}
         <Grid item xs={12} md={7}>
           <Paper elevation={0} sx={{ p: 0, border: '1px solid', borderColor: 'divider', borderRadius: 3, overflow: 'hidden' }}>
             <Tabs 
               value={activeTab} 
-              onChange={(e, v) => { setActiveTab(v); setSelectedItem(null); setSelectedLote(null); }}
+              onChange={(e, v) => { setActiveTab(v); setSelectedItem(null); setSelectedLote(null); setSelectedOPForSobra(null); searchItems(''); }}
               variant="fullWidth"
               sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05), borderBottom: '1px solid', borderColor: 'divider' }}
             >
@@ -300,19 +374,55 @@ export default function EtiquetasPage() {
 
             <Box sx={{ p: 4 }}>
               <Grid container spacing={3}>
-                {/* 1. SELEÇÃO DO ITEM */}
                 <Grid item xs={12}>
                   <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Search size={16} /> 1. Selecione o {activeTab === 0 ? 'Ingrediente' : 'Produto'}
+                    <Search size={16} /> 1. {activeTab === 0 ? 'Contexto de Produção (Opcional)' : 'Selecione o Produto'}
+                  </Typography>
+
+                  {activeTab === 0 ? (
+                    <Box sx={{ mb: 3 }}>
+                      <TextField
+                        select
+                        fullWidth
+                        label="Ordem de Produção (OP) - OPCIONAL"
+                        value={selectedOPForSobra?.id || 'none'}
+                        onChange={(e) => {
+                          const opId = e.target.value;
+                          if (opId === 'none') {
+                            setSelectedOPForSobra(null);
+                            setSelectedItem(null);
+                            searchItems('');
+                          } else {
+                            const op = allActiveOps.find(o => o.id === opId);
+                            setSelectedOPForSobra(op);
+                            setSelectedItem(null);
+                            loadItemsFromOP(opId);
+                          }
+                        }}
+                        helperText="Selecione a OP para filtrar insumos usados nela"
+                      >
+                        <MenuItem value="none"><em>Nenhuma (Busca Geral)</em></MenuItem>
+                        {allActiveOps.map(o => (
+                          <MenuItem key={o.id} value={o.id}>
+                            OP: {o.codigo} | {o.titulo || 'Produção'}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    </Box>
+                  ) : null}
+
+                  <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Search size={16} /> {activeTab === 0 ? '2. Selecione o Insumo / Sobra' : '1. Selecione o Produto'}
                   </Typography>
                   <Autocomplete
                     fullWidth
                     options={itens}
+                    value={selectedItem}
                     getOptionLabel={(option) => typeof option === 'string' ? option : (option.nome || '')}
                     isOptionEqualToValue={(option, value) => option.id === value?.id}
                     loading={searchLoading}
                     noOptionsText="Nenhum item encontrado"
-                    onInputChange={(e, val) => searchItems(val)}
+                    onInputChange={(e, val) => { if (!selectedOPForSobra) searchItems(val); }}
                     onChange={(e, val) => setSelectedItem(val)}
                     renderInput={(params) => (
                       <TextField 
@@ -334,11 +444,10 @@ export default function EtiquetasPage() {
                   />
                 </Grid>
 
-                {/* 2. SELEÇÃO DO LOTE OU OP (CONDICIONAL) */}
                 {activeTab === 0 && selectedItem && (
                   <Grid item xs={12}>
                     <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Tag size={16} /> 2. Origem (Lote em Estoque)
+                      <Tag size={16} /> {selectedOPForSobra ? '3. Lote Utilizado na Produção' : '2. Origem (Lote em Estoque)'}
                     </Typography>
                     {lotes.length > 0 ? (
                       <TextField
@@ -362,7 +471,7 @@ export default function EtiquetasPage() {
                 {activeTab === 1 && selectedItem && (
                   <Grid item xs={12}>
                     <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Tag size={16} /> 2. Ordem de Produção Relacionada (Opcional)
+                      <Tag size={16} /> 2. Ordem de Produção Relacionada
                     </Typography>
                     <TextField
                       select
@@ -380,11 +489,10 @@ export default function EtiquetasPage() {
                   </Grid>
                 )}
 
-                {/* 3. DESTINO */}
                 {selectedItem && (
                   <Grid item xs={12}>
                     <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <MapPin size={16} /> 3. Destino (Onde será armazenado/usado)
+                      <MapPin size={16} /> {activeTab === 0 ? '4. Destino' : '3. Destino'} (Onde será armazenado/usado)
                     </Typography>
                     <Grid container spacing={2}>
                       <Grid item xs={12} sm={4}>
@@ -422,7 +530,6 @@ export default function EtiquetasPage() {
 
                 <Grid item xs={12}><Divider /></Grid>
 
-                {/* 4. DADOS DA ETIQUETA */}
                 <Grid item xs={12} sm={6}>
                   <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                     Peso Total (g/ml)
@@ -490,7 +597,6 @@ export default function EtiquetasPage() {
           </Paper>
         </Grid>
 
-        {/* LADO DIREITO: PRÉVIA */}
         <Grid item xs={12} md={5}>
           <Box sx={{ position: 'sticky', top: 100 }}>
              <Typography variant="overline" color="text.secondary" fontWeight="bold" sx={{ mb: 2, display: 'block' }}>

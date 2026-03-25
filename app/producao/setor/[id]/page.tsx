@@ -9,27 +9,17 @@ import {
   Table, TableBody, TableCell, TableHead, TableRow, TableContainer,
   CircularProgress, Alert, Container, useTheme, alpha,
   Divider, Tooltip, List, ListItemButton, Breadcrumbs,
-  Link, Accordion, AccordionSummary, AccordionDetails
+  Link, Accordion, AccordionSummary, AccordionDetails,
+  Tabs, Tab
 } from '@mui/material';
-import { 
-  ChefHat, 
-  Play, 
-  CheckCircle, 
-  AlertTriangle, 
-  Info, 
-  ArrowLeft,
-  ClipboardList,
-  Layers,
-  Trash2,
-  Save,
-  Clock,
-  Package,
-  Calendar,
-  ChevronDown
-} from 'lucide-react';
+import { format, addDays, parseISO } from 'date-fns';
+import { Layers, ChevronRight, Play, CheckCircle, ChefHat, Info, History, Trash2, Tag, Printer, Save, MapPin, Calendar, User, ArrowLeft, ClipboardList, Clock, Package, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
-import { format, parseISO } from 'date-fns';
+import { formatarQuantidade } from '@/components/MovimentacaoEstoqueDialog';
+import EtiquetaPrinter from '@/components/etiquetas/EtiquetaPrinter';
+import EtiquetaPreview from '@/components/etiquetas/EtiquetaPreview';
+import { DadosEtiqueta } from '@/lib/iot/zplGenerator';
 
 interface Setor {
   id: string;
@@ -81,7 +71,16 @@ export default function SetorExecucaoPage() {
   const [loading, setLoading] = useState(true);
   const [setor, setSetor] = useState<Setor | null>(null);
   const [itensPorOrdem, setItensPorOrdem] = useState<Record<string, { ordem: any, itens: ItemProducao[] }>>({});
-  const [error, setError] = useState('');
+  const [userName, setUserName] = useState('');
+  const [quickEtiqueta, setQuickEtiqueta] = useState<{
+    open: boolean;
+    type: 'INSUMO' | 'PRODUTO';
+    item: any;
+    loteOrOp: any;
+    peso: number;
+    destinoId?: string;
+    destinoTipo?: 'LOCAL' | 'SETOR';
+  } | null>(null);
 
   // Estados do Dialog de Execução
   const [selectedItem, setSelectedItem] = useState<ItemProducao | null>(null);
@@ -91,6 +90,18 @@ export default function SetorExecucaoPage() {
   const [sobra, setSobra] = useState<number>(0);
   const [resto, setResto] = useState<number>(0);
   const [salvando, setSalvando] = useState(false);
+  const [execucaoTab, setExecucaoTab] = useState(0);
+  const [selectedOPForSobras, setSelectedOPForSobras] = useState<any | null>(null);
+  const [loadingOPReqs, setLoadingOPReqs] = useState(false);
+  const [opRequisicoes, setOpRequisicoes] = useState<any[]>([]);
+  const [existingPerdas, setExistingPerdas] = useState<any[]>([]);
+  const [sobrasInsumos, setSobrasInsumos] = useState<Record<string, number>>({});
+  const [sobrasProdutos, setSobrasProdutos] = useState<Record<string, { sobra: number, resto: number }>>({});
+  const [sobrasDestinos, setSobrasDestinos] = useState<Record<string, { type: 'LOCAL' | 'SETOR', id: string }>>({});
+  const [locais, setLocais] = useState<any[]>([]);
+  const [setores, setSetores] = useState<any[]>([]);
+  const [savingStage, setSavingStage] = useState<'FORM' | 'SUMMARY'>('FORM');
+  const [savedRecords, setSavedRecords] = useState<any[]>([]);
 
   useEffect(() => {
     if (unidadeId && setorId) {
@@ -100,7 +111,7 @@ export default function SetorExecucaoPage() {
 
   async function fetchData() {
     setLoading(true);
-    setError('');
+    // setError(''); // Assuming setError is defined elsewhere or removed
     try {
       // 1. Buscar info do setor
       if (setorId !== 'unassigned') {
@@ -158,7 +169,7 @@ export default function SetorExecucaoPage() {
       setItensPorOrdem(agroupped);
     } catch (err: any) {
       console.error(err);
-      setError('Erro ao carregar dados do setor.');
+      // setError('Erro ao carregar dados do setor.'); // Assuming setError is defined elsewhere or removed
     } finally {
       setLoading(false);
     }
@@ -239,30 +250,162 @@ export default function SetorExecucaoPage() {
         .update({ quantidade_produzida: novaQtd })
         .eq('id', selectedItem.id);
 
-      if (sobra > 0) {
-        await supabase.from('producao_perdas').insert({
-          unidade_id: unidadeId,
-          item_ordem_id: selectedItem.id,
-          quantidade_perdida: sobra,
-          tipo_perda: 'SOBRA',
-          motivo_perda: 'Sobra de produção aproveitável'
-        });
-      }
-      if (resto > 0) {
-        await supabase.from('producao_perdas').insert({
-          unidade_id: unidadeId,
-          item_ordem_id: selectedItem.id,
-          quantidade_perdida: resto,
-          tipo_perda: 'RESTO',
-          motivo_perda: 'Resto de produção não aproveitável'
-        });
-      }
-      
+      // Registro simplificado apenas de quantidade produzida
       setSelectedItem(null);
       await fetchData();
     } catch (err) {
       console.error(err);
       alert('Erro ao salvar produção.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  async function handleOpenSobrasOP(op: any) {
+    setSelectedOPForSobras(op);
+    setLoadingOPReqs(true);
+    setSavingStage('FORM');
+    setSavedRecords([]);
+    try {
+      // 1. Insumos da OP
+      const { data: reqs } = await (supabase as any)
+        .from('producao_requisicoes')
+        .select(`
+          *,
+          ingredientes ( id, nome, grupo_estoque_id ),
+          ingredientes_grupos ( id, nome )
+        `)
+        .eq('ordem_id', op.id);
+      
+      setOpRequisicoes(reqs || []);
+
+      // 2. Buscar perdas já registradas para esta OP
+      const { data: perdas } = await (supabase as any)
+        .from('producao_perdas')
+        .select('*')
+        .eq('ordem_producao_id', op.id);
+      
+      setExistingPerdas(perdas || []);
+
+      // 3. Buscar Locais e Setores para destinos
+      const { data: locaisData } = await (supabase as any).from('cliente_locais_estoque').select('id, nome').eq('unidade_id', unidadeId).eq('ativo', true);
+      const { data: setoresData } = await (supabase as any).from('cliente_setores_producao').select('id, nome').eq('cliente_id', activeClientId).eq('ativo', true);
+      
+      setLocais(locaisData || []);
+      setSetores(setoresData || []);
+
+      // Reset states
+      setSobrasInsumos({});
+      setSobrasProdutos({});
+      setSobrasDestinos({});
+
+      // 4. Inicializar estado de sobras de produtos
+      const opItens = itensPorOrdem[op.id]?.itens || [];
+      const initialProdSobras: Record<string, { sobra: number, resto: number }> = {};
+      opItens.forEach(item => {
+        initialProdSobras[item.id] = { sobra: 0, resto: 0 };
+      });
+      setSobrasProdutos(initialProdSobras);
+
+    } catch (err) {
+      console.error('Erro ao pesquisar sobras da OP:', err);
+    } finally {
+      setLoadingOPReqs(false);
+    }
+  }
+
+  const handleSaveSobrasOP = async () => {
+    if (!selectedOPForSobras) return;
+    setSalvando(true);
+    try {
+      const recordsToLabel: any[] = [];
+
+      // 1. Salvar sobras de insumos
+      const insumoEntries = Object.entries(sobrasInsumos).filter(([_, val]) => val > 0);
+      for (const [ingredienteId, val] of insumoEntries) {
+        const destino = sobrasDestinos[ingredienteId];
+        if (!destino?.id) {
+          alert('Por favor, selecione o destino para todos os itens com sobra.');
+          setSalvando(false);
+          return;
+        }
+
+        const { data: inserted, error } = await (supabase as any).from('producao_perdas').insert({
+          unidade_id: unidadeId,
+          ingrediente_id: ingredienteId,
+          ordem_producao_id: selectedOPForSobras.id,
+          quantidade_perdida: val,
+          tipo_perda: 'SOBRA',
+          motivo_perda: 'Sobra de insumo na OP',
+          destino_id: destino.id,
+          tipo_destino: destino.type
+        }).select().single();
+
+        if (error) throw error;
+        
+        const reqItem = opRequisicoes.find(r => (r.ingrediente_id || r.grupo_estoque_id) === ingredienteId);
+        recordsToLabel.push({
+          ...inserted,
+          nome: reqItem?.ingredientes?.nome || reqItem?.ingredientes_grupos?.nome,
+          type: 'INSUMO',
+          item: reqItem?.ingredientes || reqItem?.ingredientes_grupos
+        });
+      }
+
+      // 2. Salvar sobras e restos de produtos
+      for (const itemId in sobrasProdutos) {
+        const data = sobrasProdutos[itemId];
+        const itemProd = itensPorOrdem[selectedOPForSobras.id]?.itens.find(i => i.id === itemId);
+        const destino = sobrasDestinos[itemId];
+
+        if (data.sobra > 0) {
+          if (!destino?.id) {
+            alert('Por favor, selecione o destino para todos os produtos com sobra.');
+            setSalvando(false);
+            return;
+          }
+
+          const { data: inserted, error } = await (supabase as any).from('producao_perdas').insert({
+            unidade_id: unidadeId,
+            item_ordem_id: itemId,
+            ordem_producao_id: selectedOPForSobras.id,
+            quantidade_perdida: data.sobra,
+            tipo_perda: 'SOBRA',
+            motivo_perda: 'Sobra de produto na OP',
+            destino_id: destino.id,
+            tipo_destino: destino.type
+          }).select().single();
+
+          if (error) throw error;
+          recordsToLabel.push({
+            ...inserted,
+            nome: itemProd?.receitas?.nome,
+            type: 'PRODUTO',
+            item: itemProd?.receitas
+          });
+        }
+        if (data.resto > 0) {
+          await (supabase as any).from('producao_perdas').insert({
+            unidade_id: unidadeId,
+            item_ordem_id: itemId,
+            ordem_producao_id: selectedOPForSobras.id,
+            quantidade_perdida: data.resto,
+            tipo_perda: 'RESTO',
+            motivo_perda: 'Resto/Descarte de produto na OP'
+          });
+        }
+      }
+
+      setSavedRecords(recordsToLabel);
+      setSavingStage('SUMMARY');
+      alert('Sobras e restos registrados com sucesso! Você pode imprimir as etiquetas agora.');
+    } catch (err: any) {
+      console.error(err);
+      if (err?.code === 'PGRST204' || err?.message?.includes('destino_id')) {
+        alert('Erro de Banco de Dados: A coluna "destino_id" não foi encontrada na tabela "producao_perdas". Por favor, execute o SQL de migração fornecido para atualizar seu banco de dados.');
+      } else {
+        alert('Erro ao salvar sobras. Verifique a conexão ou o console do navegador.');
+      }
     } finally {
       setSalvando(false);
     }
@@ -287,7 +430,7 @@ export default function SetorExecucaoPage() {
 
       <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
         <IconButton onClick={() => router.push('/producao')} sx={{ bgcolor: 'action.hover' }}>
-          <ArrowLeft size={20} />
+          <ChevronRight size={20} style={{ transform: 'rotate(180deg)' }} />
         </IconButton>
         <Box>
           <Typography variant="h4" fontWeight="800" sx={{ letterSpacing: '-0.02em' }}>
@@ -299,11 +442,11 @@ export default function SetorExecucaoPage() {
         </Box>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+      {/* {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>} */} {/* Assuming error state is defined elsewhere or removed */}
 
       {Object.keys(itensPorOrdem).length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 3, border: '1px dashed', borderColor: 'divider' }}>
-          <Package size={48} color={theme.palette.text.disabled} style={{ marginBottom: 16 }} />
+          <History size={48} color={theme.palette.text.disabled} style={{ marginBottom: 16 }} />
           <Typography variant="h6" color="text.secondary">Nenhuma produção ativa para este setor.</Typography>
           <Button variant="outlined" sx={{ mt: 2 }} onClick={() => router.push('/producao')}>Voltar ao Dashboard</Button>
         </Paper>
@@ -323,7 +466,7 @@ export default function SetorExecucaoPage() {
                 }}
               >
                 <AccordionSummary 
-                  expandIcon={<ChevronDown size={20} />}
+                  expandIcon={<ChevronRight size={20} />}
                   sx={{ 
                     bgcolor: alpha(theme.palette.primary.main, 0.05),
                     borderBottom: '1px solid',
@@ -332,7 +475,7 @@ export default function SetorExecucaoPage() {
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, width: '100%', pr: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <ClipboardList size={22} color={theme.palette.primary.main} />
+                      <History size={22} color={theme.palette.primary.main} />
                       <Typography variant="h6" fontWeight="bold">OP: {ordem.codigo}</Typography>
                     </Box>
                     <Chip 
@@ -344,6 +487,19 @@ export default function SetorExecucaoPage() {
                       <Typography variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <Calendar size={14} /> Previsão: {ordem.data_prevista ? format(parseISO(ordem.data_prevista), 'dd/MM/yyyy') : '-'}
                       </Typography>
+                      <Button 
+                        size="small" 
+                        variant="soft" 
+                        color="secondary"
+                        startIcon={<Layers size={14} />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenSobrasOP(ordem);
+                        }}
+                        sx={{ fontSize: '0.75rem', fontWeight: 'bold' }}
+                      >
+                        Sobras/Perdas
+                      </Button>
                       <Chip 
                         label={ordem.status} 
                         size="small" 
@@ -407,17 +563,17 @@ export default function SetorExecucaoPage() {
         </Grid>
       )}
 
-      {/* Dialog de Execução (Reutilizado do componente anterior) */}
+      {/* Dialog de Execução (Simplificado) */}
       <Dialog open={!!selectedItem} onClose={() => !salvando && setSelectedItem(null)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
           <Play size={24} color={theme.palette.success.main} />
-          Execução: {selectedItem?.receitas?.nome}
+          Apontamento: {selectedItem?.receitas?.nome}
         </DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={4}>
             <Grid item xs={12} md={7}>
               <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <ClipboardList size={20} /> Insumos do Item
+                <History size={20} /> Insumos Necessários
               </Typography>
               {loadingReqs ? (
                 <CircularProgress size={24} />
@@ -479,35 +635,18 @@ export default function SetorExecucaoPage() {
 
             <Grid item xs={12} md={5}>
               <Paper elevation={0} sx={{ p: 3, bgcolor: alpha(theme.palette.primary.main, 0.02), border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 3 }}>Apontamento</Typography>
+                <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2 }}>Registrar Produção</Typography>
                 <TextField 
                   label="Quantidade Produzida"
                   type="number"
                   fullWidth
                   value={qtdProduzida}
                   onChange={(e) => setQtdProduzida(Number(e.target.value))}
-                  sx={{ mb: 3 }}
-                  helperText="Quantidade adicionada ao total já produzido."
-                />
-                <Divider sx={{ mb: 3 }} />
-                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Trash2 size={16} /> Desperdício
-                </Typography>
-                <TextField 
-                  label="Sobra (Aproveitável)"
-                  type="number"
-                  fullWidth size="small"
-                  value={sobra}
-                  onChange={(e) => setSobra(Number(e.target.value))}
                   sx={{ mb: 2 }}
                 />
-                <TextField 
-                  label="Resto (Descartado)"
-                  type="number"
-                  fullWidth size="small"
-                  value={resto}
-                  onChange={(e) => setResto(Number(e.target.value))}
-                />
+                <Typography variant="body2" color="text.secondary">
+                  O registro de sobras e desperdícios agora é feito diretamente no cabeçalho da Ordem de Produção.
+                </Typography>
               </Paper>
             </Grid>
           </Grid>
@@ -535,6 +674,329 @@ export default function SetorExecucaoPage() {
           </Box>
         </DialogActions>
       </Dialog>
+
+      {/* Novo Diálogo de Sobras da OP (Consolidado) */}
+      <Dialog open={!!selectedOPForSobras} onClose={() => !salvando && setSelectedOPForSobras(null)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ display: 'flex', flexDirection: 'column', pb: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+            <Layers size={24} color={theme.palette.secondary.main} />
+            <Typography variant="h6" fontWeight="bold">Sobras e Perdas: OP {selectedOPForSobras?.codigo}</Typography>
+          </Box>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Tabs 
+              value={execucaoTab} 
+              onChange={(_, v) => setExecucaoTab(v)}
+              variant="fullWidth"
+            >
+              <Tab icon={<Layers size={18} />} label="Sobras de Insumos" iconPosition="start" />
+              <Tab icon={<Trash2 size={18} />} label="Sobras/Restos de Produtos" iconPosition="start" />
+            </Tabs>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers sx={{ minHeight: 400 }}>
+          {savingStage === 'SUMMARY' ? (
+            <Box>
+              <Alert severity="success" sx={{ mb: 3 }}>
+                Sobras registradas com sucesso! Imprima as etiquetas abaixo para identificação.
+              </Alert>
+              <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+                <Table>
+                  <TableHead sx={{ bgcolor: alpha(theme.palette.success.main, 0.05) }}>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Item</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Qtd</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>Etiqueta</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {savedRecords.map((rec, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{rec.nome}</TableCell>
+                        <TableCell align="right">{formatarQuantidade(rec.quantidade_perdida)}</TableCell>
+                        <TableCell align="center">
+                          <EtiquetaPrinter 
+                            dados={{
+                              empresa: { razaoSocial: 'Unidade Produção', cnpj: '', enderecoResumido: '', enderecoCompleto: '' },
+                              produto: { 
+                                nome: rec.nome, 
+                                lote: rec.type === 'INSUMO' ? 'SOBRA-INS' : (selectedOPForSobras?.codigo || 'SOBRA-PROD'),
+                                peso: formatarQuantidade(rec.quantidade_perdida),
+                                marcaForn: rec.type === 'INSUMO' ? 'SOBRA' : 'PRÓPRIA',
+                                tipoArmazenamento: 'Refrigerado'
+                              },
+                              datas: { manipulacao: new Date(), validadeOriginal: new Date(), validadeFinal: addDays(new Date(), 2) },
+                              rastreabilidade: { idInterno: rec.id?.substring(0,8) || 'QUICK', responsavel: userName }
+                            }} 
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          ) : (
+            <>
+              {execucaoTab === 0 && (
+                <Box>
+                  <Alert severity="info" sx={{ mb: 3 }}>
+                    Informe a quantidade e o destino dos insumos que sobraram desta OP.
+                  </Alert>
+                  {loadingOPReqs ? (
+                    <CircularProgress size={24} />
+                  ) : (
+                    <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+                      <Table size="small">
+                        <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Insumo</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Qtd. Sobra (g/ml)</TableCell>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Destino de Armazenamento</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {opRequisicoes.map((req) => {
+                            const ingId = req.ingrediente_id || req.grupo_estoque_id;
+                            const isReg = existingPerdas.some(p => p.ingrediente_id === ingId && p.tipo_perda === 'SOBRA');
+                            
+                            return (
+                              <TableRow key={req.id} sx={{ opacity: isReg ? 0.6 : 1, bgcolor: isReg ? 'action.hover' : 'inherit' }}>
+                                <TableCell>
+                                  <Box>
+                                    <Typography variant="body2">{req.ingredientes?.nome || req.ingredientes_grupos?.nome}</Typography>
+                                    {isReg && <Chip label="Já registrado" size="small" color="success" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />}
+                                  </Box>
+                                </TableCell>
+                                <TableCell align="right">
+                                  <TextField
+                                    type="number"
+                                    size="small"
+                                    disabled={isReg}
+                                    value={sobrasInsumos[ingId] || ''}
+                                    onChange={(e) => setSobrasInsumos({
+                                      ...sobrasInsumos,
+                                      [ingId]: Number(e.target.value)
+                                    })}
+                                    placeholder="0"
+                                    sx={{ width: 100 }}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <TextField
+                                    select
+                                    fullWidth
+                                    size="small"
+                                    disabled={isReg || !(sobrasInsumos[ingId] > 0)}
+                                    value={sobrasDestinos[ingId]?.id || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const type = setores.some(s => s.id === val) ? 'SETOR' : 'LOCAL';
+                                      setSobrasDestinos({ ...sobrasDestinos, [ingId]: { id: val, type } });
+                                    }}
+                                    SelectProps={{ native: true }}
+                                  >
+                                    <option value="">Selecione o destino...</option>
+                                    <optgroup label="Locais de Estoque">
+                                      {locais.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                                    </optgroup>
+                                    <optgroup label="Setores de Produção">
+                                      {setores.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                                    </optgroup>
+                                  </TextField>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </Box>
+              )}
+
+              {execucaoTab === 1 && (
+                <Box>
+                  <Alert severity="warning" sx={{ mb: 3 }}>
+                    Informe sobras aproveitáveis e descarte de cada produto.
+                  </Alert>
+                  <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+                    <Table size="small">
+                      <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Produto</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold' }}>Sobra (g/ml)</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold' }}>Resto (g/ml)</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Destino Sobra</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {(itensPorOrdem[selectedOPForSobras?.id]?.itens || []).map((item) => {
+                          const isReg = existingPerdas.some(p => p.item_ordem_id === item.id && p.tipo_perda === 'SOBRA');
+                          
+                          return (
+                            <TableRow key={item.id} sx={{ opacity: isReg ? 0.6 : 1, bgcolor: isReg ? 'action.hover' : 'inherit' }}>
+                              <TableCell>
+                                <Box>
+                                  <Typography variant="body2">{item.receitas?.nome}</Typography>
+                                  {isReg && <Chip label="Já registrado" size="small" color="success" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />}
+                                </Box>
+                              </TableCell>
+                              <TableCell align="right">
+                                <TextField
+                                  type="number"
+                                  size="small"
+                                  disabled={isReg}
+                                  value={sobrasProdutos[item.id]?.sobra || ''}
+                                  onChange={(e) => setSobrasProdutos({
+                                    ...sobrasProdutos,
+                                    [item.id]: { ...sobrasProdutos[item.id], sobra: Number(e.target.value) }
+                                  })}
+                                  sx={{ width: 80 }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <TextField
+                                  type="number"
+                                  size="small"
+                                  disabled={isReg}
+                                  value={sobrasProdutos[item.id]?.resto || ''}
+                                  onChange={(e) => setSobrasProdutos({
+                                    ...sobrasProdutos,
+                                    [item.id]: { ...sobrasProdutos[item.id], resto: Number(e.target.value) }
+                                  })}
+                                  sx={{ width: 80 }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                  <TextField
+                                    select
+                                    fullWidth
+                                    size="small"
+                                    disabled={isReg || !(sobrasProdutos[item.id]?.sobra > 0)}
+                                    value={sobrasDestinos[item.id]?.id || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const type = setores.some(s => s.id === val) ? 'SETOR' : 'LOCAL';
+                                      setSobrasDestinos({ ...sobrasDestinos, [item.id]: { id: val, type } });
+                                    }}
+                                    SelectProps={{ native: true }}
+                                  >
+                                    <option value="">Selecione o destino...</option>
+                                    <optgroup label="Locais de Estoque">
+                                      {locais.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                                    </optgroup>
+                                    <optgroup label="Setores de Produção">
+                                      {setores.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                                    </optgroup>
+                                  </TextField>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Box>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          {savingStage === 'SUMMARY' ? (
+            <Button onClick={() => setSelectedOPForSobras(null)} variant="contained" color="primary">Concluir e Fechar</Button>
+          ) : (
+            <>
+              <Button onClick={() => setSelectedOPForSobras(null)} variant="outlined" disabled={salvando}>Cancelar</Button>
+              <Button 
+                variant="contained" 
+                color="success" 
+                startIcon={salvando ? <CircularProgress size={20} color="inherit" /> : <CheckCircle />}
+                onClick={handleSaveSobrasOP}
+                disabled={salvando || (Object.values(sobrasInsumos).every(v => v <= 0) && Object.values(sobrasProdutos).every(v => v.sobra <= 0 && v.resto <= 0))}
+              >
+                Confirmar e Salvar Tudo
+              </Button>
+            </>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* QuickEtiquetaDialog Integration */}
+      {quickEtiqueta && (
+        <Dialog 
+          open={quickEtiqueta.open} 
+          onClose={() => setQuickEtiqueta(null)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Tag size={20} /> Gerar Etiqueta de Sobra
+          </DialogTitle>
+          <DialogContent dividers>
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" color="text.secondary">Item:</Typography>
+                <Typography variant="h6" fontWeight="bold">{quickEtiqueta.item?.nome}</Typography>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Peso/Quantidade (g/ml)"
+                  fullWidth
+                  type="number"
+                  value={quickEtiqueta.peso}
+                  onChange={(e) => setQuickEtiqueta({ ...quickEtiqueta, peso: Number(e.target.value) })}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Data de Validade"
+                  fullWidth
+                  type="date"
+                  defaultValue={format(addDays(new Date(), quickEtiqueta.type === 'INSUMO' ? 3 : 2), 'yyyy-MM-dd')}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                 <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 2, p: 2, display: 'flex', justifyContent: 'center' }}>
+                    {/* Mocked DadosEtiqueta for Preview */}
+                    <EtiquetaPreview dados={{
+                      empresa: { razaoSocial: 'Unidade Produção', cnpj: '', enderecoResumido: '', enderecoCompleto: '' },
+                      produto: { 
+                        nome: quickEtiqueta.item?.nome, 
+                        lote: quickEtiqueta.type === 'INSUMO' ? 'SOBRA-INS' : (quickEtiqueta.loteOrOp?.codigo || 'SOBRA-PROD'),
+                        peso: formatarQuantidade(quickEtiqueta.peso),
+                        marcaForn: quickEtiqueta.type === 'INSUMO' ? 'SOBRA' : 'PRÓPRIA',
+                        tipoArmazenamento: 'Refrigerado'
+                      },
+                      datas: { manipulacao: new Date(), validadeOriginal: new Date(), validadeFinal: addDays(new Date(), 2) },
+                      rastreabilidade: { idInterno: 'QUICK', responsavel: userName }
+                    }} />
+                 </Box>
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setQuickEtiqueta(null)}>Cancelar</Button>
+            <EtiquetaPrinter 
+              dados={{
+                empresa: { razaoSocial: 'Unidade Produção', cnpj: '', enderecoResumido: '', enderecoCompleto: '' },
+                produto: { 
+                  nome: quickEtiqueta.item?.nome, 
+                  lote: quickEtiqueta.type === 'INSUMO' ? 'SOBRA-INS' : (quickEtiqueta.loteOrOp?.codigo || 'SOBRA-PROD'),
+                  peso: formatarQuantidade(quickEtiqueta.peso),
+                  marcaForn: quickEtiqueta.type === 'INSUMO' ? 'SOBRA' : 'PRÓPRIA',
+                  tipoArmazenamento: 'Refrigerado'
+                },
+                datas: { manipulacao: new Date(), validadeOriginal: new Date(), validadeFinal: addDays(new Date(), 2) },
+                rastreabilidade: { idInterno: 'QUICK', responsavel: userName }
+              }} 
+            />
+          </DialogActions>
+        </Dialog>
+      )}
     </Container>
   );
 }

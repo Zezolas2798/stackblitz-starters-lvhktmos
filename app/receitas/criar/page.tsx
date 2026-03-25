@@ -9,7 +9,7 @@ import {
   Autocomplete, IconButton, Alert, Grid, List, ListItem, ListItemText,
   Select, MenuItem, FormControl, InputLabel, Chip, InputAdornment, Stack,
   Dialog, DialogTitle, DialogContent, DialogActions, Tooltip, Divider,
-  useTheme, alpha
+  useTheme, alpha, Tabs, Tab
 } from '@mui/material';
 
 // Ícones Modernos
@@ -46,15 +46,18 @@ function getOrdemGrupo(nomeGrupo: string): number {
 interface ItemDeBusca {
   id: string;
   nome: string;
-  tipo: 'ingrediente' | 'receita' | 'aditivo_mestre';
+  tipo: 'ingrediente' | 'receita' | 'aditivo_mestre' | 'material';
   grupo: string;
   fonte?: string | null;
   aditivoData?: { ins: string; funcao: string | null; };
+  preco_ultima_compra?: number;
+  peso_unitario_g?: number;
+  unidade_medida?: string;
 }
 
 interface ItemComposicao {
   item_id: string;
-  item_type: 'ingrediente' | 'receita';
+  item_type: 'ingrediente' | 'receita' | 'material';
   nome: string;
   peso_bruto_g: number;
   peso_liquido_g: number;
@@ -64,6 +67,8 @@ interface ItemComposicao {
   fonte?: string | null;
   is_aditivo?: boolean;
   ins_code?: string | null;
+  preco_ultima_compra?: number;
+  peso_unitario_g?: number;
 }
 
 interface AditivoMestre {
@@ -98,6 +103,9 @@ function CriarEditarReceitaComponent() {
   const [novoTipoNome, setNovoTipoNome] = useState('');
 
   const [mapaAlergenicosIngredientes, setMapaAlergenicosIngredientes] = useState<Record<string, number[]>>({});
+
+  // UI State
+  const [tabValue, setTabValue] = useState(0);
 
   // Form Receita
   const [nomeReceita, setNomeReceita] = useState('');
@@ -150,8 +158,8 @@ function CriarEditarReceitaComponent() {
     setError(null);
     try {
       // NOTA: Adicionei 'alergenicos_ids' na query de ingredientes para suportar o novo formato
-      const [ingPromise, recPromise, catPromise, medPromise, alergenicosPromise, ingAlergLinkPromise, gruposPopPromise, tiposRecPromise, aditivosMestrePromise] = await Promise.all([
-        (supabase as any).from('ingredientes').select('id, nome, fonte, ins_code, tipo_ingrediente, funcao_aditivo, alergenicos_ids').or(`cliente_id.eq.${activeClientId},cliente_id.is.null`).order('nome'),
+      const [ingPromise, recPromise, catPromise, medPromise, alergenicosPromise, ingAlergLinkPromise, gruposPopPromise, tiposRecPromise, aditivosMestrePromise, materiaisPromise] = await Promise.all([
+        (supabase as any).from('ingredientes').select('id, nome, fonte, ins_code, tipo_ingrediente, funcao_aditivo, alergenicos_ids, preco_ultima_compra, peso_unitario_g').or(`cliente_id.eq.${activeClientId},cliente_id.is.null`).is('deleted_at', null).order('nome'),
         (supabase as any).from('receitas').select('id, nome').eq('cliente_id', activeClientId!).neq('id', editingId || '00000000-0000-0000-0000-000000000000').order('nome'),
         (supabase as any).from('anvisa_categorias').select('*').order('nome_produto'),
         (supabase as any).from('anvisa_medidas_caseiras').select('nome').order('nome'),
@@ -159,7 +167,8 @@ function CriarEditarReceitaComponent() {
         (supabase as any).from('ingrediente_alergenicos').select('ingrediente_id, alergenico_id, contem, contem_derivado'),
         (supabase as any).from('anvisa_grupos_populacionais').select('*').order('id'),
         (supabase as any).from('tipos_receita').select('*').eq('cliente_id', activeClientId!).order('nome'),
-        (supabase as any).from('anvisa_aditivos').select('*').order('ins')
+        (supabase as any).from('anvisa_aditivos').select('*').order('ins'),
+        (supabase as any).from('materiais').select('*').eq('cliente_id', activeClientId!).order('nome')
       ]);
 
       if (ingPromise.error) throw ingPromise.error;
@@ -202,11 +211,24 @@ function CriarEditarReceitaComponent() {
           nome: ing.nome,
           tipo: 'ingrediente',
           grupo: 'Meus Ingredientes',
-          fonte: ing.fonte
+          fonte: ing.fonte,
+          preco_ultima_compra: Number(ing.preco_ultima_compra || 0),
+          peso_unitario_g: Number(ing.peso_unitario_g || 1000)
         }));
 
       const receitasFormatadas: ItemDeBusca[] = (recPromise.data || []).map((rec: any) => ({
         id: rec.id, nome: rec.nome, tipo: 'receita', grupo: 'Minhas Receitas (Sub-receitas)', fonte: 'Própria'
+      }));
+
+      const materiaisFormatados: ItemDeBusca[] = (materiaisPromise.data || []).map((mat: any) => ({
+        id: mat.id,
+        nome: mat.nome,
+        tipo: 'material',
+        grupo: 'Embalagens e Materiais',
+        fonte: 'Própria',
+        preco_ultima_compra: Number(mat.preco_ultima_compra || 0),
+        peso_unitario_g: 1, // Não se aplica divisão
+        unidade_medida: mat.unidade_medida || 'un'
       }));
 
       const aditivosList = aditivosMestrePromise.data || [];
@@ -222,7 +244,7 @@ function CriarEditarReceitaComponent() {
           aditivoData: { ins: ad.ins, funcao: ad.funcao_principal }
         }));
 
-      setItensDeBusca([...ingredientesFormatados, ...receitasFormatadas, ...aditivosFormatados]);
+      setItensDeBusca([...ingredientesFormatados, ...receitasFormatadas, ...materiaisFormatados, ...aditivosFormatados]);
       setAnvisaCategorias(catPromise.data as AnvisaCategoria[]);
       setMedidasCaseirasMasterList(medPromise.data?.map((m: { nome: string }) => m.nome) || []);
       setListaMestraAlergenicos((alergenicosPromise.data || []) as AnvisaAlergenico[]);
@@ -274,7 +296,7 @@ function CriarEditarReceitaComponent() {
 
         if (recData.composicao_receitas) {
           const composicaoFormatada: ItemComposicao[] = recData.composicao_receitas.map((item: any) => {
-            let itemInfo = [...ingredientesFormatados, ...receitasFormatadas, ...aditivosFormatados].find(i => i.id === item.item_id);
+            let itemInfo = [...ingredientesFormatados, ...receitasFormatadas, ...materiaisFormatados, ...aditivosFormatados].find(i => i.id === item.item_id);
             let isAditivo = false;
             let insCode = null;
 
@@ -287,6 +309,8 @@ function CriarEditarReceitaComponent() {
                   tipo: 'ingrediente',
                   grupo: 'Aditivo Cadastrado',
                   fonte: ingRaw.fonte,
+                  preco_ultima_compra: Number(ingRaw.preco_ultima_compra || 0),
+                  peso_unitario_g: Number(ingRaw.peso_unitario_g || 1000),
                   aditivoData: {
                     ins: ingRaw.ins_code as string,
                     funcao: ingRaw.funcao_aditivo as string
@@ -308,7 +332,9 @@ function CriarEditarReceitaComponent() {
               peso_liquido_display: item.peso_liquido_g,
               fonte: itemInfo?.fonte,
               is_aditivo: isAditivo,
-              ins_code: insCode
+              ins_code: insCode,
+              preco_ultima_compra: itemInfo?.preco_ultima_compra,
+              peso_unitario_g: itemInfo?.peso_unitario_g
             }
           }
           );
@@ -455,7 +481,7 @@ function CriarEditarReceitaComponent() {
     }
 
     let realItemId = itemSelecionado.id;
-    let realItemType: 'ingrediente' | 'receita';
+    let realItemType: 'ingrediente' | 'receita' | 'material';
     const funcaoFinal = funcaoAditivoSelecionada || funcoesAditivoDisponiveis[0] || 'Aditivo';
 
     if (ehAditivoMestre && itemSelecionado.aditivoData) {
@@ -497,7 +523,7 @@ function CriarEditarReceitaComponent() {
       realItemId = ingredienteId;
       realItemType = 'ingrediente';
     } else {
-      realItemType = itemSelecionado.tipo as 'ingrediente' | 'receita';
+      realItemType = itemSelecionado.tipo as 'ingrediente' | 'receita' | 'material';
     }
 
     let valorBruto = typeof pesoBruto === 'number' ? pesoBruto : 0;
@@ -516,7 +542,9 @@ function CriarEditarReceitaComponent() {
       peso_liquido_display: pesoLiquido,
       fonte: itemSelecionado.fonte,
       is_aditivo: ehAditivoMestre || ehAditivoEdicao,
-      ins_code: itemSelecionado.aditivoData?.ins || composicao[editingItemIndex!]?.ins_code
+      ins_code: itemSelecionado.aditivoData?.ins || composicao[editingItemIndex!]?.ins_code,
+      preco_ultima_compra: itemSelecionado.preco_ultima_compra,
+      peso_unitario_g: itemSelecionado.peso_unitario_g || 1000
     };
 
     if (editingItemIndex !== null) {
@@ -552,14 +580,14 @@ function CriarEditarReceitaComponent() {
             .then(({ data }: any) => { if (data) setFuncaoAditivoSelecionada(data.funcao_aditivo || ''); });
         }
       } else {
-        const tipoCompativel = (item.item_type === 'ingrediente' || item.item_type === 'receita') ? item.item_type : 'ingrediente';
+        const tipoCompativel = (item.item_type === 'ingrediente' || item.item_type === 'receita' || item.item_type === 'material') ? item.item_type : 'ingrediente';
         itemInfo = { id: item.item_id, nome: item.nome, tipo: tipoCompativel, grupo: 'Item', fonte: item.fonte };
       }
     }
-    setItemSelecionado(itemInfo || null);
+    setItemSelecionado(itemInfo as ItemDeBusca || null);
     setPesoBruto(item.peso_bruto_display);
     setPesoLiquido(item.peso_liquido_display);
-    setUnidadeIngrediente(item.unidade);
+    setUnidadeIngrediente(item.unidade || 'g');
   }
 
   function handleDeleteItem(index: number) {
@@ -649,6 +677,18 @@ function CriarEditarReceitaComponent() {
   if (error) return <Container sx={{ mt: 5 }}><Alert severity="error">{error}</Alert></Container>;
   if (!activeClientId) return <Container><Alert severity="warning" sx={{ mt: 2 }}>Selecione um Cliente.</Alert></Container>;
 
+  const custoTotalParcial = composicao.reduce((acc, item) => {
+    if (item.item_type === 'material' && item.preco_ultima_compra) {
+      return acc + (item.peso_liquido_g * item.preco_ultima_compra);
+    }
+    if (item.preco_ultima_compra && item.peso_unitario_g && item.peso_liquido_g > 0) {
+      return acc + (item.peso_liquido_g / item.peso_unitario_g) * item.preco_ultima_compra;
+    }
+    return acc;
+  }, 0);
+
+  const formatoMoeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 12 }}>
       {/* HEADER */}
@@ -659,229 +699,321 @@ function CriarEditarReceitaComponent() {
         </Typography>
       </Box>
 
-      <Box component="form" onSubmit={handleSalvarReceita} noValidate>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs value={tabValue} onChange={(_: React.SyntheticEvent, val: number) => setTabValue(val)} variant="scrollable" scrollButtons="auto" textColor="primary" indicatorColor="primary">
+          <Tab label="1. Identificação" />
+          <Tab label="2. Ingredientes" />
+          <Tab label="3. Embalagens" />
+          <Tab label="4. Parâmetros & Porção" />
+          <Tab label="5. Riscos & Alérgenos" />
+        </Tabs>
+      </Box>
 
-        <Grid container spacing={3}>
+      <Box component="form" onSubmit={handleSalvarReceita} noValidate sx={{ mb: 12 }}>
 
-          {/* COLUNA ESQUERDA: ENGENHARIA CULINÁRIA */}
-          <Grid item xs={12} lg={7}>
-            <Paper elevation={0} sx={{ p: 3, mb: 3, border: '1px solid #e0e0e0', borderRadius: 2 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main', fontWeight: 700 }}>
-                <ChefHat size={20} /> Identificação e Preparo
-              </Typography>
-              <Stack spacing={3}>
-                <TextField label="Nome da Receita" fullWidth value={nomeReceita} onChange={(e) => setNomeReceita(e.target.value)} required placeholder="Ex: Bolo de Chocolate s/ Glúten" />
+        {/* ABA 0: IDENTIFICAÇÃO E PREPARO */}
+        {tabValue === 0 && (
+          <Paper elevation={0} sx={{ p: 4, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main', fontWeight: 700, mb: 3 }}>
+              <ChefHat size={20} /> Identificação e Preparo
+            </Typography>
+            <Grid container spacing={4}>
+              <Grid item xs={12} md={8}>
+                <Stack spacing={3}>
+                  <TextField label="Nome da Receita" fullWidth value={nomeReceita} onChange={(e) => setNomeReceita(e.target.value)} required placeholder="Ex: Bolo de Chocolate s/ Glúten" />
 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Autocomplete
-                    options={tiposReceita}
-                    getOptionLabel={(option) => option.nome}
-                    value={selectedTipoReceita}
-                    onChange={(_, newValue) => setSelectedTipoReceita(newValue)}
-                    isOptionEqualToValue={(option, value) => option.id === value.id}
-                    renderInput={(params) => <TextField {...params} label="Categoria Interna (Ex: Sobremesas)" placeholder="Selecione ou crie..." />}
-                    fullWidth
-                  />
-                  <Tooltip title="Gerenciar Categorias">
-                    <IconButton onClick={() => setOpenManageTypes(true)} sx={{ bgcolor: 'action.hover' }}><Settings size={18} /></IconButton>
-                  </Tooltip>
-                </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Autocomplete
+                      options={tiposReceita}
+                      getOptionLabel={(option) => option.nome}
+                      value={selectedTipoReceita}
+                      onChange={(_, newValue) => setSelectedTipoReceita(newValue)}
+                      isOptionEqualToValue={(option, value) => option.id === value.id}
+                      renderInput={(params) => <TextField {...params} label="Categoria Interna (Ex: Sobremesas)" placeholder="Selecione ou crie..." />}
+                      fullWidth
+                    />
+                    <Tooltip title="Gerenciar Categorias">
+                      <IconButton onClick={() => setOpenManageTypes(true)} sx={{ bgcolor: 'action.hover' }}><Settings size={18} /></IconButton>
+                    </Tooltip>
+                  </Box>
 
-                <TextField label="Modo de Preparo" multiline rows={6} fullWidth value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Descreva o passo a passo..." />
-
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, bgcolor: 'background.default', borderRadius: 2 }}>
-                  <Button component="label" variant="outlined" startIcon={<ImageIcon />}>
-                    {fotoFile ? 'Alterar Foto' : 'Adicionar Foto'}
+                  <TextField label="Modo de Preparo" multiline rows={8} fullWidth value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Descreva o passo a passo..." />
+                </Stack>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Typography variant="subtitle2" gutterBottom fontWeight="bold">Foto do Produto</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, p: 3, bgcolor: 'background.default', borderRadius: 2, border: '1px dashed #ccc' }}>
+                  {(fotoFile || fotoUrlAtual) ? (
+                    <Box component="img" src={fotoFile ? URL.createObjectURL(fotoFile) : fotoUrlAtual!} alt="Preview" sx={{ width: '100%', maxHeight: 250, objectFit: 'cover', borderRadius: 1, border: '1px solid #ddd' }} />
+                  ) : (
+                    <Box sx={{ width: '100%', height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover', borderRadius: 1 }}>
+                      <ImageIcon size={48} color="#ccc" />
+                    </Box>
+                  )}
+                  <Button component="label" variant="outlined" startIcon={<PlusCircle size={16} />} fullWidth>
+                    {fotoFile || fotoUrlAtual ? 'Alterar Foto' : 'Adicionar Foto'}
                     <input type="file" hidden accept="image/*" onChange={(e) => setFotoFile(e.target.files ? e.target.files[0] : null)} />
                   </Button>
-                  {(fotoFile || fotoUrlAtual) && (
-                    <Box component="img" src={fotoFile ? URL.createObjectURL(fotoFile) : fotoUrlAtual!} alt="Preview" sx={{ height: 60, borderRadius: 1, border: '1px solid #ddd' }} />
-                  )}
                 </Box>
-              </Stack>
-            </Paper>
+              </Grid>
+            </Grid>
+          </Paper>
+        )}
 
-            <Paper elevation={0} sx={{ p: 3, mb: 3, border: '1px solid #e0e0e0', borderRadius: 2 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main', fontWeight: 700 }}>
-                <Scale size={20} /> Composição (Ingredientes)
+        {/* ABA 1: INGREDIENTES */}
+        {tabValue === 1 && (
+          <Paper elevation={0} sx={{ p: 4, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main', fontWeight: 700 }}>
+                <Scale size={20} /> Composição de Insumos
               </Typography>
+              {custoTotalParcial > 0 && (
+                <Chip label={`Custo Parcial (Insumos): ${formatoMoeda.format(custoTotalParcial)}`} color="primary" variant="outlined" />
+              )}
+            </Box>
 
-              <Box sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05), p: 2, borderRadius: 2, mb: 3, border: `1px dashed ${alpha(theme.palette.primary.main, 0.3)}` }}>
-                <Typography variant="subtitle2" gutterBottom color="primary.dark" fontWeight="bold">{editingItemIndex !== null ? 'EDITANDO ITEM' : 'ADICIONAR ITEM'}</Typography>
+            <Grid container spacing={4}>
+              <Grid item xs={12} md={5}>
+                <Box sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05), p: 3, borderRadius: 2, border: `1px dashed ${alpha(theme.palette.primary.main, 0.3)}` }}>
+                  <Typography variant="subtitle2" gutterBottom color="primary.dark" fontWeight="bold">{editingItemIndex !== null ? 'EDITANDO INSUMO' : 'ADICIONAR INSUMO'}</Typography>
+                  <Autocomplete
+                    options={itensDeBusca.filter(i => i.tipo !== 'material').sort((a, b) => -a.grupo.localeCompare(b.grupo))}
+                    groupBy={(option) => option.grupo}
+                    getOptionLabel={(option) => option.nome}
+                    value={itemSelecionado}
+                    onChange={(_, newValue) => {
+                      setItemSelecionado(newValue);
+                      setFuncoesAditivoDisponiveis([]);
+                      setFuncaoAditivoSelecionada('');
+                      if (newValue?.tipo === 'aditivo_mestre' && newValue.aditivoData?.funcao) {
+                        const funcs = newValue.aditivoData.funcao.split('/').map(f => f.trim());
+                        if (funcs.length > 1) setFuncoesAditivoDisponiveis(funcs);
+                        else { setFuncoesAditivoDisponiveis([funcs[0]]); setFuncaoAditivoSelecionada(funcs[0]); }
+                      }
+                    }}
+                    renderInput={(params) => <TextField {...params} label="Buscar Insumo ou Receita" size="small" sx={{ bgcolor: 'background.paper' }} />}
+                    sx={{ mb: 2 }}
+                  />
 
-                <Autocomplete
-                  options={itensDeBusca.sort((a, b) => -a.grupo.localeCompare(b.grupo))}
-                  groupBy={(option) => option.grupo}
-                  getOptionLabel={(option) => option.nome}
-                  value={itemSelecionado}
-                  onChange={(_, newValue) => {
-                    setItemSelecionado(newValue);
-                    setFuncoesAditivoDisponiveis([]);
-                    setFuncaoAditivoSelecionada('');
-                    if (newValue?.tipo === 'aditivo_mestre' && newValue.aditivoData?.funcao) {
-                      const funcs = newValue.aditivoData.funcao.split('/').map(f => f.trim());
-                      if (funcs.length > 1) { setFuncoesAditivoDisponiveis(funcs); } else { setFuncoesAditivoDisponiveis([funcs[0]]); setFuncaoAditivoSelecionada(funcs[0]); }
-                    }
-                  }}
-                  renderInput={(params) => <TextField {...params} label="Buscar Ingrediente" size="small" sx={{ bgcolor: 'background.paper' }} InputProps={{ ...params.InputProps, startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> }} />}
-                  renderOption={(props, option) => (
-                    <li {...props}>
-                      <Box>
-                        <Typography variant="body2">{option.nome}</Typography>
-                        {option.tipo === 'aditivo_mestre' && <Chip label="Aditivo ANVISA" size="small" color="secondary" sx={{ height: 16, fontSize: '0.6rem' }} />}
-                      </Box>
-                    </li>
+                  {funcoesAditivoDisponiveis.length > 1 && (
+                    <FormControl fullWidth size="small" sx={{ mb: 2, bgcolor: '#fffbe6' }}>
+                      <InputLabel>Função Tecnológica</InputLabel>
+                      <Select value={funcaoAditivoSelecionada} label="Função Tecnológica" onChange={(e) => setFuncaoAditivoSelecionada(e.target.value)}>
+                        {funcoesAditivoDisponiveis.map(f => (<MenuItem key={f} value={f}>{f}</MenuItem>))}
+                      </Select>
+                    </FormControl>
                   )}
-                  sx={{ mb: 2 }}
-                />
 
-                {(funcoesAditivoDisponiveis.length > 1) && (
-                  <FormControl fullWidth size="small" sx={{ mb: 2, bgcolor: '#fffbe6' }}>
-                    <InputLabel>Função Tecnológica</InputLabel>
-                    <Select value={funcaoAditivoSelecionada} label="Função Tecnológica" onChange={(e) => setFuncaoAditivoSelecionada(e.target.value)}>
-                      {funcoesAditivoDisponiveis.map(f => (<MenuItem key={f} value={f}>{f}</MenuItem>))}
+                  <Grid container spacing={2}>
+                    <Grid item xs={6}><TextField label="Peso Bruto" type="number" value={pesoBruto} onChange={(e) => setPesoBruto(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
+                    <Grid item xs={6}><TextField label="Peso Líquido" type="number" value={pesoLiquido} onChange={(e) => setPesoLiquido(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
+                    <Grid item xs={12}>
+                      <FormControl fullWidth size="small" sx={{ bgcolor: 'background.paper' }}>
+                        <InputLabel>Unidade</InputLabel>
+                        <Select value={unidadeIngrediente} label="Unidade" onChange={(e) => setUnidadeIngrediente(e.target.value)}>
+                          <MenuItem value="g">gramas (g)</MenuItem>
+                          <MenuItem value="Kg">Quilos (Kg)</MenuItem>
+                          <MenuItem value="L">Litros (L)</MenuItem>
+                          <MenuItem value="ml">mililitros (ml)</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  </Grid>
+
+                  <Button variant="contained" onClick={handleAddItemOrUpdateItem} sx={{ mt: 2 }} fullWidth startIcon={<PlusCircle />}>
+                    {editingItemIndex !== null ? 'Atualizar Insumo' : 'Adicionar Insumo'}
+                  </Button>
+                  {editingItemIndex !== null && <Button onClick={resetIngredientForm} fullWidth sx={{ mt: 1 }}>Cancelar</Button>}
+                </Box>
+              </Grid>
+
+              <Grid item xs={12} md={7}>
+                <Typography variant="subtitle2" gutterBottom fontWeight="bold">Lista de Insumos</Typography>
+                <List dense sx={{ border: '1px solid #eee', borderRadius: 1, minHeight: 200 }}>
+                  {composicao.filter(i => i.item_type !== 'material').map((item, index) => {
+                    const originalIndex = composicao.findIndex(c => c === item);
+                    return (
+                      <ListItem key={index} divider secondaryAction={
+                        <>
+                          <IconButton size="small" onClick={() => handleStartEditItem(originalIndex)}><EditIcon fontSize="small" /></IconButton>
+                          <IconButton size="small" onClick={() => handleDeleteItem(originalIndex)} color="error"><DeleteIcon fontSize="small" /></IconButton>
+                        </>
+                      }>
+                        <ListItemText 
+                          primary={<Box sx={{ display: 'flex', gap: 1 }}>{item.nome} {item.is_aditivo && <Chip label="Aditivo" size="small" color="secondary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}</Box>} 
+                          secondary={`PB: ${item.peso_bruto_display}${item.unidade} | PL: ${item.peso_liquido_display}${item.unidade}`} 
+                        />
+                      </ListItem>
+                    );
+                  })}
+                  {composicao.filter(i => i.item_type !== 'material').length === 0 && (
+                    <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>Nenhum ingrediente adicionado ainda.</Box>
+                  )}
+                </List>
+              </Grid>
+            </Grid>
+          </Paper>
+        )}
+
+        {/* ABA 2: EMBALAGENS */}
+        {tabValue === 2 && (
+          <Paper elevation={0} sx={{ p: 4, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main', fontWeight: 700 }}>
+                <PlusCircle size={20} /> Detalhamento de Embalagens
+              </Typography>
+            </Box>
+
+            <Grid container spacing={4}>
+              <Grid item xs={12} md={5}>
+                <Box sx={{ bgcolor: alpha(theme.palette.secondary.main, 0.05), p: 3, borderRadius: 2, border: `1px dashed ${alpha(theme.palette.secondary.main, 0.3)}` }}>
+                  <Typography variant="subtitle2" gutterBottom color="secondary.dark" fontWeight="bold">{editingItemIndex !== null ? 'EDITANDO EMBALAGEM' : 'ADICIONAR EMBALAGEM'}</Typography>
+                  <Autocomplete
+                    options={itensDeBusca.filter(i => i.tipo === 'material').sort((a, b) => a.nome.localeCompare(b.nome))}
+                    getOptionLabel={(option) => option.nome}
+                    value={itemSelecionado}
+                    onChange={(_, newValue) => setItemSelecionado(newValue)}
+                    renderInput={(params) => <TextField {...params} label="Buscar Embalagem ou Material" size="small" sx={{ bgcolor: 'background.paper' }} />}
+                    sx={{ mb: 2 }}
+                  />
+
+                  <Grid container spacing={2}>
+                    <Grid item xs={6}><TextField label="Qtd/Peso Usado" type="number" value={pesoBruto} onChange={(e) => { setPesoBruto(e.target.value === '' ? '' : parseFloat(e.target.value)); setPesoLiquido(e.target.value === '' ? '' : parseFloat(e.target.value)); }} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
+                    <Grid item xs={6}>
+                      <FormControl fullWidth size="small" sx={{ bgcolor: 'background.paper' }}>
+                        <InputLabel>Unidade</InputLabel>
+                        <Select value={unidadeIngrediente} label="Unidade" onChange={(e) => setUnidadeIngrediente(e.target.value)}>
+                          <MenuItem value="un">un (unidades)</MenuItem>
+                          <MenuItem value="pct">pct (pacote)</MenuItem>
+                          <MenuItem value="cx">cx (caixa)</MenuItem>
+                          <MenuItem value="g">g (gramas)</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                  </Grid>
+
+                  <Button variant="contained" color="secondary" onClick={handleAddItemOrUpdateItem} sx={{ mt: 2 }} fullWidth startIcon={<PlusCircle />}>
+                    {editingItemIndex !== null ? 'Atualizar Item' : 'Adicionar à Ficha'}
+                  </Button>
+                  {editingItemIndex !== null && <Button onClick={resetIngredientForm} fullWidth sx={{ mt: 1 }}>Cancelar</Button>}
+                </Box>
+              </Grid>
+
+              <Grid item xs={12} md={7}>
+                <Typography variant="subtitle2" gutterBottom fontWeight="bold">Itens Não-Alimentícios (Embalagens)</Typography>
+                <List dense sx={{ border: '1px solid #eee', borderRadius: 1, minHeight: 200 }}>
+                  {composicao.filter(i => i.item_type === 'material').map((item, index) => {
+                    const originalIndex = composicao.findIndex(c => c === item);
+                    return (
+                      <ListItem key={index} divider secondaryAction={
+                        <>
+                          <IconButton size="small" onClick={() => handleStartEditItem(originalIndex)}><EditIcon fontSize="small" /></IconButton>
+                          <IconButton size="small" onClick={() => handleDeleteItem(originalIndex)} color="error"><DeleteIcon fontSize="small" /></IconButton>
+                        </>
+                      }>
+                        <ListItemText 
+                          primary={item.nome} 
+                          secondary={`Quantidade: ${item.peso_bruto_display}${item.unidade}`} 
+                        />
+                      </ListItem>
+                    );
+                  })}
+                  {composicao.filter(i => i.item_type === 'material').length === 0 && (
+                    <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>Nenhuma embalagem atrelada.</Box>
+                  )}
+                </List>
+              </Grid>
+            </Grid>
+          </Paper>
+        )}
+
+        {/* ABA 3: PARÂMETROS */}
+        {tabValue === 3 && (
+          <Paper elevation={0} sx={{ p: 4, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'warning.main', fontWeight: 700, mb: 3 }}>
+              <ScrollText size={20} /> Parâmetros de Redimento e Rotulagem
+            </Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Stack spacing={3}>
+                  <FormControl fullWidth>
+                    <InputLabel>Grupo de Alimentos ANVISA</InputLabel>
+                    <Select value={selectedGrupoAnvisa || ''} label="Grupo de Alimentos ANVISA" onChange={handleGrupoAnvisaChange}>
+                      {gruposAnvisaUnicos.map(g => (<MenuItem key={g} value={g}>{g}</MenuItem>))}
                     </Select>
                   </FormControl>
-                )}
 
-                <Grid container spacing={2}>
-                  <Grid item xs={4}>
-                    <TextField label="Peso Bruto" type="number" value={pesoBruto} onChange={(e) => setPesoBruto(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} />
+                  <Autocomplete
+                    options={categoriasFiltradasPorGrupo}
+                    getOptionLabel={(option) => option.nome_produto}
+                    value={selectedCategory}
+                    onChange={handleCategoryChange}
+                    disabled={!selectedGrupoAnvisa}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderInput={(params) => <TextField {...params} label="Categoria de Produto (RDC 723)" required />}
+                  />
+
+                  <Autocomplete
+                    options={gruposPopulacionais}
+                    getOptionLabel={(option) => option.nome}
+                    value={selectedGrupoPop}
+                    onChange={(_, newValue) => setSelectedGrupoPop(newValue)}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderInput={(params) => <TextField {...params} label="Grupo Populacional (IN 75)" required />}
+                  />
+                  <TextField label="Área do Painel Principal (cm²)" type="number" value={areaPainelCm2} onChange={(e) => setAreaPainelCm2(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth helperText="Para cálculo do tamanho fixo da lupa nutricional." />
+                </Stack>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Stack spacing={3} sx={{ p: 3, bgcolor: 'background.default', borderRadius: 2 }}>
+                  <Typography variant="subtitle2" fontWeight="bold">Rendimento e Medida Caseira</Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={6}>
+                      <TextField label="Rendimento Total" type="number" value={rendimentoTotal} onChange={(e) => setRendimentoTotal(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth InputProps={{ endAdornment: <InputAdornment position="end">{unidadeRendimento}</InputAdornment> }} />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField label="Peso Líquido Final (Embalagem)" type="number" value={pesoEmbalagem} onChange={(e) => setPesoEmbalagem(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField label="Porção Declarada" value={porcaoFinal} disabled fullWidth InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} helperText="Calculado baseado no RDC" />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Estado Físico</InputLabel>
+                        <Select value={estadoAlimento} label="Estado Físico" onChange={(e) => setEstadoAlimento(e.target.value as any)}>
+                          <MenuItem value="solido">Sólido</MenuItem>
+                          <MenuItem value="liquido">Líquido</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
                   </Grid>
-                  <Grid item xs={4}>
-                    <TextField label="Peso Líquido" type="number" value={pesoLiquido} onChange={(e) => setPesoLiquido(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} />
-                  </Grid>
-                  <Grid item xs={4}>
-                    <FormControl fullWidth size="small" sx={{ bgcolor: 'background.paper' }}>
-                      <InputLabel>Unidade</InputLabel>
-                      <Select value={unidadeIngrediente} label="Unidade" onChange={(e) => setUnidadeIngrediente(e.target.value)}>
-                        <MenuItem value="g">g</MenuItem>
-                        <MenuItem value="Kg">Kg</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                </Grid>
 
-                <Button variant="contained" onClick={handleAddItemOrUpdateItem} sx={{ mt: 2 }} fullWidth startIcon={<PlusCircle />}>
-                  {editingItemIndex !== null ? 'Atualizar Item' : 'Adicionar à Receita'}
-                </Button>
-                {editingItemIndex !== null && <Button onClick={resetIngredientForm} fullWidth sx={{ mt: 1 }}>Cancelar</Button>}
-              </Box>
+                  <Autocomplete
+                    freeSolo
+                    options={medidasCaseirasFiltradas}
+                    value={medidaCaseiraNome}
+                    onInputChange={(_, newVal) => setMedidaCaseiraNome(newVal)}
+                    disabled={!selectedCategory}
+                    renderInput={(params) => <TextField {...params} label="Medida Caseira" required placeholder="Ex: 1 colher de sopa" />}
+                  />
+                  <TextField label="Peso da Medida Caseira" type="number" value={medidaCaseiraPesoG} onChange={(e) => setMedidaCaseiraPesoG(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} />
+                </Stack>
+              </Grid>
+            </Grid>
+          </Paper>
+        )}
 
-              <List dense sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid #eee' }}>
-                {composicao.map((item, index) => (
-                  <ListItem key={index} divider secondaryAction={
-                    <>
-                      <IconButton size="small" onClick={() => handleStartEditItem(index)}><EditIcon fontSize="small" /></IconButton>
-                      <IconButton size="small" onClick={() => handleDeleteItem(index)} color="error"><DeleteIcon fontSize="small" /></IconButton>
-                    </>
-                  }>
-                    <ListItemText
-                      primary={
-                        <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2" fontWeight="600">{item.nome}</Typography>
-                          {item.is_aditivo && <Chip icon={<FlaskConical size={10} />} label="Aditivo" size="small" color="secondary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}
-                        </Box>
-                      }
-                      secondary={
-                        <Typography variant="caption" color="text.secondary">
-                          PB: {item.peso_bruto_display}g | PL: {item.peso_liquido_display}g
-                        </Typography>
-                      }
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          </Grid>
-
-          {/* COLUNA DIREITA: COMPLIANCE E ROTULAGEM */}
-          <Grid item xs={12} lg={5}>
-            <Paper elevation={0} sx={{ p: 3, mb: 3, border: '1px solid #e0e0e0', borderRadius: 2 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'warning.main', fontWeight: 700 }}>
-                <ScrollText size={20} /> Parâmetros
-              </Typography>
-              <Stack spacing={2.5}>
-
-                <FormControl fullWidth>
-                  <InputLabel>Grupo de Alimentos</InputLabel>
-                  <Select value={selectedGrupoAnvisa || ''} label="Grupo de Alimentos" onChange={handleGrupoAnvisaChange}>
-                    {gruposAnvisaUnicos.map(g => (<MenuItem key={g} value={g}>{g}</MenuItem>))}
-                  </Select>
-                </FormControl>
-
-                <Autocomplete
-                  options={categoriasFiltradasPorGrupo}
-                  getOptionLabel={(option) => option.nome_produto}
-                  value={selectedCategory}
-                  onChange={handleCategoryChange}
-                  disabled={!selectedGrupoAnvisa}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  renderInput={(params) => <TextField {...params} label="Categoria Específica" required placeholder="Selecione o produto..." />}
-                />
-
-                <Autocomplete
-                  options={gruposPopulacionais}
-                  getOptionLabel={(option) => option.nome}
-                  value={selectedGrupoPop}
-                  onChange={(_, newValue) => setSelectedGrupoPop(newValue)}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  renderInput={(params) => <TextField {...params} label="Grupo Populacional (IN 75)" required InputProps={{ ...params.InputProps, startAdornment: <InputAdornment position="start"><Users size={16} /></InputAdornment> }} />}
-                />
-
-                <Divider />
-                <Typography variant="subtitle2" fontWeight="bold">Rendimento & Porcionamento</Typography>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <TextField label="Rendimento Total" type="number" value={rendimentoTotal} onChange={(e) => setRendimentoTotal(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth InputProps={{ endAdornment: <InputAdornment position="end">{unidadeRendimento}</InputAdornment> }} />
-                  </Grid>
-                  <Grid item xs={6}>
-                    <TextField label="Peso Embalagem" type="number" value={pesoEmbalagem} onChange={(e) => setPesoEmbalagem(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth helperText="Peso Líquido Final" InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} />
-                  </Grid>
-                </Grid>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <TextField label="Porção Declarada" value={porcaoFinal} disabled fullWidth InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} helperText="Calculado" />
-                  </Grid>
-                  <Grid item xs={6}>
-                    <FormControl fullWidth>
-                      <InputLabel>Estado Físico</InputLabel>
-                      <Select value={estadoAlimento} label="Estado Físico" onChange={(e) => setEstadoAlimento(e.target.value as any)}>
-                        <MenuItem value="solido">Sólido</MenuItem>
-                        <MenuItem value="liquido">Líquido</MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                </Grid>
-
-                <Autocomplete
-                  freeSolo
-                  id="medida_caseira_nome"
-                  options={medidasCaseirasFiltradas}
-                  value={medidaCaseiraNome}
-                  onInputChange={(_, newVal) => setMedidaCaseiraNome(newVal)}
-                  onChange={(_, newVal) => setMedidaCaseiraNome(newVal)}
-                  disabled={!selectedCategory}
-                  renderInput={(params) => <TextField {...params} label="Medida Caseira" required helperText="Conforme sugestão da categoria" />}
-                />
-
-                <TextField label="Peso da Medida Caseira" type="number" value={medidaCaseiraPesoG} onChange={(e) => setMedidaCaseiraPesoG(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} />
-
-                <TextField label="Área do Painel Principal" type="number" value={areaPainelCm2} onChange={(e) => setAreaPainelCm2(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth helperText="Essencial para o tamanho das Lupas Frontais" InputProps={{ endAdornment: <InputAdornment position="end">cm²</InputAdornment> }} />
-              </Stack>
-            </Paper>
-
-            <Paper elevation={0} sx={{ p: 3, border: '1px solid #e0e0e0', borderRadius: 2, bgcolor: '#fff5f5', borderColor: '#feb2b2' }}>
-              <Typography variant="subtitle2" gutterBottom color="error.main" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <AlertTriangle size={18} /> Risco de Contaminação Cruzada
-              </Typography>
-              <Typography variant="caption" display="block" sx={{ mb: 2 }}>
-                Selecione os alérgenos que <strong>não fazem parte da receita</strong>, mas que são manipulados na mesma área.
-              </Typography>
-
-              <Autocomplete
+        {/* ABA 4: RISCOS */}
+        {tabValue === 4 && (
+          <Paper elevation={0} sx={{ p: 4, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main', fontWeight: 700, mb: 2 }}>
+              <AlertTriangle size={20} /> Risco de Contaminação Cruzada
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 3, color: 'text.secondary' }}>
+              Declare aqui os alérgenos que **não estão nos ingredientes**, mas que podem estar presentes por contato no ambiente de produção.
+            </Typography>
+            <Autocomplete
                 multiple
                 disableCloseOnSelect
                 options={opcoesRiscoDisponiveis.length > 0 ? [{ id: -1, nome: "✅ SELECIONAR TODOS OS RISCOS" }, ...opcoesRiscoDisponiveis] : []}
@@ -896,17 +1028,17 @@ function CriarEditarReceitaComponent() {
                   const { key, ...tagProps } = getTagProps({ index });
                   return <Chip key={option.id} variant="outlined" label={option.nome} color="error" size="small" {...tagProps} />;
                 })}
-                renderInput={(params) => <TextField {...params} label="Selecione os riscos..." placeholder="Ex: Trigo, Leite" sx={{ bgcolor: 'background.paper' }} />}
+                renderInput={(params) => <TextField {...params} label="Alérgenos em Risco" placeholder="Ex: Trigo, Leite..." />}
+                fullWidth
               />
-            </Paper>
-          </Grid>
-        </Grid>
+          </Paper>
+        )}
 
         {/* STICKY FOOTER ACTION BAR */}
         <Paper elevation={4} sx={{ position: 'fixed', bottom: 0, left: { md: 280, xs: 0 }, right: 0, p: 2, bgcolor: 'background.paper', borderTop: '1px solid #e0e0e0', zIndex: 1100, display: 'flex', justifyContent: 'flex-end', gap: 2, alignItems: 'center' }}>
-          <Button variant="text" color="inherit" onClick={() => router.push('/receitas')}>Cancelar</Button>
+          <Button variant="text" color="inherit" onClick={() => router.push('/receitas')}>Descartar</Button>
           <Button type="submit" variant="contained" size="large" sx={{ px: 4, py: 1.5, fontSize: '1rem' }} startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : <Save />} disabled={isSubmitting}>
-            {isSubmitting ? 'Salvando...' : 'Salvar Ficha Técnica'}
+            {isSubmitting ? 'Gravando...' : 'Salvar Alterações'}
           </Button>
         </Paper>
 

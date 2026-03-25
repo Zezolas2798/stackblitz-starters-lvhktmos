@@ -12,7 +12,8 @@ import {
   Tabs, Tab
 } from '@mui/material';
 import {
-  Save, Thermometer, Scale, FileText, MapPin, Plus, History, PackageCheck, CheckCircle, ChevronLeft, Copy
+  Save, Thermometer, Scale, FileText, MapPin, Plus, History, PackageCheck, CheckCircle, ChevronLeft, Copy,
+  Package, Archive, Box as BoxIcon, Shield, User, Activity, Droplets, Wrench
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -39,8 +40,11 @@ export default function EntradaEstoquePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [termoBuscaIngrediente, setTermoBuscaIngrediente] = useState('');
   const [ingredientes, setIngredientes] = useState<any[]>([]);
+  const [materiais, setMateriais] = useState<any[]>([]); // Novo: Materiais
   const [locaisDisponiveis, setLocaisDisponiveis] = useState<any[]>([]);
   const [categoriasDisponiveis, setCategoriasDisponiveis] = useState<any[]>([]);
+  
+  const [categoriaPrincipal, setCategoriaPrincipal] = useState<'ALIMENTOS' | 'EMBALAGENS' | 'LIMPEZA' | 'MANUTENCAO' | 'UTENSILIOS' | 'EPI_EPC' | 'UNIFORMES' | 'PRIMEIROS_SOCORROS'>('ALIMENTOS');
 
   // Lista de Fornecedores Homologados
   const [listaFornecedores, setListaFornecedores] = useState<Fornecedor[]>([]);
@@ -135,41 +139,97 @@ export default function EntradaEstoquePage() {
     return Object.values(grupos);
   }, [previsoes]);
 
+  // Helper para filtrar locais em todos os fluxos
+  const getFilteredLocais = (categoriaId?: string) => {
+    return locaisDisponiveis.filter(loc => {
+      if (!loc.categorias_permitidas || loc.categorias_permitidas.length === 0) return true;
+      if (loc.categorias_permitidas.includes(categoriaPrincipal)) return true;
+      if (categoriaId && loc.categorias_permitidas.includes(categoriaId)) return true;
+      
+      // Compatibilidade manual (Legado)
+      const targetCat = categoriasDisponiveis.find(c => c.nome === (categoria || (ingredienteSelecionado?.nome)));
+      if (targetCat && loc.categorias_permitidas.includes(targetCat.id)) return true;
+      
+      return false;
+    });
+  };
+
   useEffect(() => {
     if (activeTab === 2 && clienteId && unidadeId) {
       loadPrevisoes();
     }
-  }, [activeTab, clienteId, unidadeId]);
+  }, [activeTab, clienteId, unidadeId, categoriaPrincipal]); // Adicionado categoriaPrincipal
 
   async function loadPrevisoes() {
     setLoadingPreviso(true);
-    const { data: lotesData } = await (supabase as any)
+    
+    // Filtragem por categoria nas previsões
+    let query = (supabase as any)
       .from('lotes_estoque')
-      .select('*, ingredientes(nome), fornecedores(razao_social)')
+      .select('*, ingredientes(nome, categoria_produto_id), materiais(nome, tipo_material, categoria_id), fornecedores(razao_social)')
       .eq('unidade_id', unidadeId!)
       .eq('status', 'PREVISTO')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+      .is('deleted_at', null);
 
-    if (lotesData) setPrevisoes(lotesData);
+    if (categoriaPrincipal === 'ALIMENTOS') {
+      query = query.not('ingrediente_id', 'is', null);
+    } else {
+      const tipoMaterialMap: Record<string, string> = {
+        'EMBALAGENS': 'EMBALAGEM',
+        'LIMPEZA': 'LIMPEZA',
+        'MANUTENCAO': 'MANUTENCAO',
+        'UTENSILIOS': 'UTENSILIOS',
+        'EPI_EPC': 'EPI_EPC',
+        'UNIFORMES': 'UNIFORMES',
+        'PRIMEIROS_SOCORROS': 'PRIMEIROS_SOCORROS'
+      };
+      query = query.not('material_id', 'is', null)
+                   .eq('materiais.tipo_material', tipoMaterialMap[categoriaPrincipal]);
+    }
+
+    const { data: lotesData } = await query.order('created_at', { ascending: false });
+
+    if (lotesData) {
+      // Filtro manual para garantir que o material_id bate com o tipo_material desejado se a query do supabase não for profunda o suficiente
+      const finalData = lotesData.filter((lote: any) => {
+        if (categoriaPrincipal === 'ALIMENTOS') return !!lote.ingrediente_id;
+        const tipoEsperado = ({
+          'EMBALAGENS': 'EMBALAGEM',
+          'LIMPEZA': 'LIMPEZA',
+          'MANUTENCAO': 'MANUTENCAO',
+          'UTENSILIOS': 'UTENSILIOS',
+          'EPI_EPC': 'EPI_EPC',
+          'UNIFORMES': 'UNIFORMES',
+          'PRIMEIROS_SOCORROS': 'PRIMEIROS_SOCORROS'
+        } as any)[categoriaPrincipal];
+        return lote.materiais?.tipo_material === tipoEsperado;
+      });
+      setPrevisoes(finalData);
+    }
     setLoadingPreviso(false);
   }
 
   const openConferenciaNf = (nf: string) => {
     const itensNf = previsoes.filter(p => (p.nota_fiscal || 'Sem NF') === nf);
     // Inicializa o estado de conferência com os dados que já temos, permitindo edição
-    setItensConferencia(itensNf.map(item => ({
-      ...item,
-      loteEdit: item.numero_lote_fabricante || '',
-      tempEdit: '',
-      sifEdit: item.registro_sif || '',
-      validadeEdit: item.data_validade_rotulo || '',
-      localEdit: item.local_estoque_id || '',
-      estadoProdutoEdit: item.estado_produto || 'CONFORME',
-      qtdPacotesEdit: item.qtd_embalagens?.toString() || '',
-      pesoPacoteEdit: item.peso_unitario_embalagem?.toString() || '',
-      unidadePesoEdit: item.unidade_peso_embalagem || 'KG'
-    })));
+    setItensConferencia(itensNf.map(item => {
+       const catId = item.ingredientes?.categoria_produto_id || item.materiais?.categoria_id;
+       const permitidos = getFilteredLocais(catId);
+       const hasSpecificLocal = permitidos.length === 1;
+ 
+       return {
+         ...item,
+         loteEdit: item.numero_lote_fabricante || '',
+         tempEdit: '',
+         sifEdit: item.registro_sif || '',
+         validadeEdit: item.data_validade_rotulo || '',
+         localEdit: hasSpecificLocal ? permitidos[0].id : (item.local_estoque_id || ''),
+         estadoProdutoEdit: item.estado_produto || 'CONFORME',
+         qtdPacotesEdit: item.qtd_embalagens?.toString() || '',
+         pesoPacoteEdit: item.peso_unitario_embalagem?.toString() || '',
+         unidadePesoEdit: item.unidade_peso_embalagem || 'KG'
+       };
+    }));
     setNfSelecionada(nf);
   };
 
@@ -196,9 +256,9 @@ export default function EntradaEstoquePage() {
     setLoadingPreviso(true);
     try {
       let novaQtdInicial = item.quantidade_inicial_g_ml;
-      if (item.qtdPacotesEdit && item.pesoPacoteEdit) {
+      if (item.qtdPacotesEdit) {
         const qtdEmb = parseFloat(item.qtdPacotesEdit);
-        const pesoEmb = parseFloat(item.pesoPacoteEdit);
+        const pesoEmb = item.unidadePesoEdit === 'UN' ? 1 : parseFloat(item.pesoPacoteEdit || '0');
         novaQtdInicial = qtdEmb * pesoEmb;
         if (item.unidadePesoEdit === 'KG' || item.unidadePesoEdit === 'L') {
           novaQtdInicial *= 1000;
@@ -209,7 +269,8 @@ export default function EntradaEstoquePage() {
         // INSERÇÃO (Clone)
         const { error } = await (supabase as any).from('lotes_estoque').insert({
           unidade_id: item.unidade_id,
-          ingrediente_id: item.ingrediente_id,
+          ingrediente_id: item.ingrediente_id || null,
+          material_id: item.material_id || null,
           fornecedor_id: item.fornecedor_id,
           numero_lote_fabricante: item.loteEdit || `INT-${Date.now()}`,
           nota_fiscal: item.nota_fiscal,
@@ -223,7 +284,7 @@ export default function EntradaEstoquePage() {
           temperatura_recebimento: item.tempEdit ? parseFloat(item.tempEdit) : null,
           estado_produto: item.estadoProdutoEdit,
           qtd_embalagens: item.qtdPacotesEdit ? parseFloat(item.qtdPacotesEdit) : null,
-          peso_unitario_embalagem: item.pesoPacoteEdit ? parseFloat(item.pesoPacoteEdit) : null,
+          peso_unitario_embalagem: item.peso_unitario_embalagem,
           unidade_peso_embalagem: item.unidade_peso_embalagem
         });
         if (error) throw error;
@@ -273,9 +334,9 @@ export default function EntradaEstoquePage() {
     try {
       for (const item of itensConferencia) {
         let novaQtdInicial = item.quantidade_inicial_g_ml;
-        if (item.qtdPacotesEdit && item.pesoPacoteEdit) {
+        if (item.qtdPacotesEdit) {
           const qtdEmb = parseFloat(item.qtdPacotesEdit);
-          const pesoEmb = parseFloat(item.pesoPacoteEdit);
+          const pesoEmb = item.unidadePesoEdit === 'UN' ? 1 : parseFloat(item.pesoPacoteEdit || '0');
           novaQtdInicial = qtdEmb * pesoEmb;
           if (item.unidadePesoEdit === 'KG' || item.unidadePesoEdit === 'L') {
             novaQtdInicial *= 1000;
@@ -286,7 +347,8 @@ export default function EntradaEstoquePage() {
           // INSERÇÃO (Clone)
           const { error } = await (supabase as any).from('lotes_estoque').insert({
             unidade_id: item.unidade_id,
-            ingrediente_id: item.ingrediente_id,
+            ingrediente_id: item.ingrediente_id || null,
+            material_id: item.material_id || null,
             fornecedor_id: item.fornecedor_id,
             numero_lote_fabricante: item.loteEdit || `INT-${Date.now()}`,
             nota_fiscal: item.nota_fiscal,
@@ -334,6 +396,51 @@ export default function EntradaEstoquePage() {
       setLoadingPreviso(false);
     }
   };
+
+
+  // -- AUTO SELEÇÃO DE LOCAL (Tab 0) --
+  useEffect(() => {
+    if (activeTab === 0 && ingredienteSelecionado) {
+      const catId = categoriaPrincipal === 'ALIMENTOS' 
+        ? ingredienteSelecionado.categoria_produto_id 
+        : ingredienteSelecionado.categoria_id;
+      
+      const permitidos = getFilteredLocais(catId);
+      if (permitidos.length === 1) {
+        setLocal(permitidos[0].id);
+      } else if (local && !permitidos.some(l => l.id === local)) {
+        // Reset se o local atual não for mais permitido após trocar o ingrediente
+        setLocal('');
+      } else if (!local && permitidos.length > 1) {
+        // Se houver múltiplas opções e nada selecionado, mantém vazio
+        setLocal('');
+      }
+    }
+  }, [ingredienteSelecionado, locaisDisponiveis, categoriaPrincipal, activeTab]);
+
+  // -- AUTO SELEÇÃO DE LOCAL (Tab 1) --
+  useEffect(() => {
+    if (activeTab === 1 && ocrItems.length > 0) {
+      let mudou = false;
+      const novosOcr = ocrItems.map(item => {
+        if (!item.local && (item.ingrediente_id || item.material_id)) {
+          let catId;
+          if (item.ingrediente_id) {
+            catId = ingredientes.find(ing => ing.id === item.ingrediente_id)?.categoria_produto_id;
+          } else {
+            catId = materiais.find(mat => mat.id === item.material_id)?.categoria_id;
+          }
+          const permitidos = getFilteredLocais(catId);
+          if (permitidos.length === 1) {
+            mudou = true;
+            return { ...item, local: permitidos[0].id };
+          }
+        }
+        return item;
+      });
+      if (mudou) setOcrItems(novosOcr);
+    }
+  }, [ocrItems, ingredientes, materiais, locaisDisponiveis, categoriaPrincipal, activeTab]);
 
   // Carregamento Inicial
   useEffect(() => {
@@ -390,10 +497,18 @@ export default function EntradaEstoquePage() {
 
     const { data: ingData } = await (supabase as any)
       .from('ingredientes')
-      .select('id, nome, fonte, peso_unitario_g')
+      .select('id, nome, fonte, peso_unitario_g, categoria_produto_id')
       .eq('cliente_id', clienteId)
+      .is('deleted_at', null)
       .order('nome');
     if (ingData) setIngredientes(ingData);
+
+    const { data: matData } = await (supabase as any)
+      .from('materiais')
+      .select('id, nome, tipo_material, categoria_id')
+      .eq('cliente_id', clienteId)
+      .order('nome');
+    if (matData) setMateriais(matData);
 
     const { data: locaisData } = await (supabase as any)
       .from('cliente_locais_estoque')
@@ -417,13 +532,34 @@ export default function EntradaEstoquePage() {
     if (fornData) setListaFornecedores(fornData as any[]);
   }
 
-  const handleIngredienteCriado = (novoIngrediente: any, categoriaSugerida?: string) => {
-    setIngredientes(prev => [{ ...novoIngrediente, pre_cadastro: true }, ...prev]);
+  // Itens filtrados para o Autocomplete de busca
+  const itensBuscaFiltrados = useMemo(() => {
+    if (categoriaPrincipal === 'ALIMENTOS') return ingredientes;
+    
+    const tipoMaterialMap: Record<string, string> = {
+      'EMBALAGENS': 'EMBALAGEM',
+      'LIMPEZA': 'LIMPEZA',
+      'MANUTENCAO': 'MANUTENCAO',
+      'UTENSILIOS': 'UTENSILIO',
+      'EPI_EPC': 'EPI_EPC',
+      'UNIFORMES': 'UNIFORME',
+      'PRIMEIROS_SOCORROS': 'PRIMEIROS_SOCORROS'
+    };
+    
+    return materiais.filter(m => m.tipo_material === tipoMaterialMap[categoriaPrincipal]);
+  }, [categoriaPrincipal, ingredientes, materiais]);
+
+  const handleIngredienteCriado = (novoItem: any, categoriaSugerida?: string) => {
+    if (categoriaPrincipal === 'ALIMENTOS') {
+      setIngredientes(prev => [{ ...novoItem, pre_cadastro: true }, ...prev]);
+    } else {
+      setMateriais(prev => [{ ...novoItem, pre_cadastro: true }, ...prev]);
+    }
 
     if (activeTab === 0) {
-      setIngredienteSelecionado(novoIngrediente);
-      if (novoIngrediente.fonte) setMarca(novoIngrediente.fonte);
-      if (categoriaSugerida) {
+      setIngredienteSelecionado(novoItem);
+      if (novoItem.fonte) setMarca(novoItem.fonte);
+      if (categoriaSugerida && categoriaPrincipal === 'ALIMENTOS') {
         const existe = categoriasDisponiveis.some(c => c.nome === categoriaSugerida);
         if (!existe) {
           setCategoriasDisponiveis(prev => [...prev, { id: 'temp_' + Date.now(), nome: categoriaSugerida }]);
@@ -431,25 +567,30 @@ export default function EntradaEstoquePage() {
         setCategoria(categoriaSugerida);
       }
     } else if (ocrItemToLink !== null) {
-      setOcrItems(prev => prev.map(i => i.id === ocrItemToLink ? { ...i, ingrediente_id: novoIngrediente.id } : i));
+      if (categoriaPrincipal === 'ALIMENTOS') {
+        setOcrItems(prev => prev.map(i => i.id === ocrItemToLink ? { ...i, ingrediente_id: novoItem.id } : i));
+      } else {
+        setOcrItems(prev => prev.map(i => i.id === ocrItemToLink ? { ...i, material_id: novoItem.id } : i));
+      }
       setOcrItemToLink(null);
     }
   };
 
   const calcularTotalEstoque = () => {
     const qtd = Number(qtdPacotes);
-    const peso = Number(pesoPacote);
-    if (!qtd || !peso) return { valor: 0, unidade: 'KG' };
+    const peso = unidadePeso === 'UN' ? 1 : Number(pesoPacote);
+    if (!qtd || (unidadePeso !== 'UN' && !peso)) return { valor: 0, unidade: 'KG' };
     let total = qtd * peso;
     let unidadeFinal = unidadePeso;
     if (unidadePeso === 'G') { total /= 1000; unidadeFinal = 'KG'; }
     else if (unidadePeso === 'ML') { total /= 1000; unidadeFinal = 'L'; }
+    else if (unidadePeso === 'UN') { unidadeFinal = 'Un.'; }
     return { valor: parseFloat(total.toFixed(3)), unidade: unidadeFinal };
   };
   const estoqueCalculado = calcularTotalEstoque();
 
   const handleSalvar = async (comoPrevisto: boolean = false) => {
-    if (!clienteId || !unidadeId || !ingredienteSelecionado || !validade || !qtdPacotes || !pesoPacote) {
+    if (!clienteId || !unidadeId || !ingredienteSelecionado || !validade || !qtdPacotes || (unidadePeso !== 'UN' && !pesoPacote)) {
       alert('Preencha os campos obrigatórios (*).');
       return;
     }
@@ -494,7 +635,8 @@ export default function EntradaEstoquePage() {
         },
         body: JSON.stringify({
           unidade_id: unidadeId,
-          ingrediente_id: ingredienteSelecionado.id,
+          ingrediente_id: categoriaPrincipal === 'ALIMENTOS' ? ingredienteSelecionado.id : null,
+          material_id: categoriaPrincipal !== 'ALIMENTOS' ? ingredienteSelecionado.id : null,
           fornecedor_id: fornecedorSelecionado.id,
           numero_lote_fabricante: (!codigoLote || codigoLote.trim() === '') ? null : codigoLote,
           nota_fiscal: notaFiscal || null,
@@ -585,7 +727,7 @@ export default function EntradaEstoquePage() {
 
       for (const item of ocrItems) {
 
-        let qtdReal = item.qtd * item.peso;
+        let qtdReal = item.qtd * (item.unid === 'UN' ? 1 : (item.peso || 0));
         if (item.unid === 'KG' || item.unid === 'L') {
           qtdReal = qtdReal * 1000;
         }
@@ -598,7 +740,8 @@ export default function EntradaEstoquePage() {
           },
           body: JSON.stringify({
             unidade_id: unidadeId,
-            ingrediente_id: item.ingrediente_id,
+            ingrediente_id: categoriaPrincipal === 'ALIMENTOS' ? item.ingrediente_id : null,
+            material_id: categoriaPrincipal !== 'ALIMENTOS' ? item.material_id : null,
             fornecedor_id: fornecedorSelecionado.id,
             numero_lote_fabricante: item.lote,
             nota_fiscal: notaFiscal || null,
@@ -661,7 +804,36 @@ export default function EntradaEstoquePage() {
         onClose={() => { setModalOpen(false); setOcrItemToLink(null); }}
         onSuccess={handleIngredienteCriado}
         nomeSugerido={termoBuscaIngrediente}
+        categoriaPrincipal={categoriaPrincipal}
       />
+
+      {/* TABS DE CATEGORIA PRINCIPAL (IGUAL AO ESTOQUE) */}
+      <Box sx={{ mb: 3 }}>
+        <Tabs
+          value={categoriaPrincipal}
+          onChange={(e, v) => {
+            setCategoriaPrincipal(v);
+            setIngredienteSelecionado(null);
+            setCategoria('');
+            setMarca('');
+          }}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            '& .MuiTabs-indicator': { height: 4, borderRadius: '4px 4px 0 0' },
+            '& .MuiTab-root': { fontWeight: 700, fontSize: '0.9rem', minHeight: 60 }
+          }}
+        >
+          <Tab value="ALIMENTOS" label="Alimentos" icon={<PackageCheck size={20} />} iconPosition="start" />
+          <Tab value="EMBALAGENS" label="Embalagens" icon={<Package size={20} />} iconPosition="start" />
+          <Tab value="LIMPEZA" label="Limpeza" icon={<Droplets size={20} />} iconPosition="start" />
+          <Tab value="MANUTENCAO" label="Manutenção" icon={<Wrench size={20} />} iconPosition="start" />
+          <Tab value="UTENSILIOS" label="Utensílios" icon={<BoxIcon size={20} />} iconPosition="start" />
+          <Tab value="EPI_EPC" label="EPIs/EPCs" icon={<Shield size={20} />} iconPosition="start" />
+          <Tab value="UNIFORMES" label="Uniformes" icon={<User size={20} />} iconPosition="start" />
+          <Tab value="PRIMEIROS_SOCORROS" label="P. Socorros" icon={<Activity size={20} />} iconPosition="start" />
+        </Tabs>
+      </Box>
 
       {/* ABAS DE SELEÇÃO: ENTRADA MANUAL VS INTELIGENTE */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 4 }}>
@@ -744,15 +916,22 @@ export default function EntradaEstoquePage() {
               <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
                 <Autocomplete
                   fullWidth
-                  options={ingredientes}
-                  getOptionLabel={(option) => `${option.nome} ${option.fonte ? `(${option.fonte})` : ''}`}
+                  options={itensBuscaFiltrados}
+                  getOptionLabel={(option) => {
+                    if (categoriaPrincipal === 'ALIMENTOS') {
+                      return `${option.nome} ${option.fonte ? `(${option.fonte})` : ''}`;
+                    }
+                    return option.nome;
+                  }}
                   value={ingredienteSelecionado}
                   onChange={(_, newValue) => setIngredienteSelecionado(newValue)}
                   onInputChange={(_, newInputValue) => setTermoBuscaIngrediente(newInputValue)}
                   renderInput={(params) => (
                     <TextField
-                      {...params} label="Ingrediente (Sistema) *" placeholder="Digite para buscar..."
-                      helperText={ingredientes.length === 0 ? "Nenhum ingrediente cadastrado." : "A marca será sugerida automaticamente."}
+                      {...params} 
+                      label={categoriaPrincipal === 'ALIMENTOS' ? "Ingrediente (Sistema) *" : "Material (Sistema) *"} 
+                      placeholder="Digite para buscar..."
+                      helperText={itensBuscaFiltrados.length === 0 ? `Nenhum ${categoriaPrincipal.toLowerCase()} cadastrado.` : "A marca será sugerida automaticamente."}
                     />
                   )}
                 />
@@ -782,8 +961,18 @@ export default function EntradaEstoquePage() {
                 <Grid item xs={12} md={6}>
                   <FormControl fullWidth size="small">
                     <InputLabel>Categoria de Armazenamento</InputLabel>
-                    <Select value={categoria} label="Categoria de Armazenamento" onChange={e => setCategoria(e.target.value)}>
-                      {categoriasDisponiveis.map((cat) => (<MenuItem key={cat.id} value={cat.nome}>{cat.nome}</MenuItem>))}
+                    <Select 
+                      value={categoria} 
+                      label="Categoria de Armazenamento" 
+                      onChange={e => setCategoria(e.target.value)}
+                    >
+                      <MenuItem value=""><em>Nenhuma</em></MenuItem>
+                      {categoriasDisponiveis
+                        .filter(cat => cat.modalidade === categoriaPrincipal || (!cat.modalidade && categoriaPrincipal === 'ALIMENTOS'))
+                        .map((cat) => (
+                          <MenuItem key={cat.id} value={cat.nome}>{cat.nome}</MenuItem>
+                        ))
+                      }
                     </Select>
                   </FormControl>
                 </Grid>
@@ -805,7 +994,18 @@ export default function EntradaEstoquePage() {
                   <TextField label="Quantidade de Embalagens" size="small" type="number" fullWidth value={qtdPacotes} onChange={e => setQtdPacotes(e.target.value)} sx={{ bgcolor: 'background.paper' }} placeholder="Ex: 5" />
                 </Grid>
                 <Grid item xs={6}>
-                  <TextField label="Peso Unitário" size="small" type="number" fullWidth value={pesoPacote} onChange={e => setPesoPacote(e.target.value)} sx={{ bgcolor: 'background.paper' }} placeholder="Ex: 2" />
+                  <TextField 
+                    label={`Peso Unitário ${unidadePeso !== 'UN' ? '*' : ''}`} 
+                    size="small" 
+                    type="number" 
+                    fullWidth 
+                    value={unidadePeso === 'UN' ? '' : pesoPacote} 
+                    onChange={e => setPesoPacote(e.target.value)} 
+                    disabled={unidadePeso === 'UN'}
+                    error={unidadePeso !== 'UN' && (!pesoPacote || parseFloat(pesoPacote) <= 0)}
+                    sx={{ bgcolor: 'background.paper' }} 
+                    placeholder={unidadePeso === 'UN' ? 'N/A' : 'Ex: 2'} 
+                  />
                 </Grid>
                 <Grid item xs={6}>
                   <TextField select label="Unidade" size="small" fullWidth value={unidadePeso} onChange={e => setUnidadePeso(e.target.value)} sx={{ bgcolor: 'background.paper' }}>
@@ -859,7 +1059,17 @@ export default function EntradaEstoquePage() {
                   <FormControl fullWidth size="small" required>
                     <InputLabel>Destino</InputLabel>
                     <Select value={local} label="Destino" onChange={e => setLocal(e.target.value)}>
-                      {locaisDisponiveis.map((loc) => (<MenuItem key={loc.id} value={loc.id}><Box sx={{ display: 'flex', gap: 1 }}><MapPin size={16} /> {loc.nome}</Box></MenuItem>))}
+                      {getFilteredLocais(
+                        categoriaPrincipal === 'ALIMENTOS' 
+                          ? ingredienteSelecionado?.categoria_produto_id 
+                          : ingredienteSelecionado?.categoria_id
+                      ).map((loc) => (
+                        <MenuItem key={loc.id} value={loc.id}>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <MapPin size={16} /> {loc.nome}
+                          </Box>
+                        </MenuItem>
+                      ))}
                     </Select>
                   </FormControl>
                 </Box>
@@ -1017,14 +1227,20 @@ export default function EntradaEstoquePage() {
                           <Typography variant="caption" color={item.local ? "text.secondary" : "error.main"} fontWeight="bold">2. Local de Guarda *</Typography>
                           <Select
                             size="small" fullWidth displayEmpty
-                            value={item.local}
+                            value={item.local || ''}
                             onChange={e => setOcrItems(prev => prev.map(i => i.id === item.id ? { ...i, local: e.target.value } : i))}
                             error={!item.local}
                             disabled={item.lido}
                             sx={{ bgcolor: 'white' }}
                           >
                             <MenuItem value="" disabled>Local...</MenuItem>
-                            {locaisDisponiveis.map(loc => <MenuItem key={loc.id} value={loc.id}>{loc.nome}</MenuItem>)}
+                            {getFilteredLocais(
+                              item.ingrediente_id 
+                                ? ingredientes.find(ing => ing.id === item.ingrediente_id)?.categoria_produto_id
+                                : materiais.find(mat => mat.id === item.material_id)?.categoria_id
+                            ).map(loc => (
+                              <MenuItem key={loc.id} value={loc.id}>{loc.nome}</MenuItem>
+                            ))}
                           </Select>
                         </Grid>
 
@@ -1226,9 +1442,11 @@ export default function EntradaEstoquePage() {
                                 setItensConferencia(v);
                               }}
                             >
-                              {locaisDisponiveis.map(loc => (
-                                <MenuItem key={loc.id} value={loc.id}>{loc.nome}</MenuItem>
-                              ))}
+                               {getFilteredLocais(
+                                 item.ingredientes?.categoria_produto_id || item.materiais?.categoria_id
+                               ).map(loc => (
+                                 <MenuItem key={loc.id} value={loc.id}>{loc.nome}</MenuItem>
+                               ))}
                             </Select>
                           </FormControl>
                         </Grid>
@@ -1248,13 +1466,17 @@ export default function EntradaEstoquePage() {
                         </Grid>
                         <Grid item xs={12} md={3}>
                           <TextField
-                            label="Peso Unitário" size="small" type="number" fullWidth
-                            value={item.pesoPacoteEdit}
+                            label={`Peso Unitário ${item.unidadePesoEdit !== 'UN' ? '*' : ''}`} 
+                            size="small" type="number" fullWidth
+                            value={item.unidadePesoEdit === 'UN' ? '' : item.pesoPacoteEdit}
                             onChange={(e) => {
                               const v = [...itensConferencia];
                               v[index].pesoPacoteEdit = e.target.value;
                               setItensConferencia(v);
                             }}
+                            disabled={item.unidadePesoEdit === 'UN'}
+                            error={item.unidadePesoEdit !== 'UN' && (!item.pesoPacoteEdit || parseFloat(item.pesoPacoteEdit) <= 0)}
+                            placeholder={item.unidadePesoEdit === 'UN' ? 'N/A' : '0.000'}
                           />
                         </Grid>
                         <Grid item xs={12} md={2}>

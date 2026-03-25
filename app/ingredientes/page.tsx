@@ -57,6 +57,7 @@ export default function IngredientesPage() {
       const { data, error } = await (supabase as any).from('ingredientes')
         .select('*')
         .or(`cliente_id.eq.${unidadeSelecionada!.cliente_id},cliente_id.is.null`)
+        .is('deleted_at', null)
         .order('nome');
 
       if (error) throw error;

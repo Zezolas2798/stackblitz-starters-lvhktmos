@@ -106,8 +106,12 @@ export default function NovoIngredientePage() {
     cobre_mcg: null, selenio_mcg: null, iodo_mcg: null, manganes_mg: null,
     fluor_mg: null, cromo_mcg: null, molibdenio_mcg: null, cloreto_mg: null,
     grupo_estoque_id: null,
-    classificacao_nova: null
+    classificacao_nova: null,
+    categoria_produto_id: null
   });
+
+  const [categoriasMestre, setCategoriasMestre] = useState<any[]>([]);
+  const [categoriaValue, setCategoriaValue] = useState<any>(null);
 
   const [alergenosSelecionados, setAlergenosSelecionados] = useState<AlergenicoTag[]>([]);
   const [opcoesGrupos, setOpcoesGrupos] = useState<{id: string, nome: string}[]>([]);
@@ -124,13 +128,17 @@ export default function NovoIngredientePage() {
       const { data: funcoesData } = await (supabase as any).from('anvisa_funcoes_aditivos').select('nome').order('nome');
       if (funcoesData) setOpcoesFuncaoDinamicas(funcoesData.map((f: any) => f.nome));
     }
-    async function loadGroups() {
+    async function loadGroupsAndCategories() {
       if (!activeClientId) return;
-      const { data } = await (supabase as any).from('ingredientes_grupos').select('id, nome').eq('cliente_id', activeClientId).order('nome');
-      if (data) setOpcoesGrupos(data);
+      const [grpRes, catRes] = await Promise.all([
+        (supabase as any).from('ingredientes_grupos').select('id, nome').eq('cliente_id', activeClientId).order('nome'),
+        (supabase as any).from('cliente_categorias_produto').select('id, nome').eq('cliente_id', activeClientId).eq('modalidade', 'ALIMENTOS').order('nome')
+      ]);
+      if (grpRes.data) setOpcoesGrupos(grpRes.data);
+      if (catRes.data) setCategoriasMestre(catRes.data);
     }
     loadMasters();
-    loadGroups();
+    loadGroupsAndCategories();
   }, [activeClientId]);
 
   const handleChange = (field: keyof Ingrediente, value: any) => {
@@ -189,6 +197,7 @@ export default function NovoIngredientePage() {
       const payload = {
         ...formData,
         cliente_id: activeClientId,
+        categoria_produto_id: categoriaValue?.id || null,
         alergenicos_ids: idsAlergenicos,
         created_at: new Date().toISOString()
       };
@@ -273,6 +282,16 @@ export default function NovoIngredientePage() {
 
               <Grid item xs={12} md={4}>
                 <TextField label="Marca / Fonte" fullWidth value={formData.fonte || ''} onChange={e => handleChange('fonte', e.target.value)} />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Autocomplete
+                  options={categoriasMestre}
+                  value={categoriaValue}
+                  onChange={(_, val) => setCategoriaValue(val)}
+                  getOptionLabel={(option) => option.nome || ''}
+                  renderInput={(params) => <TextField {...params} label="Categoria de Produto" placeholder="Ex: Grãos, Proteínas, Temperos..." />}
+                  noOptionsText="Nenhuma categoria de Alimentos encontrada"
+                />
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField label="Peso Médio Unitário (g)" type="number" fullWidth value={formData.peso_unitario_g ?? ''} onChange={e => handleChange('peso_unitario_g', e.target.value)} InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} />

@@ -6,6 +6,7 @@ import {
     Accordion, AccordionSummary, AccordionDetails, List, ListItem, ListItemButton, ListItemText, ListItemIcon,
     InputAdornment, Chip
 } from '@mui/material';
+import { useTheme, alpha } from '@mui/material/styles';
 import { ChevronDown, MapPin, ChefHat, Trash2, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -22,8 +23,11 @@ interface SetorProducao {
     nome: string;
 }
 
-export const formatarQuantidade = (qtdGml: number) => {
-    if (!qtdGml && qtdGml !== 0) return '0 g/ml';
+export const formatarQuantidade = (qtdGml: number, unidade?: string) => {
+    if (!qtdGml && qtdGml !== 0) return unidade === 'UN' ? '0 Un' : '0 g/ml';
+    if (unidade === 'UN') {
+        return `${Math.round(qtdGml).toLocaleString('pt-BR')} Un`;
+    }
     if (qtdGml >= 1000) {
         return `${(qtdGml / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kg/L`;
     }
@@ -31,14 +35,17 @@ export const formatarQuantidade = (qtdGml: number) => {
 };
 
 export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSuccess }: Props) {
+    const theme = useTheme();
     const { activeClientId } = useClient();
     const [tipo, setTipo] = useState('');
     const [quantidade, setQuantidade] = useState('');
     const [modoMovimentacao, setModoMovimentacao] = useState<'PESO' | 'EMBALAGEM'>('PESO');
     const [unidadePeso, setUnidadePeso] = useState<'G_ML' | 'KG_L'>('G_ML');
+    const isUnidade = lote?.unidade_peso_embalagem === 'UN';
 
     const [setores, setSetores] = useState<SetorProducao[]>([]);
     const [locais, setLocais] = useState<any[]>([]);
+    const [categoriasDb, setCategoriasDb] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -63,23 +70,37 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                 setUnidadePeso('G_ML');
             }
 
-            if (lote?.peso_unitario_embalagem && lote?.qtd_embalagens) {
+            if (isUnidade) {
+                setModoMovimentacao('PESO');
+                setUnidadePeso('G_ML');
+            } else if (lote?.peso_unitario_embalagem && lote?.qtd_embalagens) {
                 setModoMovimentacao('EMBALAGEM'); // Suggest packaging if available
             } else {
                 setModoMovimentacao('PESO');
             }
 
-            if (activeClientId) fetchSetores(activeClientId);
+            if (activeClientId) {
+                fetchSetores(activeClientId);
+                fetchCategorias(activeClientId);
+            }
             if (lote?.unidade_id) fetchLocais(lote?.unidade_id);
         }
     }, [open, lote, activeClientId]);
 
     const fetchLocais = async (unidadeId: string) => {
         const { data } = await (supabase as any).from('cliente_locais_estoque')
-            .select('id, nome')
+            .select('id, nome, categorias_permitidas')
             .eq('unidade_id', unidadeId)
+            .eq('ativo', true)
             .order('nome');
         if (data) setLocais(data);
+    };
+
+    const fetchCategorias = async (clienteId: string) => {
+        const { data } = await (supabase as any).from('cliente_categorias_produto')
+            .select('id, nome, modalidade')
+            .eq('cliente_id', clienteId);
+        if (data) setCategoriasDb(data || []);
     };
 
     const fetchSetores = async (clienteId: string) => {
@@ -137,7 +158,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
             if (qtdGmlParaAbater > (disponivelGml + 0.1)) { // 0.1 de tolerância para dizimas
                 const msg = modoMovimentacao === 'EMBALAGEM' 
                     ? `Saldo insuficiente. Disponível para movimentar: ${disponivelEmbalagens} embalagens.`
-                    : `Saldo insuficiente. Disponível para movimentar: ${formatarQuantidade(disponivelGml)}. O restante está reservado para produção.`;
+                    : `Saldo insuficiente. Disponível para movimentar: ${formatarQuantidade(disponivelGml, lote.unidade_peso_embalagem)}. O restante está reservado para produção.`;
                 throw new Error(msg);
             }
 
@@ -147,6 +168,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
             const isTransferencia = tipo.startsWith('TRANSFERENCIA_');
             const isSetor = tipo.startsWith('SETOR_');
             const isDescartado = tipo === 'DESCARTADO';
+            const isUso = tipo === 'USO';
 
             const { data: userData } = await supabase.auth.getUser();
             const user = userData?.user;
@@ -285,12 +307,13 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                 if (novaQuantidadeGml <= 0) tipoHistorico = 'TRANSFERENCIA';
             }
             else if (isDescartado) justificativaFinal = `DESCARTADO`;
+            else if (isUso) justificativaFinal = `USO`;
 
             // Resumo de movimentacao para salvar:
             if (modoMovimentacao === 'EMBALAGEM') {
                 justificativaFinal += ` (${inputVal} embalagens movidas)`;
             } else {
-                justificativaFinal += ` (${formatarQuantidade(qtdGmlParaAbater)} movidos)`;
+                justificativaFinal += ` (${formatarQuantidade(qtdGmlParaAbater, lote.unidade_peso_embalagem)} movidos)`;
             }
 
             const { error: erroHist } = await (supabase as any)
@@ -336,15 +359,15 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                         </Typography>
                         <Box sx={{ textAlign: 'right' }}>
                             <Typography variant="body2" color="primary.main" fontWeight="bold">
-                                Total: {formatarQuantidade(lote.quantidade_atual_g_ml)}
+                                Total: {formatarQuantidade(lote.quantidade_atual_g_ml, lote.unidade_peso_embalagem)}
                             </Typography>
                             {Number(lote.total_reservado_g) > 0 && (
                                 <Typography variant="caption" color="warning.dark" sx={{ display: 'block', fontWeight: 'bold' }}>
-                                    Reservado: {formatarQuantidade(lote.total_reservado_g)}
+                                    Reservado: {formatarQuantidade(lote.total_reservado_g, lote.unidade_peso_embalagem)}
                                 </Typography>
                             )}
                             <Typography variant="body2" color="success.main" fontWeight="bold">
-                                Disponível: {formatarQuantidade(disponivelGml)}
+                                Disponível: {formatarQuantidade(disponivelGml, lote.unidade_peso_embalagem)}
                             </Typography>
                             {modoMovimentacao === 'EMBALAGEM' && lote.peso_unitario_embalagem && (
                                 <Chip 
@@ -377,7 +400,32 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                             </AccordionSummary>
                             <AccordionDetails sx={{ p: 0 }}>
                                 <List disablePadding>
-                                    {locais.filter(l => l.nome !== lote?.local_armazenamento).map(local => {
+                                    {locais.filter(l => {
+                                        if (l.nome === lote?.local_armazenamento) return false;
+                                        if (!l.categorias_permitidas || l.categorias_permitidas.length === 0) return true;
+
+                                        // Determinar modalidade do lote
+                                        let mod = 'ALIMENTOS';
+                                        if (lote.materiais) {
+                                            const tm = lote.materiais.tipo_material;
+                                            if (tm === 'UTENSILIO') mod = 'UTENSILIOS';
+                                            else if (tm === 'LIMPEZA') mod = 'LIMPEZA';
+                                            else if (tm === 'MANUTENCAO') mod = 'MANUTENCAO';
+                                            else if (tm === 'EPI_EPC') mod = 'EPI_EPC';
+                                            else if (tm === 'UNIFORMES') mod = 'UNIFORMES';
+                                            else if (tm === 'PRIMEIROS_SOCORROS') mod = 'PRIMEIROS_SOCORROS';
+                                            else mod = 'EMBALAGENS';
+                                        }
+
+                                        // 1. Checar modalidade genérica
+                                        if (l.categorias_permitidas.includes(mod)) return true;
+
+                                        // 2. Checar categoria específica
+                                        const catObj = categoriasDb.find(c => c.nome === lote.categoria_produto);
+                                        if (catObj && l.categorias_permitidas.includes(catObj.id)) return true;
+
+                                        return false;
+                                    }).map(local => {
                                         const selected = tipo === `TRANSFERENCIA_${local.id}`;
                                         return (
                                             <ListItem disablePadding key={`local_${local.id}`}>
@@ -429,6 +477,27 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                         <Accordion disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderTop: 'none', '&:before': { display: 'none' } }}>
                             <AccordionSummary expandIcon={<ChevronDown size={20} />} sx={{ bgcolor: 'action.hover' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <CheckCircle2 size={18} color={theme.palette.success.main} />
+                                    <Typography fontWeight="bold" color="success.main">Uso / Utilização</Typography>
+                                </Box>
+                            </AccordionSummary>
+                            <AccordionDetails sx={{ p: 0 }}>
+                                <List disablePadding>
+                                    <ListItem disablePadding>
+                                        <ListItemButton onClick={() => setTipo('USO')} selected={tipo === 'USO'}>
+                                            <ListItemIcon sx={{ minWidth: 36 }}>
+                                                {tipo === 'USO' ? <CheckCircle2 size={18} color="green" /> : <Box sx={{ width: 18 }} />}
+                                            </ListItemIcon>
+                                            <ListItemText primary="Registrar Uso" secondary="Utilização rotineira do material" />
+                                        </ListItemButton>
+                                    </ListItem>
+                                </List>
+                            </AccordionDetails>
+                        </Accordion>
+
+                        <Accordion disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderTop: 'none', '&:before': { display: 'none' } }}>
+                            <AccordionSummary expandIcon={<ChevronDown size={20} />} sx={{ bgcolor: 'action.hover' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <Trash2 size={18} color="red" />
                                     <Typography fontWeight="bold" color="error">Descarte / Perda</Typography>
                                 </Box>
@@ -461,14 +530,17 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                             }}
                             fullWidth
                             size="small"
+                            disabled={isUnidade}
                         >
-                            <ToggleButton value="PESO">Por Peso / Volume</ToggleButton>
-                            <ToggleButton
-                                value="EMBALAGEM"
-                                disabled={!lote.peso_unitario_embalagem}
-                            >
-                                Por Embalagem
-                            </ToggleButton>
+                            <ToggleButton value="PESO">{isUnidade ? 'Por Unidade' : 'Por Peso / Volume'}</ToggleButton>
+                            {!isUnidade && (
+                                <ToggleButton
+                                    value="EMBALAGEM"
+                                    disabled={!lote.peso_unitario_embalagem}
+                                >
+                                    Por Embalagem
+                                </ToggleButton>
+                            )}
                         </ToggleButtonGroup>
                         {!lote.peso_unitario_embalagem && (
                             <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
@@ -518,9 +590,10 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                                 sx={{ width: 140 }}
                                 value={unidadePeso}
                                 onChange={(e) => setUnidadePeso(e.target.value as any)}
+                                disabled={isUnidade}
                             >
-                                <MenuItem value="G_ML">g / ml</MenuItem>
-                                <MenuItem value="KG_L">Kg / L</MenuItem>
+                                <MenuItem value="G_ML">{isUnidade ? 'Unidades' : 'g / ml'}</MenuItem>
+                                {!isUnidade && <MenuItem value="KG_L">Kg / L</MenuItem>}
                             </TextField>
                         ) : (
                             <Box sx={{ display: 'flex', alignItems: 'center', width: 120, justifyContent: 'center', bgcolor: 'action.hover', borderRadius: 1 }}>
@@ -530,7 +603,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                     </Box>
                     {modoMovimentacao === 'EMBALAGEM' && lote.peso_unitario_embalagem && quantidade && (
                         <Typography variant="caption" color="text.secondary" sx={{ mt: -2 }}>
-                            Isso Equivale a: {formatarQuantidade(Number(quantidade) * lote.peso_unitario_embalagem * (lote.unidade_peso_embalagem === 'KG' || lote.unidade_peso_embalagem === 'L' ? 1000 : 1))}
+                            Isso Equivale a: {formatarQuantidade(Number(quantidade) * lote.peso_unitario_embalagem * (lote.unidade_peso_embalagem === 'KG' || lote.unidade_peso_embalagem === 'L' ? 1000 : 1), lote.unidade_peso_embalagem)}
                         </Typography>
                     )}
                 </Box>

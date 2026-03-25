@@ -27,17 +27,26 @@ import {
   MenuItem,
   Collapse,
   Divider,
-  Tooltip
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
 import {
   ShoppingCart, FileText, Package, ChevronDown, ChevronRight,
-  Hash, Plus, Trash2, Save, Upload, CheckCircle
+  Hash, Plus, Trash2, Save, Upload, CheckCircle, Clock, Edit2, XCircle,
+  Droplets, Wrench, Box as BoxIcon, Shield, User, Activity
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import { format, parseISO } from 'date-fns';
 import { Fornecedor } from '@/lib/types';
 import QuickIngredienteDialog from '@/components/QuickIngredienteDialog';
+import { processNFFile } from '@/lib/utils/nf-parser';
 
 interface RequisicaoFalta {
   id: string;
@@ -60,8 +69,9 @@ interface NfItem {
   qtdEmbalagens: string;
   pesoUnitario: string;
   unidadePeso: string;
-  validade: string;
-  lote: string;
+  precoTotal: string; // [NEW] Preço pago por toda essa quantidade
+  descricaoNF?: string; // [NEW] Descrição original que veio da nota fiscal
+  unidadeNF?: string; // [NEW] Unidade original da nota fiscal
 }
 
 export default function ComprasPage() {
@@ -73,16 +83,30 @@ export default function ComprasPage() {
   const [error, setError] = useState('');
 
   // --- NF UPLOAD STATE ---
+  const [modalidade, setModalidade] = useState<'ALIMENTOS' | 'EMBALAGENS' | 'LIMPEZA' | 'MANUTENCAO' | 'UTENSILIOS' | 'EPI_EPC' | 'UNIFORMES' | 'PRIMEIROS_SOCORROS'>('ALIMENTOS');
   const [ingredientes, setIngredientes] = useState<any[]>([]);
+  const [materiais, setMateriais] = useState<any[]>([]);
   const [listaFornecedores, setListaFornecedores] = useState<Fornecedor[]>([]);
   const [fornecedorNf, setFornecedorNf] = useState<Fornecedor | null>(null);
   const [numNf, setNumNf] = useState('');
-  const [dataNf, setDataNf] = useState(new Date().toISOString().split('T')[0]);
+  const [dataNf, setDataNf] = useState(''); 
+  const [dataVencimentoNf, setDataVencimentoNf] = useState(''); 
+  const [valorTotalNfLido, setValorTotalNfLido] = useState<number | null>(null); 
+
+  useEffect(() => {
+    // Evita erro de hidratação
+    setDataNf(new Date().toISOString().split('T')[0]);
+  }, []);
   const [nfItens, setNfItens] = useState<NfItem[]>([
-    { tempId: '1', ingrediente_id: '', marca: '', qtdEmbalagens: '', pesoUnitario: '', unidadePeso: 'KG', validade: '', lote: '' }
+    { tempId: '1', ingrediente_id: '', marca: '', qtdEmbalagens: '', pesoUnitario: '', unidadePeso: 'KG', precoTotal: '' }
   ]);
   const [salvandoNf, setSalvandoNf] = useState(false);
   const [nfSucesso, setNfSucesso] = useState(false);
+  const [historicoNfs, setHistoricoNfs] = useState<any[]>([]);
+  const [loadingHistorico, setLoadingHistorico] = useState(false);
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id?: string, nf?: string, fornecedor?: string, type: 'ITEM' | 'NF' } | null>(null);
+  const [filtroMes, setFiltroMes] = useState(format(new Date(), 'yyyy-MM'));
 
   // --- QUICK INGREDIENTE DIALOG ---
   const [modalOpen, setModalOpen] = useState(false);
@@ -90,7 +114,6 @@ export default function ComprasPage() {
   const [nfItemToLink, setNfItemToLink] = useState<string | null>(null);
 
   // --- OCR STATE ---
-  const [ocrItems, setOcrItems] = useState<any[]>([]);
   const [isReadingOcr, setIsReadingOcr] = useState(false);
 
 
@@ -144,6 +167,14 @@ export default function ComprasPage() {
       .is('deleted_at', null)
       .order('nome');
     if (ingData) setIngredientes(ingData);
+
+    const { data: matData } = await (supabase as any)
+      .from('materiais')
+      .select('id, nome, marca, tipo_material, preco_ultima_compra, custo_medio')
+      .eq('cliente_id', activeClientId)
+      .is('ativo', true)
+      .order('nome');
+    if (matData) setMateriais(matData);
 
     const { data: fornData } = await (supabase as any)
       .from('fornecedores')
@@ -220,7 +251,7 @@ export default function ComprasPage() {
     setNfItens([...nfItens, {
       tempId: Date.now().toString(),
       ingrediente_id: '', marca: '', qtdEmbalagens: '', pesoUnitario: '',
-      unidadePeso: 'KG', validade: '', lote: ''
+      unidadePeso: 'KG', precoTotal: '', descricaoNF: '', unidadeNF: ''
     }]);
   };
 
@@ -229,104 +260,206 @@ export default function ComprasPage() {
   };
 
   const handleNfItemChange = (tempId: string, field: keyof NfItem, value: string) => {
-    setNfItens(nfItens.map(i => i.tempId === tempId ? { ...i, [field]: value } : i));
+    setNfItens(nfItens.map(i => {
+      if (i.tempId !== tempId) return i;
+      
+      // Se mudar para UN, limpa o peso unitário e define como '1' internamente (via disabled no render)
+      if (field === 'unidadePeso' && value === 'UN') {
+        return { ...i, [field]: value, pesoUnitario: '1' };
+      }
+      return { ...i, [field]: value };
+    }));
   };
 
   // Auto-fill marca when ingredient selected
-  const handleIngredienteSelect = (tempId: string, ingredienteId: string) => {
-    const ing = ingredientes.find(i => i.id === ingredienteId);
-    setNfItens(nfItens.map(i => {
+  // Auto-fill marca when ingredient or material selected
+  const handleIngredienteSelect = (tempId: string, itemId: string, overrideItem?: any) => {
+    let marca = '';
+    let pesoU = '';
+    let unPeso = 'KG';
+
+    if (modalidade === 'ALIMENTOS') {
+      const ing = overrideItem || ingredientes.find(i => i.id === itemId);
+      marca = ing?.fonte || '';
+      pesoU = ing?.peso_unitario_g ? (ing.peso_unitario_g >= 1000 ? (ing.peso_unitario_g / 1000).toString() : ing.peso_unitario_g.toString()) : '';
+      unPeso = (ing?.peso_unitario_g && ing.peso_unitario_g >= 1000) ? 'KG' : (ing?.peso_unitario_g ? 'G' : 'KG');
+    } else {
+      const mat = overrideItem || materiais.find(m => m.id === itemId);
+      marca = mat?.marca || '';
+      pesoU = '1';
+      unPeso = (mat?.unidade_medida?.toUpperCase() === 'UN' || mat?.unidade_medida?.toUpperCase() === 'UNID') ? 'UN' : (mat?.unidade_medida || 'UN'); 
+    }
+
+    setNfItens(prev => prev.map(i => {
       if (i.tempId !== tempId) return i;
       return {
         ...i,
-        ingrediente_id: ingredienteId,
-        marca: ing?.fonte || '',
-        pesoUnitario: ing?.peso_unitario_g ? (ing.peso_unitario_g >= 1000 ? (ing.peso_unitario_g / 1000).toString() : ing.peso_unitario_g.toString()) : '',
-        unidadePeso: ing?.peso_unitario_g >= 1000 ? 'KG' : 'G'
+        ingrediente_id: itemId, // Em caso de material usaremos essa property para temporário e depois separamos
+        marca,
+        pesoUnitario: pesoU,
+        unidadePeso: unPeso
       };
     }));
   };
 
   // Handle ingredient created via QuickIngredienteDialog
-  const handleIngredienteCriado = (novoIngrediente: any) => {
-    setIngredientes(prev => [novoIngrediente, ...prev]);
+  const handleIngredienteCriado = (novoItem: any) => {
+    if (modalidade === 'ALIMENTOS') {
+      setIngredientes(prev => [novoItem, ...prev]);
+    } else {
+      setMateriais(prev => [novoItem, ...prev]);
+    }
+    
     // If we have a target NF item, auto-select the new ingredient
     if (nfItemToLink) {
-      handleIngredienteSelect(nfItemToLink, novoIngrediente.id);
+      handleIngredienteSelect(nfItemToLink, novoItem.id, novoItem);
       setNfItemToLink(null);
     }
   };
 
   // Build grouped ingredient options: requisitions first, then all
   const ingredienteSugestoes = useMemo(() => {
-    const reqIngIds = new Set<string>();
-    const sugestoes: { id: string; nome: string; fonte?: string; group: string }[] = [];
+    const sugestoes: { id: string; nome: string; fonte?: string; marca?: string; group: string }[] = [];
 
-    // From requisitions (FALTA_ESTOQUE) — show ingredients that belong to the groups or specific
-    requisicoes.forEach(req => {
-      if (req.ingrediente_id && !reqIngIds.has(req.ingrediente_id)) {
-        reqIngIds.add(req.ingrediente_id);
-        sugestoes.push({
-          id: req.ingrediente_id,
-          nome: req.ingredientes?.nome || 'Desconhecido',
-          group: '📋 Requisições (Falta Estoque)'
-        });
-      }
-    });
+    if (modalidade === 'ALIMENTOS') {
+      const reqIngIds = new Set<string>();
 
-    // Also add ingredients whose grupo_estoque_id matches any grupo from requisitions
-    const reqGrupoIds = new Set(requisicoes.filter(r => r.grupo_estoque_id).map(r => r.grupo_estoque_id!));
-    ingredientes.forEach(ing => {
-      if (ing.grupo_estoque_id && reqGrupoIds.has(ing.grupo_estoque_id) && !reqIngIds.has(ing.id)) {
-        reqIngIds.add(ing.id);
-        sugestoes.push({
-          id: ing.id,
-          nome: ing.nome,
-          fonte: ing.fonte,
-          group: '📋 Requisições (Falta Estoque)'
-        });
-      }
-    });
+      // From requisitions (FALTA_ESTOQUE) — show ingredients that belong to the groups or specific
+      requisicoes.forEach(req => {
+        if (req.ingrediente_id && !reqIngIds.has(req.ingrediente_id)) {
+          reqIngIds.add(req.ingrediente_id);
+          sugestoes.push({
+            id: req.ingrediente_id,
+            nome: req.ingredientes?.nome || 'Desconhecido',
+            group: '📋 Requisições'
+          });
+        }
+      });
 
-    // All ingredients
-    ingredientes.forEach(ing => {
-      if (!reqIngIds.has(ing.id)) {
+      // Also add ingredients whose grupo_estoque_id matches any grupo from requisitions
+      const reqGrupoIds = new Set(requisicoes.filter(r => r.grupo_estoque_id).map(r => r.grupo_estoque_id!));
+      ingredientes.forEach(ing => {
+        if (ing.grupo_estoque_id && reqGrupoIds.has(ing.grupo_estoque_id) && !reqIngIds.has(ing.id)) {
+          reqIngIds.add(ing.id);
+          sugestoes.push({
+            id: ing.id,
+            nome: ing.nome,
+            fonte: ing.fonte,
+            group: '📋 Requisições'
+          });
+        }
+      });
+
+      // All ingredients
+      ingredientes.forEach(ing => {
+        if (!reqIngIds.has(ing.id)) {
+          sugestoes.push({
+            id: ing.id,
+            nome: ing.nome,
+            fonte: ing.fonte,
+            group: '📦 Insumos Disponíveis'
+          });
+        }
+      });
+    } else {
+      // Outras Modalidades
+      const mapTipo: any = {
+        'EMBALAGENS': 'EMBALAGEM',
+        'LIMPEZA': 'LIMPEZA',
+        'UTENSILIOS': 'UTENSILIO',
+        'MANUTENCAO': 'MANUTENCAO',
+        'EPI_EPC': 'EPI_EPC',
+        'UNIFORMES': 'UNIFORME',
+        'PRIMEIROS_SOCORROS': 'PRIMEIROS_SOCORROS',
+        'OUTROS': 'OUTROS'
+      };
+      const alvo = mapTipo[modalidade];
+      materiais.filter(m => m.tipo_material === alvo).forEach(mat => {
         sugestoes.push({
-          id: ing.id,
-          nome: ing.nome,
-          fonte: ing.fonte,
-          group: '📦 Todos os Ingredientes'
+          id: mat.id,
+          nome: mat.nome,
+          marca: mat.marca || '',
+          group: '📦 Materiais Disponíveis'
         });
-      }
-    });
+      });
+    }
 
     return sugestoes;
-  }, [ingredientes, requisicoes]);
+  }, [ingredientes, materiais, requisicoes, modalidade]);
 
-  // OCR upload handler
-  const handleOcrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // OCR / File upload handler
+  const handleOcrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
     setIsReadingOcr(true);
-    setTimeout(() => {
-      const extraidos = [
-        { id: 1, nomeExtracao: 'Item 1 da NF', marca: '', lote: '', validade: '', qtd: 1, peso: 1, unid: 'KG' },
-        { id: 2, nomeExtracao: 'Item 2 da NF', marca: '', lote: '', validade: '', qtd: 1, peso: 1, unid: 'KG' }
-      ];
+    
+    try {
+      const parsed = await processNFFile(file);
+      
+      if (!parsed) {
+        alert('Não foi possível extrair dados deste arquivo.');
+        return;
+      }
 
-      const comMatch = extraidos.map(item => {
-        const match = ingredientes.find(ing =>
-          ing.nome.toLowerCase().includes(item.nomeExtracao.split(' ')[0].toLowerCase())
-        );
+      // 1. Tentar auto-selecionar o fornecedor pelo CNPJ ou Nome
+      if (parsed.fornecedorCnpj || parsed.fornecedorNome) {
+        const cleanCnpj = (c: string) => c.replace(/\D/g, '');
+        const targetCnpj = parsed.fornecedorCnpj ? cleanCnpj(parsed.fornecedorCnpj) : '';
+
+        const match = listaFornecedores.find(f => {
+          const fCnpj = f.cnpj ? cleanCnpj(f.cnpj) : '';
+          const cnpjMatch = targetCnpj && fCnpj === targetCnpj;
+          const nomeMatch = parsed.fornecedorNome && f.razao_social && 
+            f.razao_social.toLowerCase().includes(parsed.fornecedorNome.toLowerCase());
+          return cnpjMatch || nomeMatch;
+        });
+        if (match) setFornecedorNf(match);
+      }
+
+      // 2. Preencher dados da nota e totais
+      if (parsed.numero) setNumNf(parsed.numero);
+      if (parsed.valorTotalNf) setValorTotalNfLido(parsed.valorTotalNf);
+      
+      if (parsed.dataEmissao && typeof parsed.dataEmissao === 'string') {
+        const d = parsed.dataEmissao.split('T')[0];
+        setDataNf(d);
+      }
+      if (parsed.dataVencimento && typeof parsed.dataVencimento === 'string') {
+        const dv = parsed.dataVencimento.split('T')[0];
+        setDataVencimentoNf(dv);
+      }
+
+      const novosItens: NfItem[] = parsed.itens.map(item => {
+        // Usuário fará o mapeamento "De/Para"
         return {
-          ...item,
-          ingrediente_id: match ? match.id : '',
+          tempId: Math.random().toString(36).slice(2, 11),
+          ingrediente_id: '', // Sempre manual
+          marca: '',
+          qtdEmbalagens: (item.quantidade || 0).toString(),
+          pesoUnitario: '', // Aguarda preenchimento
+          unidadePeso: 'KG',
+          precoTotal: (item.valorTotal || 0).toString(),
+          descricaoNF: item.descricao || 'Item sem descrição',
+          unidadeNF: item.unidade || ''
         };
       });
 
-      setOcrItems(comMatch);
+      if (novosItens.length > 0) {
+        setNfItens(prev => {
+          // Mantém itens que já foram mapeados ou que possuem descrição
+          const filtered = prev.filter(i => i.ingrediente_id !== '' || i.descricaoNF);
+          return [...filtered, ...novosItens];
+        });
+      }
+
+    } catch (err) {
+      console.error('Erro no processamento do arquivo:', err);
+      alert('Erro ao ler arquivo: Escolha um formato válido (XML, PDF ou Imagem).');
+    } finally {
       setIsReadingOcr(false);
-    }, 2000);
+      e.target.value = '';
+    }
   };
 
   const handleSalvarNf = async () => {
@@ -335,48 +468,138 @@ export default function ComprasPage() {
       return;
     }
 
-    const validItens = nfItens.filter(i => i.ingrediente_id && i.qtdEmbalagens && i.pesoUnitario);
+    const validItens = nfItens.filter(i => {
+      const hasBasicInfo = i.ingrediente_id && i.qtdEmbalagens;
+      const isUnidade = i.unidadePeso === 'UN';
+      const hasPeso = isUnidade || (i.pesoUnitario && parseFloat(i.pesoUnitario) > 0);
+      return hasBasicInfo && hasPeso;
+    });
     if (validItens.length === 0) {
-      alert('Adicione pelo menos um item com ingrediente e quantidade.');
+      alert('Preencha os dados dos itens (Produto, Qtd e Peso). Se a unidade for UN, o peso é ignorado.');
       return;
     }
 
     setSalvandoNf(true);
     setNfSucesso(false);
     try {
+      let valorTotalNFCalculado = 0;
+
       for (const item of validItens) {
         const qtdEmb = parseFloat(item.qtdEmbalagens);
         const pesoEmb = parseFloat(item.pesoUnitario);
+        const precoTot = parseFloat(item.precoTotal) || 0;
+        valorTotalNFCalculado += precoTot;
+
         let qtdGml = qtdEmb * pesoEmb;
-        if (item.unidadePeso === 'KG' || item.unidadePeso === 'L') {
+        // Se for UN, a quantidade total é apenas o número de embalagens (unidades)
+        if (item.unidadePeso === 'UN') {
+          qtdGml = qtdEmb;
+        } else if (item.unidadePeso === 'KG' || item.unidadePeso === 'L') {
           qtdGml *= 1000;
         }
 
-        const { error: insertErr } = await (supabase as any).from('lotes_estoque').insert({
+        const payload: any = {
           unidade_id: unidadeId,
-          ingrediente_id: item.ingrediente_id,
+          cliente_id: activeClientId,
           fornecedor_id: fornecedorNf.id,
-          numero_lote_fabricante: item.lote || `NF-${numNf || 'SN'}-${Date.now().toString().slice(-4)}`,
+          numero_lote_fabricante: `NF-${numNf || 'SN'}-${Date.now().toString().slice(-4)}`,
           nota_fiscal: numNf || null,
           data_fabricacao: dataNf,
-          data_validade_rotulo: item.validade || null,
+          data_validade_rotulo: null,
           quantidade_inicial_g_ml: qtdGml,
           quantidade_atual_g_ml: qtdGml,
           status: 'PREVISTO',
           qtd_embalagens: qtdEmb,
           peso_unitario_embalagem: pesoEmb,
-          unidade_peso_embalagem: item.unidadePeso
-        });
+          unidade_peso_embalagem: item.unidadePeso,
+          valor_unitario: precoTot / (qtdEmb || 1), // Financeiro
+          valor_total: precoTot, // Financeiro
+          data_vencimento_financeiro: dataVencimentoNf || null
+        };
 
+        if (modalidade === 'ALIMENTOS') {
+          payload.ingrediente_id = item.ingrediente_id;
+          payload.categoria_produto = null; // Será definido no recebimento ou pelo ingrediente
+        } else {
+          payload.material_id = item.ingrediente_id;
+          // [UPDATED] Mapeamento completo de categorias para materiais
+          const materialCatMap: Record<string, string> = {
+            'EMBALAGENS': 'Embalagens',
+            'LIMPEZA': 'Limpeza',
+            'MANUTENCAO': 'Manutenção',
+            'UTENSILIOS': 'Utensílios',
+            'EPI_EPC': 'EPIs/EPCs',
+            'UNIFORMES': 'Uniformes',
+            'PRIMEIROS_SOCORROS': 'Primeiros Socorros'
+          };
+          payload.categoria_produto = materialCatMap[modalidade] || 'Outros';
+        }
+
+        // NOVO: Indica que o financeiro será processado por esta função (não pelo trigger)
+        payload.financeiro_processado = true;
+
+        const { error: insertErr } = await (supabase as any).from('lotes_estoque').insert(payload);
         if (insertErr) throw insertErr;
       }
 
+      // --- GERAR DESPESA FINANCEIRA ---
+      if (valorTotalNFCalculado > 0) {
+        // Tentar buscar uma categoria padrão baseada na modalidade
+        const { data: contasInfo } = await (supabase as any)
+          .from('fin_contas')
+          .select('id, nome, codigo')
+          .eq('cliente_id', activeClientId)
+          .eq('tipo', 'DESPESA')
+          .eq('ativo', true);
+
+        let contaAutoId = contasInfo?.[0]?.id; // Fallback
+        
+        // Mapeamento Direto por Nome (mais robusto que regex genérico se as categorias foram criadas agora)
+        const mapping: Record<string, string> = {
+          'ALIMENTOS': 'Compras de Alimentos',
+          'EMBALAGENS': 'Material de Embalagem',
+          'LIMPEZA': 'Produtos de Limpeza',
+          'MANUTENCAO': 'Manutenção e Reparos',
+          'UTENSILIOS': 'Utensílios e Ferramentas',
+          'EPI_EPC': 'Equipamentos de Proteção',
+          'UNIFORMES': 'Uniformes e Vestuário',
+          'PRIMEIROS_SOCORROS': 'Material de Primeiros Socorros'
+        };
+
+        const targetName = mapping[modalidade];
+        const contaMatched = contasInfo?.find((c: any) => c.nome === targetName);
+        if (contaMatched) contaAutoId = contaMatched.id;
+
+        const novaTransacao = await (supabase as any)
+          .from('fin_transacoes')
+          .insert({
+            unidade_id: unidadeId,
+            data_competencia: dataNf || new Date().toISOString().split('T')[0],
+            data_vencimento: dataVencimentoNf || null,
+            nota_fiscal: numNf || null,
+            descricao: `Compra (${modalidade.charAt(0) + modalidade.slice(1).toLowerCase()}): ${fornecedorNf.nome_fantasia || fornecedorNf.razao_social} (NF ${numNf || 'S/N'})`,
+            valor_total: valorTotalNFCalculado,
+            origem_modulo: 'ESTOQUE', // Usando o padrão do enum
+          })
+          .select('id')
+          .single();
+
+        if (novaTransacao.data?.id && contaAutoId) {
+          await (supabase as any).from('fin_lancamentos').insert({
+            transacao_id: novaTransacao.data.id,
+            conta_id: contaAutoId,
+            tipo_lancamento: 'DEBITO',
+            valor: valorTotalNFCalculado
+          });
+        }
+      }
+
       setNfSucesso(true);
-      // Reset form
       setNfItens([
-        { tempId: Date.now().toString(), ingrediente_id: '', marca: '', qtdEmbalagens: '', pesoUnitario: '', unidadePeso: 'KG', validade: '', lote: '' }
+        { tempId: Date.now().toString(), ingrediente_id: '', marca: '', qtdEmbalagens: '', pesoUnitario: '', unidadePeso: 'KG', precoTotal: '', descricaoNF: '', unidadeNF: '' }
       ]);
       setNumNf('');
+      setDataVencimentoNf('');
 
     } catch (err: any) {
       console.error(err);
@@ -388,6 +611,161 @@ export default function ComprasPage() {
 
   const getReqItemName = (req: RequisicaoFalta) =>
     req.grupo_estoque_id ? req.ingredientes_grupos?.nome : req.ingredientes?.nome;
+
+  const loadHistoricoNfs = useCallback(async () => {
+    if (!unidadeId) return;
+    setLoadingHistorico(true);
+    try {
+      // Cálculo robusto do fim do mês
+      const [year, month] = filtroMes.split('-').map(Number);
+      const nextMonthDate = new Date(year, month, 1);
+      const endOfMonthDate = new Date(nextMonthDate.getTime() - 1);
+      const endOfMonth = format(endOfMonthDate, 'yyyy-MM-dd');
+
+      const { data, error } = await (supabase as any)
+        .from('lotes_estoque')
+        .select('*, ingredientes(nome), materiais(nome), fornecedores(razao_social, nome_fantasia)')
+        .eq('unidade_id', unidadeId)
+        .is('deleted_at', null)
+        .gte('data_fabricacao', `${filtroMes}-01`)
+        .lte('data_fabricacao', endOfMonth)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Agrupar por Categoria e depois por Nota Fiscal
+      const cats: any = {
+        'ALIMENTOS': { id: 'ALIMENTOS', nome: 'Alimentos', icon: ShoppingCart, color: theme.palette.primary.main, nfs: {} },
+        'EMBALAGENS': { id: 'EMBALAGENS', nome: 'Embalagens', icon: Package, color: theme.palette.secondary.main, nfs: {} },
+        'LIMPEZA': { id: 'LIMPEZA', nome: 'Produtos de Limpeza', icon: Droplets, color: theme.palette.info.main, nfs: {} },
+        'MANUTENCAO': { id: 'MANUTENCAO', nome: 'Manutenção', icon: Wrench, color: theme.palette.warning.main, nfs: {} },
+        'UTENSILIOS': { id: 'UTENSILIOS', nome: 'Utensílios', icon: BoxIcon, color: theme.palette.success.main, nfs: {} },
+        'EPI_EPC': { id: 'EPI_EPC', nome: 'EPIs/EPCs', icon: Shield, color: theme.palette.error.main, nfs: {} },
+        'UNIFORMES': { id: 'UNIFORMES', nome: 'Uniformes', icon: User, color: theme.palette.primary.light, nfs: {} },
+        'PRIMEIROS_SOCORROS': { id: 'PRIMEIROS_SOCORROS', nome: 'Primeiros Socorros', icon: Activity, color: theme.palette.error.light, nfs: {} },
+        'OUTROS': { id: 'OUTROS', nome: 'Outros', icon: FileText, color: theme.palette.grey[500], nfs: {} }
+      };
+
+      (data || []).forEach((lote: any) => {
+        // Determinar Categoria
+        let catKey = 'ALIMENTOS';
+        if (lote.material_id) {
+          if (lote.categoria_produto === 'Embalagens') catKey = 'EMBALAGENS';
+          else if (lote.categoria_produto === 'Limpeza') catKey = 'LIMPEZA';
+          else if (lote.categoria_produto === 'Manutenção') catKey = 'MANUTENCAO';
+          else if (lote.categoria_produto === 'Utensílios') catKey = 'UTENSILIOS';
+          else if (lote.categoria_produto === 'EPIs/EPCs') catKey = 'EPI_EPC';
+          else if (lote.categoria_produto === 'Uniformes') catKey = 'UNIFORMES';
+          else if (lote.categoria_produto === 'Primeiros Socorros') catKey = 'PRIMEIROS_SOCORROS';
+          else catKey = 'OUTROS';
+        }
+
+        const nfKey = lote.nota_fiscal || 'S/N';
+        const groupKey = `${nfKey}-${lote.fornecedor_id}`;
+        
+        if (!cats[catKey].nfs[groupKey]) {
+          cats[catKey].nfs[groupKey] = {
+            nota_fiscal: nfKey,
+            fornecedor: lote.fornecedores?.nome_fantasia || lote.fornecedores?.razao_social || 'Desconhecido',
+            data_emissao: lote.data_fabricacao,
+            itens: [],
+            statusGeral: 'RECEBIDO' // Default
+          };
+        }
+        cats[catKey].nfs[groupKey].itens.push(lote);
+        if (lote.status === 'PREVISTO') {
+          cats[catKey].nfs[groupKey].statusGeral = 'AGUARDANDO';
+        }
+      });
+
+      // Converter nfs de objeto para array em cada categoria
+      const finalResult = Object.values(cats).map((c: any) => ({
+        ...c,
+        nfs: Object.values(c.nfs)
+      })).filter((c: any) => c.nfs.length > 0);
+
+      setHistoricoNfs(finalResult);
+    } catch (err) {
+      console.error('Erro ao carregar histórico:', err);
+    } finally {
+      setLoadingHistorico(false);
+    }
+  }, [unidadeId, filtroMes, theme]);
+
+  useEffect(() => {
+    if (tabValue === 3) loadHistoricoNfs();
+  }, [tabValue, loadHistoricoNfs, filtroMes]);
+
+  const handleDeleteLote = async (id: string) => {
+    setLoadingHistorico(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('lotes_estoque')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+      setDeleteTarget(null);
+      loadHistoricoNfs();
+    } catch (err: any) {
+      alert('Erro ao excluir: ' + err.message);
+    } finally {
+      setLoadingHistorico(false);
+    }
+  };
+
+  const handleDeleteNF = async (nf: string, fornecedor: string) => {
+    setLoadingHistorico(true);
+    try {
+      // Buscar lotes desta NF e fornecedor
+      const { data: lotes } = await (supabase as any)
+        .from('lotes_estoque')
+        .select('id, fornecedor_id, fornecedores(nome_fantasia, razao_social)')
+        .eq('nota_fiscal', nf)
+        .eq('unidade_id', unidadeId)
+        .is('deleted_at', null);
+      
+      const idsToDelete = lotes?.filter((l: any) => {
+        const nome = l.fornecedores?.nome_fantasia || l.fornecedores?.razao_social;
+        return nome === fornecedor || nf === 'S/N';
+      }).map((l: any) => l.id);
+      
+      if (idsToDelete && idsToDelete.length > 0) {
+        const { error } = await (supabase as any)
+          .from('lotes_estoque')
+          .update({ deleted_at: new Date().toISOString() })
+          .in('id', idsToDelete);
+        if (error) throw error;
+        setDeleteTarget(null);
+        loadHistoricoNfs();
+      }
+    } catch (err: any) {
+      alert('Erro ao excluir NF: ' + err.message);
+    } finally {
+      setLoadingHistorico(false);
+    }
+  };
+
+  const handleEditItemSave = async () => {
+    if (!editingItem) return;
+    try {
+      const { error } = await (supabase as any)
+        .from('lotes_estoque')
+        .update({
+          nota_fiscal: editingItem.nota_fiscal,
+          quantidade_inicial_g_ml: parseFloat(editingItem.quantidade_inicial_g_ml),
+          quantidade_atual_g_ml: parseFloat(editingItem.quantidade_inicial_g_ml), // Sincroniza se ainda PREVISTO
+          valor_total: parseFloat(editingItem.valor_total),
+          valor_unitario: parseFloat(editingItem.valor_total) / (editingItem.qtd_embalagens || 1)
+        })
+        .eq('id', editingItem.id);
+      
+      if (error) throw error;
+      setEditingItem(null);
+      loadHistoricoNfs();
+    } catch (err: any) {
+      alert('Erro ao salvar edição: ' + err.message);
+    }
+  };
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 12 }}>
@@ -408,6 +786,7 @@ export default function ComprasPage() {
         onClose={() => { setModalOpen(false); setNfItemToLink(null); }}
         onSuccess={handleIngredienteCriado}
         nomeSugerido={termoBuscaIngrediente}
+        categoriaPrincipal={modalidade}
       />
 
       <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
@@ -416,6 +795,7 @@ export default function ComprasPage() {
             <Tab icon={<Package size={18} />} iconPosition="start" label="Lista Consolidada" sx={{ fontWeight: 'bold', minHeight: 56 }} />
             <Tab icon={<Hash size={18} />} iconPosition="start" label="Agrupado por OP" sx={{ fontWeight: 'bold', minHeight: 56 }} />
             <Tab icon={<FileText size={18} />} iconPosition="start" label="Lançar Nota Fiscal" sx={{ fontWeight: 'bold', minHeight: 56 }} />
+            <Tab icon={<Clock size={18} />} iconPosition="start" label="Histórico de Notas" sx={{ fontWeight: 'bold', minHeight: 56 }} />
           </Tabs>
         </Box>
         <Box sx={{ p: 3 }}>
@@ -572,14 +952,36 @@ export default function ComprasPage() {
                       disabled={isReadingOcr}
                       size="small"
                     >
-                      {isReadingOcr ? 'Lendo...' : 'Importar Digital (IA)'}
-                      <input type="file" hidden accept="image/*,.pdf" onChange={handleOcrUpload} />
+                      {isReadingOcr ? 'Processando...' : 'Importar Nota (IA/XML)'}
+                      <input type="file" hidden accept="image/*,.pdf,.xml" onChange={handleOcrUpload} />
                     </Button>
                   </Tooltip>
                 </Box>
                 
                 <Grid container spacing={3}>
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Modalidade da Compra"
+                      value={modalidade}
+                      onChange={e => {
+                        setModalidade(e.target.value as any);
+                        setNfItens([{ tempId: Date.now().toString(), ingrediente_id: '', marca: '', qtdEmbalagens: '', pesoUnitario: '', unidadePeso: 'KG', precoTotal: '' }]);
+                      }}
+                      sx={{ bgcolor: 'white' }}
+                    >
+                      <MenuItem value="ALIMENTOS">Alimentos (Insumos)</MenuItem>
+                      <MenuItem value="EMBALAGENS">Embalagens</MenuItem>
+                      <MenuItem value="LIMPEZA">Produtos de limpeza</MenuItem>
+                      <MenuItem value="MANUTENCAO">Manutenção</MenuItem>
+                      <MenuItem value="UTENSILIOS">Utensílios</MenuItem>
+                      <MenuItem value="EPI_EPC">EPIs/EPCs</MenuItem>
+                      <MenuItem value="UNIFORMES">Uniformes</MenuItem>
+                      <MenuItem value="PRIMEIROS_SOCORROS">Primeiros Socorros</MenuItem>
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} md={9}>
                     <Autocomplete
                       options={listaFornecedores}
                       getOptionLabel={(option) => option.nome_fantasia || option.razao_social || 'Sem Nome'}
@@ -614,6 +1016,38 @@ export default function ComprasPage() {
                       onChange={e => setDataNf(e.target.value)}
                     />
                   </Grid>
+                  <Grid item xs={12} md={3}>
+                    <TextField
+                      label="Vencimento Contas a Pagar"
+                      type="date"
+                      fullWidth
+                      color="warning"
+                      InputLabelProps={{ shrink: true }}
+                      value={dataVencimentoNf}
+                      onChange={e => setDataVencimentoNf(e.target.value)}
+                    />
+                  </Grid>
+
+                  {valorTotalNfLido !== null && (
+                    <Grid item xs={12}>
+                      <Alert 
+                        severity="info" 
+                        variant="outlined" 
+                        sx={{ 
+                          bgcolor: alpha(theme.palette.info.main, 0.05),
+                          borderColor: alpha(theme.palette.info.main, 0.2),
+                          '& .MuiAlert-message': { width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          Valor Total lido da Nota Fiscal: 
+                        </Typography>
+                        <Typography variant="h6" color="info.main" sx={{ fontWeight: '800' }}>
+                          R$ {valorTotalNfLido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Alert>
+                    </Grid>
+                  )}
                 </Grid>
               </Paper>
 
@@ -636,7 +1070,7 @@ export default function ComprasPage() {
                     size="small"
                     sx={{ borderRadius: 2 }}
                   >
-                    Adicionar Insumo
+                    {modalidade === 'ALIMENTOS' ? 'Adicionar Insumo' : 'Adicionar Material'}
                   </Button>
                 </Box>
 
@@ -651,7 +1085,10 @@ export default function ComprasPage() {
                       const qtd = parseFloat(item.qtdEmbalagens) || 0;
                       const peso = parseFloat(item.pesoUnitario) || 0;
                       let total = qtd * peso;
-                      const unidFinal = item.unidadePeso === 'G' ? 'Kg' : (item.unidadePeso === 'ML' ? 'L' : item.unidadePeso);
+                      const unidFinal = item.unidadePeso === 'G' ? 'Kg' : 
+                                       (item.unidadePeso === 'ML' ? 'L' : 
+                                       (item.unidadePeso === 'UN' ? 'Un.' : item.unidadePeso));
+                                       
                       if (item.unidadePeso === 'G') total /= 1000;
                       if (item.unidadePeso === 'ML') total /= 1000;
 
@@ -684,8 +1121,16 @@ export default function ComprasPage() {
                           <Grid container spacing={2}>
                             {/* Linha 1: Identificação */}
                             <Grid item xs={12} md={7}>
+                              {item.descricaoNF && (
+                                <Box sx={{ mb: 1.5, p: 1, px: 1.5, bgcolor: alpha(theme.palette.warning.main, 0.1), borderRadius: 1, border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}` }}>
+                                  <Typography variant="caption" color="text.secondary" fontWeight="bold">Extraído da Nota Fiscal:</Typography>
+                                  <Typography variant="body2" fontWeight="bold" color="warning.dark">
+                                    {item.descricaoNF} {item.unidadeNF ? `(${item.unidadeNF})` : ''}
+                                  </Typography>
+                                </Box>
+                              )}
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontWeight: 'bold' }}>
-                                INSUMO / INGREDIENTE *
+                                VINCULAR AO INSUMO DO SISTEMA *
                               </Typography>
                               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                                 <Autocomplete
@@ -693,7 +1138,12 @@ export default function ComprasPage() {
                                   size="small"
                                   options={ingredienteSugestoes}
                                   groupBy={(option) => option.group}
-                                  getOptionLabel={(option) => `${option.nome}${option.fonte ? ` (${option.fonte})` : ''}`}
+                                  getOptionLabel={(option) => {
+                                    if (modalidade === 'ALIMENTOS') {
+                                      return `${option.nome}${option.fonte ? ` (${option.fonte})` : ''}`;
+                                    }
+                                    return `${option.nome}${option.marca ? ` (${option.marca})` : ''}`;
+                                  }}
                                   value={ingredienteSugestoes.find(s => s.id === item.ingrediente_id) || null}
                                   onChange={(_, newVal) => {
                                     if (newVal) handleIngredienteSelect(item.tempId, newVal.id);
@@ -702,10 +1152,10 @@ export default function ComprasPage() {
                                   renderInput={(params) => (
                                     <TextField
                                       {...params}
-                                      placeholder="Busque por nome ou marca..."
+                                      placeholder={modalidade === 'ALIMENTOS' ? "Busque por nome ou marca..." : "Busque pelo nome do material..."}
                                     />
                                   )}
-                                  noOptionsText="Nenhum ingrediente encontrado"
+                                  noOptionsText={modalidade === 'ALIMENTOS' ? "Nenhum ingrediente encontrado" : "Nenhum material encontrado"}
                                   isOptionEqualToValue={(opt, val) => opt.id === val.id}
                                 />
                                 <Tooltip title="Cadastrar Novo Ingrediente">
@@ -741,7 +1191,7 @@ export default function ComprasPage() {
                             </Grid>
 
                             {/* Linha 2: Dados Técnicos */}
-                            <Grid item xs={6} md={1.5}>
+                            <Grid item xs={6} md={2}>
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Qtd. Emb.</Typography>
                               <TextField
                                 type="number" size="small" fullWidth
@@ -750,16 +1200,21 @@ export default function ComprasPage() {
                                 inputProps={{ min: 0 }}
                               />
                             </Grid>
-                            <Grid item xs={6} md={1.5}>
-                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Peso Unit.</Typography>
+                            <Grid item xs={6} md={2}>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                Peso Unit. {item.unidadePeso !== 'UN' ? '*' : ''}
+                              </Typography>
                               <TextField
                                 type="number" size="small" fullWidth
                                 value={item.pesoUnitario}
                                 onChange={e => handleNfItemChange(item.tempId, 'pesoUnitario', e.target.value)}
-                                inputProps={{ min: 0 }}
+                                disabled={item.unidadePeso === 'UN'}
+                                error={item.unidadePeso !== 'UN' && (!item.pesoUnitario || parseFloat(item.pesoUnitario) <= 0)}
+                                inputProps={{ min: 0, step: "any" }}
+                                placeholder={item.unidadePeso === 'UN' ? 'N/A' : '0.000'}
                               />
                             </Grid>
-                            <Grid item xs={6} md={1.5}>
+                            <Grid item xs={6} md={2}>
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Unid.</Typography>
                               <TextField
                                 select size="small" fullWidth
@@ -770,28 +1225,22 @@ export default function ComprasPage() {
                                 <MenuItem value="G">g</MenuItem>
                                 <MenuItem value="L">L</MenuItem>
                                 <MenuItem value="ML">ml</MenuItem>
+                                <MenuItem value="UN">Un.</MenuItem>
                               </TextField>
                             </Grid>
-                            <Grid item xs={6} md={2.5}>
-                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Validade</Typography>
-                              <TextField
-                                type="date" size="small" fullWidth
-                                value={item.validade}
-                                onChange={e => handleNfItemChange(item.tempId, 'validade', e.target.value)}
-                                InputLabelProps={{ shrink: true }}
-                              />
-                            </Grid>
-                            <Grid item xs={12} md={2.5}>
-                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Lote Fabricante</Typography>
+                            <Grid item xs={6} md={3}>
+                              <Typography variant="caption" color="success.main" sx={{ display: 'block', mb: 0.5, fontWeight: 'bold' }}>Preço Total na NF (R$)</Typography>
                               <TextField
                                 size="small" fullWidth
-                                value={item.lote}
-                                onChange={e => handleNfItemChange(item.tempId, 'lote', e.target.value)}
-                                placeholder="ID do Lote"
+                                type="number"
+                                color="success"
+                                value={item.precoTotal}
+                                onChange={e => handleNfItemChange(item.tempId, 'precoTotal', e.target.value)}
+                                placeholder="0.00"
                               />
                             </Grid>
-                            <Grid item xs={12} md={2.5} sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: { md: 'flex-end', xs: 'flex-start' } }}>
-                              <Typography variant="caption" color="text.secondary">Total Calculado</Typography>
+                            <Grid item xs={12} md={3} sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: { md: 'flex-end', xs: 'flex-start' } }}>
+                              <Typography variant="caption" color="text.secondary">Total Volume</Typography>
                               <Typography variant="h6" fontWeight="800" color="primary.main">
                                 {total > 0 ? `${total.toLocaleString('pt-BR', { minimumFractionDigits: 3 })} ${unidFinal}` : '-'}
                               </Typography>
@@ -852,6 +1301,187 @@ export default function ComprasPage() {
                   {salvandoNf ? 'Processando...' : 'Finalizar Lançamento'}
                 </Button>
               </Paper>
+            </Box>
+          )}
+
+          {/* ──────── TAB 3: HISTÓRICO DE NOTAS ──────── */}
+          {tabValue === 3 && (
+            <Box>
+              <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
+                <Typography variant="body2" fontWeight="bold">Filtrar por Mês:</Typography>
+                <TextField
+                  type="month"
+                  size="small"
+                  value={filtroMes}
+                  onChange={(e) => setFiltroMes(e.target.value)}
+                  sx={{ width: 200 }}
+                />
+              </Box>
+
+              {loadingHistorico ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+              ) : historicoNfs.length === 0 ? (
+                <Alert severity="info">Nenhuma nota fiscal encontrada no histórico.</Alert>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {historicoNfs.map((cat: any) => (
+                    <Accordion key={cat.id} defaultExpanded sx={{ borderRadius: 2, '&:before': { display: 'none' }, boxShadow: 'none', border: '1px solid', borderColor: alpha(cat.color, 0.2) }}>
+                      <AccordionSummary expandIcon={<ChevronDown size={20} />} sx={{ bgcolor: alpha(cat.color, 0.05), borderRadius: '8px 8px 0 0' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <cat.icon size={22} color={cat.color} />
+                          <Typography variant="h6" fontWeight="bold" sx={{ color: cat.color }}>{cat.nome}</Typography>
+                          <Chip label={cat.nfs.length} size="small" sx={{ bgcolor: cat.color, color: 'white', fontWeight: 'bold' }} />
+                        </Box>
+                      </AccordionSummary>
+                      <AccordionDetails sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {cat.nfs.map((nf: any, idx: number) => (
+                          <Accordion key={idx} variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', '&:before': { display: 'none' } }}>
+                            <AccordionSummary expandIcon={<ChevronDown size={18} />} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', pr: 2 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <FileText size={18} color={theme.palette.primary.main} />
+                                  <Typography fontWeight="bold">NF {nf.nota_fiscal}</Typography>
+                                  <Typography variant="body2" color="text.secondary">| {nf.fornecedor}</Typography>
+                                  <Typography variant="caption" sx={{ ml: 2, color: 'text.disabled' }}>
+                                    {nf.data_emissao ? format(parseISO(nf.data_emissao), 'dd/MM/yyyy') : 'Sem data'}
+                                  </Typography>
+                                  <Chip 
+                                    label={nf.statusGeral === 'AGUARDANDO' ? 'Aguardando Recebimento' : 'Recebido'} 
+                                    size="small"
+                                    color={nf.statusGeral === 'AGUARDANDO' ? 'warning' : 'success'}
+                                    sx={{ ml: 2, height: 20, fontSize: '0.65rem', fontWeight: 'bold' }}
+                                  />
+                                </Box>
+                                <IconButton 
+                                  size="small" 
+                                  color="error" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteTarget({ nf: nf.nota_fiscal, fornecedor: nf.fornecedor, type: 'NF' });
+                                  }}
+                                >
+                                  <Trash2 size={16} />
+                                </IconButton>
+                              </Box>
+                            </AccordionSummary>
+                            <AccordionDetails sx={{ p: 0 }}>
+                              <Table size="small">
+                                <TableHead sx={{ bgcolor: 'background.default' }}>
+                                    <TableRow>
+                                      <TableCell sx={{ fontWeight: 'bold' }}>Item</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }} align="right">Qtd Inicial</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }} align="right">Valor Total</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }} align="center">Venc. Financeiro</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }} align="center">Status</TableCell>
+                                      <TableCell sx={{ fontWeight: 'bold' }} align="right">Ações</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {nf.itens.map((lote: any) => (
+                                    <TableRow key={lote.id} hover>
+                                      <TableCell>
+                                        <Typography variant="subtitle2">{lote.ingredientes?.nome || lote.materiais?.nome || 'Desconhecido'}</Typography>
+                                        <Typography variant="caption" color="text.secondary">{lote.numero_lote_fabricante}</Typography>
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        {(lote.quantidade_inicial_g_ml / 1000).toLocaleString('pt-BR')} {lote.unidade_peso_embalagem === 'UNID' ? 'Un' : (lote.unidade_peso_embalagem === 'L' ? 'L' : 'Kg')}
+                                      </TableCell>
+                                      <TableCell align="right">R$ {lote.valor_total?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                                      <TableCell align="center">
+                                        <Typography variant="caption" fontWeight="bold" color="warning.dark">
+                                          {lote.data_vencimento_financeiro ? format(parseISO(lote.data_vencimento_financeiro), 'dd/MM/yyyy') : '-'}
+                                        </Typography>
+                                      </TableCell>
+                                      <TableCell align="center">
+                                        <Chip 
+                                          label={lote.status === 'PREVISTO' ? 'Aguardando' : 'Recebido'} 
+                                          size="small" 
+                                          color={lote.status === 'PREVISTO' ? 'warning' : 'success'} 
+                                          variant="outlined" 
+                                        />
+                                      </TableCell>
+                                      <TableCell align="right">
+                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                                          <IconButton size="small" onClick={() => setEditingItem(lote)}><Edit2 size={14} /></IconButton>
+                                          <IconButton size="small" color="error" onClick={() => setDeleteTarget({ id: lote.id, type: 'ITEM' })}><Trash2 size={14} /></IconButton>
+                                        </Box>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </AccordionDetails>
+                          </Accordion>
+                        ))}
+                      </AccordionDetails>
+                    </Accordion>
+                  ))}
+                </Box>
+              )}
+
+              {/* MODAL DE EDIÇÃO */}
+              <Dialog open={!!editingItem} onClose={() => setEditingItem(null)} fullWidth maxWidth="xs">
+                <DialogTitle sx={{ fontWeight: 'bold' }}>Editar Item da Nota</DialogTitle>
+                <DialogContent>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                    <TextField 
+                      label="Nº Nota Fiscal" 
+                      value={editingItem?.nota_fiscal || ''} 
+                      onChange={e => setEditingItem({...editingItem, nota_fiscal: e.target.value})}
+                      fullWidth size="small"
+                    />
+                    <TextField 
+                      label="Quantidade Total (g/ml/un)" 
+                      type="number"
+                      value={editingItem?.quantidade_inicial_g_ml || ''} 
+                      onChange={e => setEditingItem({...editingItem, quantidade_inicial_g_ml: e.target.value})}
+                      fullWidth size="small" helperText="1kg = 1000, 1un = 1"
+                    />
+                    <TextField 
+                      label="Valor Total (R$)" 
+                      type="number"
+                      value={editingItem?.valor_total || ''} 
+                      onChange={e => setEditingItem({...editingItem, valor_total: e.target.value})}
+                      fullWidth size="small"
+                    />
+                  </Box>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setEditingItem(null)}>Cancelar</Button>
+                  <Button variant="contained" onClick={handleEditItemSave}>Salvar Alterações</Button>
+                </DialogActions>
+              </Dialog>
+
+              {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+              <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
+                <DialogTitle sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+                  <XCircle size={24} /> Confirmar Exclusão
+                </DialogTitle>
+                <DialogContent>
+                  <Typography>
+                    {deleteTarget?.type === 'NF' 
+                      ? `Tem certeza que deseja excluir TODOS os itens da Nota Fiscal ${deleteTarget.nf}? Esta ação não pode ser desfeita.`
+                      : 'Tem certeza que deseja excluir este item da nota fiscal?'}
+                  </Typography>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+                  <Button 
+                    variant="contained" 
+                    color="error" 
+                    disabled={loadingHistorico}
+                    onClick={() => {
+                      if (deleteTarget?.type === 'NF') {
+                        handleDeleteNF(deleteTarget.nf!, deleteTarget.fornecedor!);
+                      } else {
+                        handleDeleteLote(deleteTarget?.id!);
+                      }
+                    }}
+                  >
+                    Excluir
+                  </Button>
+                </DialogActions>
+              </Dialog>
             </Box>
           )}
 

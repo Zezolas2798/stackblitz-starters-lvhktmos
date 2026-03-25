@@ -16,9 +16,6 @@ async function check() {
             console.log('Sample:', data[0]);
         }
     }
-
-    const { data: d2 } = await (supabase as any).from('estoque_lotes').select('*');
-    console.log(`estoque_lotes has ${d2?.length || 0} rows.`);
 }
 
 check().catch(console.error);

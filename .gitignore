@@ -41,3 +41,8 @@ tsc_output*.txt
 
 # backups
 *.bak
+
+# assistant
+temp*.js
+.gemini/
+brain/
