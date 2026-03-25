@@ -477,8 +477,10 @@ export function buildDreUSAR(data: DashboardData, taxConfig: TaxConfig): DreNode
   const laborTotal = data.custoMaoDeObra;
   const primeCost = cmvTotal + laborTotal;
   const lucroBruto = receitaLiquida - cmvTotal;
-  const gop = lucroBruto - laborTotal - data.custosControlaveis;
-  const ebitda = gop - data.custoOcupacao;
+  const controlaveisTotal = data.custosControlaveis;
+  const ocupacaoTotal = data.custoOcupacao;
+  const gop = lucroBruto - laborTotal - controlaveisTotal;
+  const ebitda = gop - ocupacaoTotal;
 
   // Agrupar despesas controláveis por nome
   const despControlaveis = data.despesasDetalhe
@@ -502,38 +504,42 @@ export function buildDreUSAR(data: DashboardData, taxConfig: TaxConfig): DreNode
     {
       id: '2', name: '(-) Deduções da Receita Bruta', value: -deducoes, percentage: pct(deducoes), isTotal: false,
       children: [
-        { id: '2.1', name: 'Impostos (Estimativa)', value: -taxResult.totalTaxes },
-        { id: '2.2', name: 'Taxas Adquirentes (MDR Loja)', value: -leakage.mdrCost },
-        { id: '2.3', name: 'Comissões Delivery (Apps)', value: -data.taxasPlataformaDelivery },
-        ...(leakage.anticipationCost > 0 ? [{ id: '2.4', name: 'Custo Antecipação', value: -leakage.anticipationCost }] : []),
+        { id: '2.1', name: 'Impostos (Estimativa Fiscal)', value: -taxResult.totalTaxes },
+        { id: '2.2', name: 'Taxas Adquirentes (Estimativa MDR Loja)', value: -leakage.mdrCost },
+        { id: '2.3', name: 'Comissões Delivery (Lançamento Manual/Apps)', value: -data.taxasPlataformaDelivery },
+        ...(leakage.anticipationCost > 0 ? [{ id: '2.4', name: 'Custo Antecipação (Estimativa)', value: -leakage.anticipationCost }] : []),
       ]
     },
     { id: '3', name: 'Receita Líquida (Net Sales)', value: receitaLiquida, percentage: pct(receitaLiquida), isTotal: true },
     {
       id: '4', name: 'Custo de Mercadoria Vendida (CMV)', value: -cmvTotal, percentage: pct(cmvTotal), isTotal: true,
       children: [
-        { id: '4.1', name: 'CMV Alimentos', value: -data.cmvAlimentos },
-        { id: '4.2', name: 'CMV Bebidas', value: -data.cmvBebidas },
-        ...(data.custoDesperdicioEstoque > 0 ? [{ id: '4.3', name: 'Desperdício/Perda', value: -data.custoDesperdicioEstoque }] : []),
+        { id: '4.1', name: 'CMV Loja (Calculado por Ficha Técnica)', value: -data.cmvTotal },
+        ...(data.custoDesperdicioEstoque > 0 ? [{ id: '4.2', name: 'Desperdício/Perda (Estoque)', value: -data.custoDesperdicioEstoque }] : []),
       ]
     },
     {
-      id: '5', name: 'Custo de Mão de Obra Total (Labor)', value: -laborTotal, percentage: pct(laborTotal), isTotal: true,
+      id: '5', name: laborTotal > 0 ? 'Custo de Mão de Obra Total (Labor)' : 'Custo de Mão de Obra (Pendente Lançamento)', 
+      value: -laborTotal, percentage: pct(laborTotal), isTotal: true,
       children: despLabor.length > 0 ? despLabor : [
-        { id: '5.1', name: 'Sem lançamentos de mão de obra', value: 0 },
+        { id: '5.1', name: 'Sem lançamentos detectados', value: 0 },
       ]
     },
     { id: '6', name: 'PRIME COST (CMV + Labor)', value: -primeCost, percentage: pct(primeCost), isTotal: true },
-    { id: '7', name: 'Lucro Bruto (Gross Profit)', value: lucroBruto - laborTotal, percentage: pct(lucroBruto - laborTotal), isTotal: true },
+    { id: '7', name: 'Lucro Operacional Bruto', value: lucroBruto - laborTotal, percentage: pct(lucroBruto - laborTotal), isTotal: true },
     {
-      id: '8', name: 'Despesas Controláveis', value: -data.custosControlaveis, percentage: pct(data.custosControlaveis), isTotal: true,
+      id: '8', name: controlaveisTotal > 0 ? 'Despesas Controláveis' : 'Despesas Controláveis (Pendente Lançamento)', 
+      value: -controlaveisTotal, percentage: pct(controlaveisTotal), isTotal: true,
       children: despControlaveis.length > 0 ? despControlaveis : [
-        { id: '8.1', name: 'Sem lançamentos de despesas controláveis', value: 0 },
+        { id: '8.1', name: 'Sem despesas controláveis detectadas', value: 0 },
       ]
     },
     { id: '9', name: 'GOP (Gross Operating Profit)', value: gop, percentage: pct(gop), isTotal: true },
-    { id: '10', name: 'Custo de Ocupação', value: -data.custoOcupacao, percentage: pct(data.custoOcupacao), isTotal: true },
-    { id: '11', name: 'EBITDA', value: ebitda, percentage: pct(ebitda), isTotal: true },
+    { 
+      id: '10', name: ocupacaoTotal > 0 ? 'Custo de Ocupação' : 'Custo de Ocupação (Pendente Lançamento)', 
+      value: -ocupacaoTotal, percentage: pct(ocupacaoTotal), isTotal: true 
+    },
+    { id: '11', name: 'EBITDA (Fluxo Operacional)', value: ebitda, percentage: pct(ebitda), isTotal: true },
   ];
 
   return dreNodes;

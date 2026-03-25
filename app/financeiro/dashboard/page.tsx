@@ -323,61 +323,11 @@ export default function FinanceiroDashboardPage() {
 
       {/* ═══════════════ VISÃO 1: DRE USAR ═══════════════ */}
       {activeTab === 0 && (
-        <Grid container spacing={3}>
-          {/* Coluna Esquerda: KPIs com Bullet Graph */}
-          <Grid item xs={12} md={5}>
-            <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, height: '100%' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h6" fontWeight="bold">
-                  Saudabilidade (Real vs Meta)
-                </Typography>
-                <DataBadge type={hasRevenue ? 'real' : 'empty'} />
-              </Box>
-
-              <BulletGraph
-                title="Prime Cost (CMV + Labor)"
-                subtitle="O custo principal da operação. O ideal (alvo) é 60%."
-                actual={primeCostPercent}
-                target={60}
-                ranges={[55, 65, 100]}
-                format="percent"
-                inverseColors={true}
-              />
-
-              <BulletGraph
-                title="Custo de Mercadoria Vendida (CMV)"
-                subtitle="Peso dos insumos. Alvo 30%."
-                actual={cmvPercent}
-                target={30}
-                ranges={[25, 33, 100]}
-                format="percent"
-                inverseColors={true}
-              />
-
-              <BulletGraph
-                title="Margem EBITDA"
-                subtitle="Geração de caixa operacional. Alvo 15 a 20%."
-                actual={ebitdaPercent}
-                target={15}
-                ranges={[10, 15, 30]}
-                format="percent"
-                inverseColors={false}
-              />
-
-              {laborTotal === 0 && hasRevenue && (
-                <Alert severity="warning" sx={{ mt: 2, borderRadius: 1.5 }}>
-                  <Typography variant="caption">
-                    <b>Mão de Obra não lançada.</b> Configure a categoria de despesa "Folha de Pagamento" com subtipo <b>CUSTO_MAO_DE_OBRA</b> para incluir no Prime Cost.
-                  </Typography>
-                </Alert>
-              )}
-            </Paper>
-          </Grid>
-
-          {/* Coluna Direita: DRE Statement */}
-          <Grid item xs={12} md={7}>
+        <Grid container spacing={3} direction="column">
+          {/* Bloco 1: DRE Statement (Top) */}
+          <Grid item xs={12}>
             <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, overflowX: 'auto' }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, mb: 1 }}>
                 <Typography variant="h6" fontWeight="bold">
                   Demonstrativo de Resultado (Padrão USAR)
                 </Typography>
@@ -395,6 +345,62 @@ export default function FinanceiroDashboardPage() {
                     Lance vendas e despesas para gerar o DRE automaticamente.
                   </Typography>
                 </Box>
+              )}
+            </Paper>
+          </Grid>
+
+          {/* Bloco 2: Saudabilidade (Bottom) */}
+          <Grid item xs={12}>
+            <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h6" fontWeight="bold">
+                  Saudabilidade (Real vs Meta)
+                </Typography>
+                <DataBadge type={hasRevenue ? 'real' : 'empty'} />
+              </Box>
+
+              <Grid container spacing={4}>
+                <Grid item xs={12} md={4}>
+                  <BulletGraph
+                    title="Prime Cost (CMV + Labor)"
+                    subtitle="O custo principal da operação. O ideal (alvo) é 60%."
+                    actual={primeCostPercent}
+                    target={60}
+                    ranges={[55, 65, 100]}
+                    format="percent"
+                    inverseColors={true}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <BulletGraph
+                    title="Custo de Mercadoria Vendida (CMV)"
+                    subtitle="Peso dos insumos. Alvo 30%."
+                    actual={cmvPercent}
+                    target={30}
+                    ranges={[25, 33, 100]}
+                    format="percent"
+                    inverseColors={true}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <BulletGraph
+                    title="Margem EBITDA"
+                    subtitle="Geração de caixa operacional. Alvo 15 a 20%."
+                    actual={ebitdaPercent}
+                    target={15}
+                    ranges={[10, 15, 30]}
+                    format="percent"
+                    inverseColors={false}
+                  />
+                </Grid>
+              </Grid>
+
+              {laborTotal === 0 && hasRevenue && (
+                <Alert severity="warning" sx={{ mt: 3, borderRadius: 1.5 }}>
+                  <Typography variant="caption">
+                    <b>Atenção:</b> O Prime Cost está sendo calculado sem o <b>Custo de Mão de Obra</b> pois não há lançamentos integrados para este mês.
+                  </Typography>
+                </Alert>
               )}
             </Paper>
           </Grid>
