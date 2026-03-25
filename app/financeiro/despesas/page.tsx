@@ -323,31 +323,63 @@ export default function DespesasPage() {
           descFinal += ` (+ Multas/Taxas)`;
         }
 
-        const { data: transacao, error: transError } = await (supabase as any)
-          .from('fin_transacoes')
-          .insert({
-            unidade_id: unidadeId,
-            descricao: descFinal,
-            data_competencia: dataCompetenciaGeral,
-            data_pagamento: row.data_pagamento || dataCompetenciaGeral, 
-            origem_modulo: 'MANUAL',
-            valor_total: valorTotalNum
-          })
-          .select()
-          .single();
-
-        if (transError) throw transError;
-
-        const { error: lancError } = await (supabase as any)
+        // Verificar se já existe lançamento manual para esta conta nesta competência
+        const { data: existingLanc, error: findError } = await (supabase as any)
           .from('fin_lancamentos')
-          .insert({
-            transacao_id: (transacao as any).id,
-            conta_id: contaId,
-            tipo_lancamento: 'DEBITO',
-            valor: valorTotalNum
-          });
+          .select('id, transacao_id, fin_transacoes!inner(id, unidade_id, data_competencia, origem_modulo)')
+          .eq('conta_id', contaId)
+          .eq('fin_transacoes.unidade_id', unidadeId)
+          .eq('fin_transacoes.data_competencia', dataCompetenciaGeral)
+          .eq('fin_transacoes.origem_modulo', 'MANUAL')
+          .maybeSingle();
 
-        if (lancError) throw lancError;
+        if (existingLanc) {
+          // UPDATE existente
+          const { error: transUpdError } = await (supabase as any)
+            .from('fin_transacoes')
+            .update({
+              descricao: descFinal,
+              data_pagamento: row.data_pagamento || dataCompetenciaGeral,
+              valor_total: valorTotalNum
+            })
+            .eq('id', (existingLanc as any).transacao_id);
+
+          if (transUpdError) throw transUpdError;
+
+          const { error: lancUpdError } = await (supabase as any)
+            .from('fin_lancamentos')
+            .update({ valor: valorTotalNum })
+            .eq('id', (existingLanc as any).id);
+
+          if (lancUpdError) throw lancUpdError;
+        } else {
+          // INSERT novo
+          const { data: transacao, error: transError } = await (supabase as any)
+            .from('fin_transacoes')
+            .insert({
+              unidade_id: unidadeId,
+              descricao: descFinal,
+              data_competencia: dataCompetenciaGeral,
+              data_pagamento: row.data_pagamento || dataCompetenciaGeral, 
+              origem_modulo: 'MANUAL',
+              valor_total: valorTotalNum
+            })
+            .select()
+            .single();
+
+          if (transError) throw transError;
+
+          const { error: lancError } = await (supabase as any)
+            .from('fin_lancamentos')
+            .insert({
+              transacao_id: (transacao as any).id,
+              conta_id: contaId,
+              tipo_lancamento: 'DEBITO',
+              valor: valorTotalNum
+            });
+
+          if (lancError) throw lancError;
+        }
         sucessoCount++;
       }
 
