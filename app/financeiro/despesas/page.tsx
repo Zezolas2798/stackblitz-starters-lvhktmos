@@ -17,6 +17,7 @@ interface FinConta {
   nome: string;
   tipo: string;
   comportamento_custo: 'FIXO' | 'VARIAVEL' | 'MISTO' | 'NAO_APLICAVEL';
+  subtipo_usar: string;
   alocacao_custo: string;
 }
 
@@ -66,6 +67,7 @@ export default function DespesasPage() {
   const [editandoCatId, setEditandoCatId] = useState<string | null>(null);
   const [novaCatNome, setNovaCatNome] = useState('');
   const [novaCatComportamento, setNovaCatComportamento] = useState<'FIXO' | 'VARIAVEL'>('FIXO');
+  const [novaCatSubtipo, setNovaCatSubtipo] = useState<string>('OUTRAS_DESPESAS');
   const [catSubmitting, setCatSubmitting] = useState(false);
 
   useEffect(() => {
@@ -90,7 +92,7 @@ export default function DespesasPage() {
     setLoading(true);
     const { data: contasInfo, error: cErr } = await (supabase as any)
       .from('fin_contas')
-      .select('id, codigo, nome, tipo, comportamento_custo, alocacao_custo')
+      .select('id, codigo, nome, tipo, comportamento_custo, subtipo_usar, alocacao_custo')
       .eq('cliente_id', activeClientId)
       .eq('tipo', 'DESPESA')
       .eq('ativo', true)
@@ -186,12 +188,14 @@ export default function DespesasPage() {
     setEditandoCatId(conta.id);
     setNovaCatNome(conta.nome);
     setNovaCatComportamento(conta.comportamento_custo === 'FIXO' || conta.comportamento_custo === 'VARIAVEL' ? conta.comportamento_custo : 'FIXO');
+    setNovaCatSubtipo(conta.subtipo_usar || 'OUTRAS_DESPESAS');
   }
-
+  
   function handleCancelEdit() {
     setEditandoCatId(null);
     setNovaCatNome('');
     setNovaCatComportamento('FIXO');
+    setNovaCatSubtipo('OUTRAS_DESPESAS');
   }
 
   async function handleSaveCategory() {
@@ -204,7 +208,8 @@ export default function DespesasPage() {
           .from('fin_contas')
           .update({
             nome: novaCatNome,
-            comportamento_custo: novaCatComportamento
+            comportamento_custo: novaCatComportamento,
+            subtipo_usar: novaCatSubtipo
           })
           .eq('id', editandoCatId);
         if (error) throw error;
@@ -217,7 +222,7 @@ export default function DespesasPage() {
           nome: novaCatNome,
           tipo: 'DESPESA',
           comportamento_custo: novaCatComportamento,
-          subtipo_usar: 'OUTRAS_DESPESAS'
+          subtipo_usar: novaCatSubtipo
         });
         if (error) throw error;
       }
@@ -656,35 +661,54 @@ export default function DespesasPage() {
             <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 'bold' }}>
               {editandoCatId ? 'Editando Categoria' : 'Adicionar Nova Categoria'}
             </Typography>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={editandoCatId ? 5 : 6}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={5}>
                 <TextField 
                   label="Nome da Categoria" size="small" fullWidth 
                   value={novaCatNome} onChange={e => setNovaCatNome(e.target.value)}
                 />
               </Grid>
-              <Grid item xs={3}>
+              <Grid item xs={6} md={3}>
                 <FormControl fullWidth size="small">
-                  <Select value={novaCatComportamento} onChange={(e: any) => setNovaCatComportamento(e.target.value)}>
+                  <InputLabel>Comportamento</InputLabel>
+                  <Select 
+                    label="Comportamento"
+                    value={novaCatComportamento} 
+                    onChange={(e: any) => setNovaCatComportamento(e.target.value)}
+                  >
                     <MenuItem value="FIXO">Custo Fixo</MenuItem>
                     <MenuItem value="VARIAVEL">Custo Variável</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={editandoCatId ? 4 : 3}>
-                <Stack direction="row" spacing={1}>
+              <Grid item xs={6} md={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Mapeamento DRE (USAR)</InputLabel>
+                  <Select 
+                    label="Mapeamento DRE (USAR)"
+                    value={novaCatSubtipo} 
+                    onChange={(e: any) => setNovaCatSubtipo(e.target.value)}
+                  >
+                    <MenuItem value="CUSTOS_CONTROLAVEIS">Despesas Operacionais</MenuItem>
+                    <MenuItem value="CUSTO_MAO_DE_OBRA">Mão de Obra</MenuItem>
+                    <MenuItem value="CUSTO_OCUPACAO">Ocupação</MenuItem>
+                    <MenuItem value="OUTRAS_DESPESAS">Outras Despesas</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
                   {editandoCatId && (
-                    <Button variant="outlined" size="small" onClick={handleCancelEdit}>
+                    <Button variant="outlined" size="small" onClick={handleCancelEdit} sx={{ borderRadius: 2 }}>
                       Cancelar
                     </Button>
                   )}
                   <Button 
-                    fullWidth={!editandoCatId} variant="contained" size="medium" 
+                    variant="contained" size="medium" 
                     disabled={!novaCatNome || catSubmitting} onClick={handleSaveCategory}
+                    sx={{ px: 4, borderRadius: 2 }}
                   >
-                    {editandoCatId ? 'Salvar' : 'Criar'}
+                    {editandoCatId ? 'Salvar Alterações' : 'Criar Categoria'}
                   </Button>
-                </Stack>
               </Grid>
             </Grid>
           </Paper>
@@ -707,23 +731,33 @@ export default function DespesasPage() {
                   key={conta.id} divider
                   secondaryAction={
                     <Stack direction="row" spacing={1}>
-                      <IconButton edge="end" onClick={() => handleEditCategory(conta)} color="primary" size="small">
-                        <Pencil size={16} />
+                      <IconButton edge="end" size="small" onClick={() => handleEditCategory(conta)}>
+                        <Pencil size={18} />
                       </IconButton>
-                      <IconButton edge="end" onClick={() => handleDeleteCategory(conta.id)} color="error" size="small">
-                        <Trash2 size={16} />
+                      <IconButton edge="end" size="small" color="error" onClick={() => handleDeleteCategory(conta.id)}>
+                        <Trash2 size={18} />
                       </IconButton>
                     </Stack>
                   }
                 >
                   <ListItemText 
                     primary={conta.nome} 
-                    secondary={conta.comportamento_custo === 'FIXO' ? 'Gasto Mensal Recorrente' : 'Proporcional à Operação'} 
-                  />
-                  <Chip 
-                    label={conta.comportamento_custo} size="small" 
-                    variant="outlined" color={conta.comportamento_custo === 'FIXO' ? 'primary' : 'warning'}
-                    sx={{ mr: 2, fontWeight: 'bold', fontSize: '0.6rem' }}
+                    secondary={
+                      <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                        <Chip label={conta.comportamento_custo} size="tiny" sx={{ fontSize: '0.65rem', height: 18 }} />
+                        <Chip 
+                          label={
+                            conta.subtipo_usar === 'CUSTOS_CONTROLAVEIS' ? 'Operacional' :
+                            conta.subtipo_usar === 'CUSTO_MAO_DE_OBRA' ? 'Mão de Obra' :
+                            conta.subtipo_usar === 'CUSTO_OCUPACAO' ? 'Ocupação' : 'Outros'
+                          } 
+                          size="tiny" 
+                          variant="outlined"
+                          color="primary"
+                          sx={{ fontSize: '0.65rem', height: 18 }} 
+                        />
+                      </Stack>
+                    }
                   />
                 </ListItem>
               ))
