@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, Container, Paper, Grid, Button, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tabs, Tab, Switch, FormControlLabel, IconButton, Collapse, Divider, useTheme, alpha } from '@mui/material';
-import { UploadCloud, CheckCircle, Save, Calendar, Star, HelpCircle, TrendingUp, AlertCircle, Monitor, Truck, Settings as SettingsIcon } from 'lucide-react';
+import { Box, Typography, Container, Paper, Grid, Button, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tabs, Tab, Switch, FormControlLabel, IconButton, Collapse, Divider, useTheme, alpha, Chip } from '@mui/material';
+import { UploadCloud, CheckCircle, Save, Calendar, Star, HelpCircle, TrendingUp, AlertCircle, Monitor, Truck, Settings as SettingsIcon, Clock } from 'lucide-react';
 import { Assessment, MenuBook, KeyboardArrowDown, KeyboardArrowUp, History as HistoryIcon } from '@mui/icons-material';
 import { 
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, 
@@ -514,6 +514,16 @@ export default function VendasPDVPage() {
         </Box>
         
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Box sx={{ mr: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+             <Chip 
+               icon={<Clock size={14} />} 
+               label="Custos: Sincronizados (Tempo Real)" 
+               size="small" 
+               color="success" 
+               variant="outlined" 
+               sx={{ fontWeight: 'bold', fontSize: '0.7rem' }}
+             />
+          </Box>
           <TextField
             label="Mês de Referência"
             type="month"
@@ -836,10 +846,17 @@ export default function VendasPDVPage() {
                             </IconButton>
                           </TableCell>
                           <TableCell><b>{receita.nome}</b></TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                              {receita.custo_teorico > 0 
-                                ? `R$ ${receita.custo_teorico.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                : 'R$ 0,00'}
+                          <TableCell align="right">
+                              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                <Typography variant="body2" color="primary.main" fontWeight="bold">
+                                  {receita.custo_teorico > 0 
+                                    ? `R$ ${receita.custo_teorico.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                    : 'R$ 0,00'}
+                                </Typography>
+                                <Typography variant="caption" color="success.main" sx={{ fontSize: '0.65rem', fontWeight: 600 }}>
+                                  Sincronizado
+                                </Typography>
+                              </Box>
                           </TableCell>
                           <TableCell align="right">
                             <MuiTooltip 
@@ -879,8 +896,9 @@ export default function VendasPDVPage() {
                           <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={4}>
                             <Collapse in={expandedRows.includes(receita.id)} timeout="auto" unmountOnExit>
                               <Box sx={{ margin: 2, bgcolor: 'action.hover', p: 2, borderRadius: 1 }}>
-                                <Typography variant="subtitle2" gutterBottom component="div" fontWeight="bold">
-                                  Detalhamento de Insumos (Base Ficha Técnica)
+                                <Typography variant="subtitle2" gutterBottom component="div" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  Detalhamento de Insumos (Baseado em Preços Pagos)
+                                  <Chip label="Última Compra" size="small" variant="outlined" color="info" sx={{ height: 18, fontSize: '0.6rem' }} />
                                 </Typography>
                                 <Table size="small">
                                   <TableHead>
