@@ -178,9 +178,9 @@ export default function EntradaEstoquePage() {
         'EMBALAGENS': 'EMBALAGEM',
         'LIMPEZA': 'LIMPEZA',
         'MANUTENCAO': 'MANUTENCAO',
-        'UTENSILIOS': 'UTENSILIOS',
+        'UTENSILIOS': 'UTENSILIO',
         'EPI_EPC': 'EPI_EPC',
-        'UNIFORMES': 'UNIFORMES',
+        'UNIFORMES': 'UNIFORME',
         'PRIMEIROS_SOCORROS': 'PRIMEIROS_SOCORROS'
       };
       query = query.not('material_id', 'is', null)
@@ -197,9 +197,9 @@ export default function EntradaEstoquePage() {
           'EMBALAGENS': 'EMBALAGEM',
           'LIMPEZA': 'LIMPEZA',
           'MANUTENCAO': 'MANUTENCAO',
-          'UTENSILIOS': 'UTENSILIOS',
+          'UTENSILIOS': 'UTENSILIO',
           'EPI_EPC': 'EPI_EPC',
-          'UNIFORMES': 'UNIFORMES',
+          'UNIFORMES': 'UNIFORME',
           'PRIMEIROS_SOCORROS': 'PRIMEIROS_SOCORROS'
         } as any)[categoriaPrincipal];
         return lote.materiais?.tipo_material === tipoEsperado;
@@ -850,6 +850,7 @@ export default function EntradaEstoquePage() {
                     size="small"
                     color="primary"
                     sx={{ height: 20, fontSize: '0.7rem', fontWeight: 'bold' }}
+                    title={`Existem ${previsoes.length} lotes aguardando recebimento nesta categoria.`}
                   />
                 )}
               </Box>

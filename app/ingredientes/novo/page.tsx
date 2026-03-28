@@ -26,6 +26,7 @@ interface AditivoMestre {
   ins: string;
   nome: string;
   funcao_principal: string | null;
+  is_artificial?: boolean;
 }
 
 interface AnvisaAlergenico {
@@ -79,6 +80,8 @@ export default function NovoIngredientePage() {
     declaracao_ingredientes_fornecedor: '',
     funcao_aditivo: '',
     ins_code: '',
+    is_corante_artificial: false,
+    is_corante_carmim: false,
     
     // Macronutrientes Obrigatórios
     energia_kcal: null, carboidrato_g: null, proteina_g: null, lipideos_g: null,
@@ -114,6 +117,7 @@ export default function NovoIngredientePage() {
   const [categoriaValue, setCategoriaValue] = useState<any>(null);
 
   const [alergenosSelecionados, setAlergenosSelecionados] = useState<AlergenicoTag[]>([]);
+  const [todosGrupos, setTodosGrupos] = useState<{id: string, nome: string, categoria_id: string | null}[]>([]);
   const [opcoesGrupos, setOpcoesGrupos] = useState<{id: string, nome: string}[]>([]);
 
   // Carga Inicial
@@ -131,15 +135,26 @@ export default function NovoIngredientePage() {
     async function loadGroupsAndCategories() {
       if (!activeClientId) return;
       const [grpRes, catRes] = await Promise.all([
-        (supabase as any).from('ingredientes_grupos').select('id, nome').eq('cliente_id', activeClientId).order('nome'),
+        (supabase as any).from('ingredientes_grupos').select('id, nome, categoria_id').eq('cliente_id', activeClientId).order('nome'),
         (supabase as any).from('cliente_categorias_produto').select('id, nome').eq('cliente_id', activeClientId).eq('modalidade', 'ALIMENTOS').order('nome')
       ]);
-      if (grpRes.data) setOpcoesGrupos(grpRes.data);
+      if (grpRes.data) setTodosGrupos(grpRes.data);
       if (catRes.data) setCategoriasMestre(catRes.data);
     }
     loadMasters();
     loadGroupsAndCategories();
   }, [activeClientId]);
+
+  // Filtrar grupos quando a categoria muda
+  useEffect(() => {
+    if (categoriaValue?.id) {
+      // Filtragem estrita: apenas grupos vinculados a esta categoria
+      const filtrados = todosGrupos.filter(g => g.categoria_id === categoriaValue.id);
+      setOpcoesGrupos(filtrados);
+    } else {
+      setOpcoesGrupos([]);
+    }
+  }, [categoriaValue, todosGrupos]);
 
   const handleChange = (field: keyof Ingrediente, value: any) => {
     let finalValue = value;
@@ -148,7 +163,7 @@ export default function NovoIngredientePage() {
     } else if (
         field !== 'nome' && field !== 'fonte' && field !== 'tipo_ingrediente' && 
         field !== 'funcao_aditivo' && field !== 'ins_code' && field !== 'declaracao_ingredientes_fornecedor' &&
-        field !== 'classificacao_nova'
+        field !== 'classificacao_nova' && field !== 'categoria_produto_id' && field !== 'grupo_estoque_id'
     ) {
         const num = Number(value);
         if (!isNaN(num)) finalValue = num;
@@ -171,6 +186,13 @@ export default function NovoIngredientePage() {
       } else {
           setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, fonte: 'Tabela INS ANVISA' }));
       }
+      
+      // Detecção Automática de Corantes Específicos
+      setFormData(prev => ({ 
+        ...prev, 
+        is_corante_artificial: !!aditivo.is_artificial,
+        is_corante_carmim: aditivo.ins === '120'
+      }));
     }
   };
 
@@ -287,7 +309,10 @@ export default function NovoIngredientePage() {
                 <Autocomplete
                   options={categoriasMestre}
                   value={categoriaValue}
-                  onChange={(_, val) => setCategoriaValue(val)}
+                  onChange={(_, val) => {
+                    setCategoriaValue(val);
+                    handleChange('grupo_estoque_id', null);
+                  }}
                   getOptionLabel={(option) => option.nome || ''}
                   renderInput={(params) => <TextField {...params} label="Categoria de Produto" placeholder="Ex: Grãos, Proteínas, Temperos..." />}
                   noOptionsText="Nenhuma categoria de Alimentos encontrada"
@@ -307,11 +332,21 @@ export default function NovoIngredientePage() {
                     if (typeof newValue === 'string') {
                       // Handle free text (new group)
                       if (!activeClientId) return;
+                      if (!categoriaValue?.id) {
+                        alert('Por favor, selecione uma Categoria primeiro para vincular este novo Grupo.');
+                        return;
+                      }
                       try {
                         setLoading(true);
-                        const { data, error } = await (supabase as any).from('ingredientes_grupos').insert([{ cliente_id: activeClientId, nome: newValue }]).select().single();
+                        const { data, error } = await (supabase as any).from('ingredientes_grupos')
+                          .insert([{ 
+                            cliente_id: activeClientId, 
+                            categoria_id: categoriaValue.id,
+                            nome: newValue 
+                          }])
+                          .select().single();
                         if (error) throw error;
-                        setOpcoesGrupos(prev => [...prev, data]);
+                        setTodosGrupos(prev => [...prev, data]);
                         handleChange('grupo_estoque_id', data.id);
                       } catch (err: any) {
                         console.error('Erro ao criar grupo:', err);
@@ -325,7 +360,8 @@ export default function NovoIngredientePage() {
                       handleChange('grupo_estoque_id', null);
                     }
                   }}
-                  renderInput={(params) => <TextField {...params} label="Grupo de Estoque (Para Agrupar Marcas)" placeholder="Ex: Farinha de Trigo" helperText="Ingredientes do mesmo grupo compartilham estoques na produção." />}
+                  renderInput={(params) => <TextField {...params} label="Grupo de Estoque (Para Agrupar Marcas)" placeholder="Ex: Farinha de Trigo" helperText="Opcional. Agrupa produtos que compartilham o mesmo estoque." />}
+                  noOptionsText={categoriaValue ? "Nenhuma subcategoria encontrada para esta categoria" : "Selecione uma categoria primeiro"}
                 />
               </Grid>
 
@@ -376,9 +412,13 @@ export default function NovoIngredientePage() {
 
               <Grid item xs={12}>
                   <Typography variant="subtitle2" color="error" fontWeight="bold" sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center' }}>
-                      <AlertTriangle size={18} /> CONTROLE DE ALERGÊNICOS (OBRIGATÓRIO)
+                      <AlertTriangle size={18} /> CONTROLE DE ALERGÊNICOS & ADITIVOS CRÍTICOS
                   </Typography>
-                  <FormControlLabel control={<Checkbox checked={!!formData.contem_gluten} onChange={e => handleChange('contem_gluten', e.target.checked)} color="error" />} label="CONTÉM GLÚTEN" sx={{ mb: 2, display: 'block' }} />
+                  <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
+                    <FormControlLabel control={<Checkbox checked={!!formData.contem_gluten} onChange={e => handleChange('contem_gluten', e.target.checked)} color="error" />} label="CONTÉM GLÚTEN" />
+                    <FormControlLabel control={<Checkbox checked={!!formData.is_corante_artificial} onChange={e => handleChange('is_corante_artificial', e.target.checked)} color="error" />} label="CORANTE ARTIFICIAL" />
+                    <FormControlLabel control={<Checkbox checked={!!formData.is_corante_carmim} onChange={e => handleChange('is_corante_carmim', e.target.checked)} color="error" />} label="CARMIM (INS 120)" />
+                  </Stack>
                   <Autocomplete
                     options={listaMestraAlergenicos.filter(a => !alergenosSelecionados.find(s => s.alergenico_id === a.id))}
                     getOptionLabel={(o) => o.nome} onChange={(_, val) => handleAddAlergeno(val)}

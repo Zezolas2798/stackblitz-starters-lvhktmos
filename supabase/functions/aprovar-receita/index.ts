@@ -138,6 +138,7 @@ serve(async (req) => {
         versao: proximaVersao, // Usamos o valor calculado seguramente
         nome_snapshot: receita.nome,
         modo_preparo_snapshot: receita.modo_preparo,
+        modo_conservacao_snapshot: receita.modo_conservacao,
         rendimento_snapshot: receita.rendimento_total_g,
         composicao_snapshot: snapshotComposicao,
         tabela_nutricional_snapshot: dadosNutricionaisCalculados,

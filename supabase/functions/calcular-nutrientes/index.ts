@@ -155,6 +155,8 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
   const ingredientesParaLista: any[] = [];
   const alergenicosColetados: AlergenicoDetectado[] = [];
   let contemGluten = false;
+  let coloridoArtificialmente = false;
+  let coloridoCarmim = false;
 
   for (const item of composicao) {
     if (item.item_type === 'ingrediente') {
@@ -163,6 +165,8 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
 
       ingredientesParaLista.push({ peso_liquido_g: item.peso_liquido_g, ingrediente: ing });
       if (ing.contem_gluten) contemGluten = true;
+      if (ing.is_corante_artificial) coloridoArtificialmente = true;
+      if (ing.is_corante_carmim) coloridoCarmim = true;
 
       // Schema: alergenicos_ids é array de inteiros
       if (ing.alergenicos_ids && Array.isArray(ing.alergenicos_ids)) {
@@ -185,6 +189,8 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
 
       const resSub = await calcularNutrientesRecursivo(sub.composicao_receitas, supabaseAdmin, alergenicosMap);
       if (resSub.contemGluten) contemGluten = true;
+      if (resSub.coloridoArtificialmente) coloridoArtificialmente = true;
+      if (resSub.coloridoCarmim) coloridoCarmim = true;
       alergenicosColetados.push(...resSub.alergenicosColetados);
 
       const declSub = resSub.listaIngredientesFormatada.join(', ').toLowerCase();
@@ -201,7 +207,7 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
   }
 
   const listaIngredientesFormatada = gerarListaDeIngredientes(ingredientesParaLista);
-  return { totaisBrutos, alergenicosColetados, contemGluten, listaIngredientesFormatada };
+  return { totaisBrutos, alergenicosColetados, contemGluten, listaIngredientesFormatada, coloridoArtificialmente, coloridoCarmim };
 }
 
 function calculatePor100g(totais: Record<string, number>, rendimento: number) {
@@ -365,7 +371,7 @@ function gerarListaDeIngredientes(lista: any[]) {
 }
 
 function processarDeclaracoes(rec: any, resRec: any, por100g: any, alergenicosMap: Map<number, string>) {
-  const { contemGluten, alergenicosColetados, listaIngredientesFormatada } = resRec;
+  const { contemGluten, alergenicosColetados, listaIngredientesFormatada, coloridoArtificialmente, coloridoCarmim } = resRec;
   const contemLactose = (por100g['lactose_g'] || 0) > 0.1;
   const setAlergenicos = new Set<string>();
 
@@ -401,7 +407,9 @@ function processarDeclaracoes(rec: any, resRec: any, por100g: any, alergenicosMa
     contem_gluten: contemGluten,
     contem_lactose: contemLactose,
     alergenicos: txtA,
-    lista_ingredientes: txtI
+    lista_ingredientes: txtI,
+    colorido_artificialmente: coloridoArtificialmente,
+    colorido_carmim: coloridoCarmim
   };
 }
 

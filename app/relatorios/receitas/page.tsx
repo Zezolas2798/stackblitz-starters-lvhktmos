@@ -8,7 +8,7 @@ import {
   ListItemText, ListItemIcon, Paper, Divider, LinearProgress,
   Grid, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow,
   ListItemButton, Alert, CircularProgress, TextField, InputAdornment,
-  Accordion, AccordionSummary, AccordionDetails, useTheme, alpha, TableContainer
+  Accordion, AccordionSummary, AccordionDetails, useTheme, alpha, TableContainer, MenuItem
 } from '@mui/material';
 import {
   Printer,
@@ -22,7 +22,7 @@ import {
 import { ThemeProvider } from '@mui/material/styles';
 import { getTheme } from '@/lib/theme';
 
-import { TabelaVertical, LupaFrontalANVISA, RenderBlocoDeclaracoes } from '@/components/NutritionalLabel';
+import NutritionalLabel, { LupaFrontalANVISA, RenderBlocoDeclaracoes } from '@/components/NutritionalLabel';
 import { ResultadoCalculo } from '@/lib/types';
 
 // --- TIPOS ---
@@ -39,6 +39,7 @@ interface ReceitaRelatorio {
   nome: string;
   rendimento_total_g: number;
   modo_preparo: string;
+  modo_conservacao?: string | null;
   foto_url?: string | null;
   tipos_receita?: { nome: string } | null;
   tabelaCalculada?: ResultadoCalculo;
@@ -55,6 +56,8 @@ export default function RelatoriosPage() {
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [modoImpressao, setModoImpressao] = useState<'FICHA' | 'NUTRICIONAL' | null>(null);
+  const [layoutTabela, setLayoutTabela] = useState<any>('VERTICAL');
+  const [layoutLupa, setLayoutLupa] = useState<any>('HORIZONTAL');
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -63,7 +66,7 @@ export default function RelatoriosPage() {
     if (activeClientId) {
       setLoading(true);
       (supabase as any).from('receitas')
-        .select('id, nome, rendimento_total_g, modo_preparo, foto_url, tipos_receita(nome)')
+        .select('id, nome, rendimento_total_g, modo_preparo, modo_conservacao, foto_url, tipos_receita(nome)')
         .eq('cliente_id', activeClientId)
         .order('nome')
         .then(({ data }: any) => {
@@ -171,7 +174,11 @@ export default function RelatoriosPage() {
         try {
           const { data } = await supabase.functions.invoke('calcular-nutrientes', { body: { receita_id: id } });
           if (data && !data.error) {
-            receitasAtualizadas[index].tabelaCalculada = data as ResultadoCalculo;
+            const result = data as ResultadoCalculo;
+            if (receitasAtualizadas[index].modo_conservacao) {
+              result.declaracoes.modo_conservacao = receitasAtualizadas[index].modo_conservacao;
+            }
+            receitasAtualizadas[index].tabelaCalculada = result;
           }
         } catch (e) {
           console.error(`Erro ao calcular receita ${id}`, e);
@@ -237,6 +244,7 @@ export default function RelatoriosPage() {
               min-height: 297mm;
               background: white;
               padding: 15mm;
+              padding-bottom: 40mm; /* Extra space for floating footer */
               margin-bottom: 20px;
               box-shadow: 0 0 10px rgba(0,0,0,0.5);
               box-sizing: border-box;
@@ -244,8 +252,37 @@ export default function RelatoriosPage() {
         `}</style>
 
           {/* CONTROLES */}
-          <Paper className="no-print" elevation={8} sx={{ position: 'fixed', bottom: 30, zIndex: 9999, px: 3, py: 2, borderRadius: 10, display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Paper className="no-print" elevation={8} sx={{ position: 'fixed', bottom: 30, zIndex: 9999, px: 3, py: 2, borderRadius: 10, display: 'flex', gap: 2, alignItems: 'center', bgcolor: 'background.paper', border: '1px solid #ddd' }}>
             <Typography fontWeight="bold" sx={{ mr: 2 }}>{itensParaImprimir.length} receitas geradas</Typography>
+            
+            <TextField
+              select
+              size="small"
+              label="Layout Tabela"
+              value={layoutTabela}
+              onChange={(e) => setLayoutTabela(e.target.value)}
+              sx={{ width: 140 }}
+            >
+              <MenuItem value="VERTICAL">Vertical</MenuItem>
+              <MenuItem value="VERTICAL_QUEBRADA">Vert. Quebrada</MenuItem>
+              <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+              <MenuItem value="HORIZONTAL_QUEBRADA">Horiz. Quebrada</MenuItem>
+              <MenuItem value="LINEAR">Linear</MenuItem>
+            </TextField>
+
+            <TextField
+              select
+              size="small"
+              label="Layout Lupa"
+              value={layoutLupa}
+              onChange={(e) => setLayoutLupa(e.target.value)}
+              sx={{ width: 140 }}
+            >
+              <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+              <MenuItem value="VERTICAL">Vertical</MenuItem>
+              <MenuItem value="MISTO">Misto</MenuItem>
+            </TextField>
+
             <Button variant="contained" onClick={() => window.print()} startIcon={<Printer />}>IMPRIMIR / PDF</Button>
             <Button variant="outlined" color="inherit" onClick={() => setModoImpressao(null)}>FECHAR</Button>
           </Paper>
@@ -332,6 +369,18 @@ export default function RelatoriosPage() {
                           </Typography>
                         </Box>
                       </Box>
+
+                      {/* DIZERES TÉCNICOS (NOVO INTEGRADO) */}
+                      {receita.tabelaCalculada && (
+                        <Box>
+                          <Typography variant="subtitle2" fontWeight="bold" gutterBottom sx={{ borderBottom: '2px solid black' }}>
+                            DADOS TÉCNICOS & CONSERVAÇÃO
+                          </Typography>
+                          <Box sx={{ border: '1px solid #000', p: 1 }}>
+                            <RenderBlocoDeclaracoes declaracoes={receita.tabelaCalculada.declaracoes} />
+                          </Box>
+                        </Box>
+                      )}
                     </Stack>
 
                   ) : (
@@ -349,7 +398,7 @@ export default function RelatoriosPage() {
                         }}
                       >
                         {receita.tabelaCalculada ? (
-                          <TabelaVertical tabela={receita.tabelaCalculada} />
+                          <NutritionalLabel tabela={receita.tabelaCalculada} modelo={layoutTabela} />
                         ) : (
                           <Typography color="error">Cálculo pendente.</Typography>
                         )}
@@ -365,9 +414,8 @@ export default function RelatoriosPage() {
                               <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, borderRight: '1px solid #000', borderBottom: '1px solid #000', px: 1, py: 0.2, fontWeight: 'bold', fontSize: '0.6rem', color: '#000' }}>
                                 PAINEL FRONTAL (RDC 429)
                               </Typography>
-                              <Box sx={{ display: 'flex', justifyContent: 'center', py: 1, mt: 1 }}>
-                                {/* Layout Horizontal para economizar altura */}
-                                <LupaFrontalANVISA lupas={receita.tabelaCalculada.lupas} areaPainelCm2={null} layout="HORIZONTAL" />
+                              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 1, mt: 1 }}>
+                                <LupaFrontalANVISA lupas={receita.tabelaCalculada.lupas} areaPainelCm2={undefined} layout={layoutLupa} />
                               </Box>
                             </Box>
 

@@ -127,6 +127,7 @@ function CriarEditarReceitaComponent() {
   const [medidaCaseiraPesoG, setMedidaCaseiraPesoG] = useState<number | ''>('');
   const [riscosContaminacao, setRiscosContaminacao] = useState<AnvisaAlergenico[]>([]);
   const [areaPainelCm2, setAreaPainelCm2] = useState<number | ''>('');
+  const [modoConservacao, setModoConservacao] = useState('');
 
   // Composição
   const [composicao, setComposicao] = useState<ItemComposicao[]>([]);
@@ -274,6 +275,7 @@ function CriarEditarReceitaComponent() {
         setMedidaCaseiraNome(recData.medida_caseira_nome || null);
         setMedidaCaseiraPesoG(recData.medida_caseira_peso_g || '');
         setAreaPainelCm2(recData.area_painel_principal_cm2 || '');
+        setModoConservacao(recData.modo_conservacao || '');
 
         if (recData.anvisa_categorias) {
           const cat = recData.anvisa_categorias as AnvisaCategoria;
@@ -644,6 +646,7 @@ function CriarEditarReceitaComponent() {
       medida_caseira_peso_g: pesoMedidaNum,
       risco_contaminacao_cruzada_ids: riscosContaminacao.map(a => a.id),
       area_painel_principal_cm2: areaPainelCm2 || null,
+      modo_conservacao: modoConservacao || null,
     };
     const itensParaSalvar = composicao.map((item) => ({
       item_id: item.item_id, item_type: item.item_type, peso_bruto_g: item.peso_bruto_g, peso_liquido_g: item.peso_liquido_g
@@ -738,6 +741,17 @@ function CriarEditarReceitaComponent() {
                   </Box>
 
                   <TextField label="Modo de Preparo" multiline rows={8} fullWidth value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Descreva o passo a passo..." />
+                  
+                  <TextField 
+                    label="Modo de Conservação" 
+                    multiline 
+                    rows={4} 
+                    fullWidth 
+                    value={modoConservacao} 
+                    onChange={(e) => setModoConservacao(e.target.value)} 
+                    placeholder="Ex: Mantenha refrigerado de 0°C a 7°C. Após aberto, consumir em até... " 
+                    helperText="Obrigatório se o produto exigir condições especiais (RDC 727/2022). Ex: MANTER SOB REFRIGERAÇÃO."
+                  />
                 </Stack>
               </Grid>
               <Grid item xs={12} md={4}>

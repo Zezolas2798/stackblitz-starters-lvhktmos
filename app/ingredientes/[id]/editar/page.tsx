@@ -26,6 +26,7 @@ interface AditivoMestre {
     ins: string;
     nome: string;
     funcao_principal: string | null;
+    is_artificial?: boolean;
 }
 
 interface AnvisaAlergenico {
@@ -83,6 +84,8 @@ export default function EditarIngredientePage() {
         declaracao_ingredientes_fornecedor: '',
         funcao_aditivo: '',
         ins_code: '',
+        is_corante_artificial: false,
+        is_corante_carmim: false,
 
         // Macronutrientes Obrigatórios
         energia_kcal: null, carboidrato_g: null, proteina_g: null, lipideos_g: null,
@@ -115,6 +118,7 @@ export default function EditarIngredientePage() {
     });
 
     const [alergenosSelecionados, setAlergenosSelecionados] = useState<AlergenicoTag[]>([]);
+    const [todosGrupos, setTodosGrupos] = useState<{id: string, nome: string, categoria_id: string | null}[]>([]);
     const [opcoesGrupos, setOpcoesGrupos] = useState<{id: string, nome: string}[]>([]);
 
     // Carrega Ingrediente + Dados Mestres
@@ -142,8 +146,8 @@ export default function EditarIngredientePage() {
                     categorias = catData;
                 }
                 
-                const { data: grpData } = await (supabase as any).from('ingredientes_grupos').select('id, nome').eq('cliente_id', activeClientId).order('nome');
-                if (grpData) setOpcoesGrupos(grpData);
+                const { data: grpData } = await (supabase as any).from('ingredientes_grupos').select('id, nome, categoria_id').eq('cliente_id', activeClientId).order('nome');
+                if (grpData) setTodosGrupos(grpData);
             }
 
             // 2. Carrega Dados do Ingrediente
@@ -160,6 +164,8 @@ export default function EditarIngredientePage() {
                         ...ing,
                         tipo_ingrediente: ing.tipo_ingrediente as TipoIngrediente,
                         contem_gluten: !!ing.contem_gluten,
+                        is_corante_artificial: !!ing.is_corante_artificial,
+                        is_corante_carmim: !!ing.is_corante_carmim,
                         categoria_produto_id: ing.categoria_produto_id || null
                     } as Partial<Ingrediente>);
 
@@ -196,6 +202,17 @@ export default function EditarIngredientePage() {
         if (activeClientId) loadMastersAndData();
     }, [ingredienteId, activeClientId]);
 
+    // Filtrar grupos quando a categoria muda
+    useEffect(() => {
+        if (categoriaValue?.id) {
+            // Filtragem estrita: apenas grupos vinculados a esta categoria
+            const filtrados = todosGrupos.filter(g => g.categoria_id === categoriaValue.id);
+            setOpcoesGrupos(filtrados);
+        } else {
+            setOpcoesGrupos([]);
+        }
+    }, [categoriaValue, todosGrupos]);
+
     const handleChange = (field: keyof Ingrediente, value: any) => {
         let finalValue = value;
         if (typeof value === 'string' && value === '') {
@@ -203,7 +220,7 @@ export default function EditarIngredientePage() {
         } else if (
             field !== 'nome' && field !== 'fonte' && field !== 'tipo_ingrediente' &&
             field !== 'funcao_aditivo' && field !== 'ins_code' && field !== 'declaracao_ingredientes_fornecedor' &&
-            field !== 'classificacao_nova'
+            field !== 'classificacao_nova' && field !== 'categoria_produto_id' && field !== 'grupo_estoque_id'
         ) {
             const num = Number(value);
             if (!isNaN(num)) finalValue = num;
@@ -225,6 +242,13 @@ export default function EditarIngredientePage() {
             } else {
                 setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, fonte: 'Tabela INS ANVISA' }));
             }
+
+            // Detecção Automática de Corantes Específicos
+            setFormData(prev => ({ 
+                ...prev, 
+                is_corante_artificial: !!aditivo.is_artificial,
+                is_corante_carmim: aditivo.ins === '120'
+            }));
         }
     };
 
@@ -241,7 +265,8 @@ export default function EditarIngredientePage() {
         setAlergenosSelecionados(prev => prev.map(tag => tag.alergenico_id === id ? { ...tag, [field]: !tag[field] } : tag));
     };
 
-    const handleSalvar = async () => {
+    const handleSalvar = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
         if (!activeClientId) return alert('Selecione uma unidade/cliente no menu lateral!');
         if (!formData.nome) return alert('O nome do ingrediente é obrigatório');
 
@@ -249,21 +274,23 @@ export default function EditarIngredientePage() {
         try {
             const idsAlergenicos = alergenosSelecionados.map(a => a.alergenico_id);
 
-            let idCategoriaFinal: string | null = null;
-            if (typeof categoriaValue === 'object' && categoriaValue?.id) {
-                idCategoriaFinal = categoriaValue.id;
-            }
-
             const payload: any = {
                 ...formData,
-                categoria_produto_id: idCategoriaFinal,
                 alergenicos_ids: idsAlergenicos,
                 updated_at: new Date().toISOString()
             };
 
-            // Remover cliente_id pois não deve ser alterado (e dar erro se for string vazia)
+            // Garantir que categoria_produto_id esteja correto se categoriaValue foi selecionado
+            if (categoriaValue?.id) {
+                payload.categoria_produto_id = categoriaValue.id;
+            }
+
+            // Remover campos que não devem ser enviados ou que são objetos
             delete payload.cliente_id;
             delete payload.created_at;
+            delete payload.created_by;
+            delete payload.id;
+            delete payload.cliente;
 
             const { error } = await supabase.from('ingredientes').update(payload).eq('id', ingredienteId);
             if (error) throw error;
@@ -271,15 +298,23 @@ export default function EditarIngredientePage() {
             // Update Alergenicos (Deleta os existentes e recriar os passados)
             await supabase.from('ingrediente_alergenicos').delete().eq('ingrediente_id', ingredienteId);
             if (alergenosSelecionados.length > 0) {
-                const links: any[] = alergenosSelecionados.map(a => ({ ingrediente_id: ingredienteId, alergenico_id: a.alergenico_id, contem: a.contem, contem_derivado: a.contem_derivado }));
+                const links: any[] = alergenosSelecionados.map(a => ({ 
+                    ingrediente_id: ingredienteId, 
+                    anvisa_alergenico_id: a.alergenico_id, 
+                    nivel_contato: a.contem ? 'DIRETO' : (a.contem_derivado ? 'DIRETO' : 'TRACOS_CRUZADOS')
+                }));
                 await supabase.from('ingrediente_alergenicos').insert(links);
             }
 
             alert(`Ingrediente "${formData.nome}" editado com sucesso!`);
-            router.push('/ingredientes');
+            
+            // Pequeno delay para garantir que o alert seja visto antes do redirecionamento
+            setTimeout(() => {
+                router.push('/ingredientes');
+            }, 100);
         } catch (err: any) {
-            console.error(err);
-            alert('Erro ao salvar: ' + err.message);
+            console.error('Erro ao salvar:', err);
+            alert('Erro ao salvar: ' + (err.message || 'Verifique os logs do console'));
         } finally {
             setLoading(false);
         }
@@ -309,7 +344,7 @@ export default function EditarIngredientePage() {
                     <Tab icon={<Activity size={20} />} label="Tabela Nutricional Completa" iconPosition="start" />
                 </Tabs>
 
-                <Box sx={{ p: 4 }}>
+                <Box component="form" noValidate onSubmit={handleSalvar} sx={{ p: 4 }}>
                     {/* === ABA 1: DADOS GERAIS === */}
                     {tabIndex === 0 && (
                         <Grid container spacing={3}>
@@ -357,9 +392,13 @@ export default function EditarIngredientePage() {
                                 <Autocomplete
                                     options={categoriasMestre}
                                     value={categoriaValue}
-                                    onChange={(_, val) => setCategoriaValue(val)}
+                                    onChange={(_, val) => {
+                                        setCategoriaValue(val);
+                                        handleChange('grupo_estoque_id', null);
+                                    }}
                                     getOptionLabel={(option) => option.nome || ''}
-                                    renderInput={(params) => <TextField {...params} label="Categoria de Produto" />}
+                                    renderInput={(params) => <TextField {...params} label="Categoria de Produto" placeholder="Ex: Grãos, Proteínas, Temperos..." />}
+                                    noOptionsText="Nenhuma categoria de Alimentos encontrada"
                                 />
                             </Grid>
                             <Grid item xs={12} md={4}>
@@ -374,12 +413,23 @@ export default function EditarIngredientePage() {
                                     value={opcoesGrupos.find(g => g.id === formData.grupo_estoque_id) || null}
                                     onChange={async (_, newValue) => {
                                         if (typeof newValue === 'string') {
+                                            // Handle free text (new group)
                                             if (!activeClientId) return;
+                                            if (!categoriaValue?.id) {
+                                                alert('Por favor, selecione uma Categoria primeiro para vincular este novo Grupo.');
+                                                return;
+                                            }
                                             try {
                                                 setLoading(true);
-                                                const { data, error } = await (supabase as any).from('ingredientes_grupos').insert([{ cliente_id: activeClientId, nome: newValue }]).select().single();
+                                                const { data, error } = await (supabase as any).from('ingredientes_grupos')
+                                                    .insert([{
+                                                        cliente_id: activeClientId,
+                                                        categoria_id: categoriaValue.id,
+                                                        nome: newValue
+                                                    }])
+                                                    .select().single();
                                                 if (error) throw error;
-                                                setOpcoesGrupos(prev => [...prev, data]);
+                                                setTodosGrupos(prev => [...prev, data]);
                                                 handleChange('grupo_estoque_id', data.id);
                                             } catch (err: any) {
                                                 console.error('Erro ao criar grupo:', err);
@@ -393,7 +443,8 @@ export default function EditarIngredientePage() {
                                             handleChange('grupo_estoque_id', null);
                                         }
                                     }}
-                                    renderInput={(params) => <TextField {...params} label="Grupo de Estoque (Para Agrupar Marcas)" placeholder="Ex: Farinha de Trigo" helperText="Ingredientes do mesmo grupo compartilham estoques na produção." />}
+                                    renderInput={(params) => <TextField {...params} label="Grupo de Estoque (Para Agrupar Marcas)" placeholder="Ex: Farinha de Trigo" helperText="Opcional. Agrupa produtos que compartilham o mesmo estoque." />}
+                                    noOptionsText={categoriaValue ? "Nenhuma subcategoria encontrada para esta categoria" : "Selecione uma categoria primeiro"}
                                 />
                             </Grid>
 
@@ -444,9 +495,13 @@ export default function EditarIngredientePage() {
 
                             <Grid item xs={12}>
                                 <Typography variant="subtitle2" color="error" fontWeight="bold" sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center' }}>
-                                    <AlertTriangle size={18} /> CONTROLE DE ALERGÊNICOS (OBRIGATÓRIO)
+                                    <AlertTriangle size={18} /> CONTROLE DE ALERGÊNICOS & ADITIVOS CRÍTICOS
                                 </Typography>
-                                <FormControlLabel control={<Checkbox checked={!!formData.contem_gluten} onChange={e => handleChange('contem_gluten', e.target.checked)} color="error" />} label="CONTÉM GLÚTEN" sx={{ mb: 2, display: 'block' }} />
+                                <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
+                                    <FormControlLabel control={<Checkbox checked={!!formData.contem_gluten} onChange={e => handleChange('contem_gluten', e.target.checked)} color="error" />} label="CONTÉM GLÚTEN" />
+                                    <FormControlLabel control={<Checkbox checked={!!formData.is_corante_artificial} onChange={e => handleChange('is_corante_artificial', e.target.checked)} color="error" />} label="CORANTE ARTIFICIAL" />
+                                    <FormControlLabel control={<Checkbox checked={!!formData.is_corante_carmim} onChange={e => handleChange('is_corante_carmim', e.target.checked)} color="error" />} label="CARMIM (INS 120)" />
+                                </Stack>
                                 <Autocomplete
                                     options={listaMestraAlergenicos.filter(a => !alergenosSelecionados.find(s => s.alergenico_id === a.id))}
                                     getOptionLabel={(o) => o.nome} onChange={(_, val) => handleAddAlergeno(val)}
@@ -576,11 +631,11 @@ export default function EditarIngredientePage() {
                     <Divider sx={{ my: 4 }} />
 
                     <Button
+                        type="submit"
                         variant="contained"
                         size="large"
                         fullWidth
                         startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
-                        onClick={handleSalvar}
                         disabled={loading}
                         sx={{ fontWeight: 'bold', height: 48, boxShadow: 3 }}
                     >

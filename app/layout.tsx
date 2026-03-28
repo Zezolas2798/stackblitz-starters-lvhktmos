@@ -15,6 +15,7 @@ import { ClientProvider, useClient } from '@/lib/ClientContext';
 import { ThemeContextProvider, useThemeContext } from '@/lib/ThemeContext';
 import { AppSidebar } from '@/components/AppSidebar';
 import { AppHeader } from '@/components/AppHeader';
+import StyledComponentsRegistry from '@/lib/registry';
 
 import { ThemeProvider } from '@mui/material/styles';
 import { CssBaseline, Box, Toolbar } from '@mui/material';
@@ -101,11 +102,13 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </head>
       <body>
-        <ThemeContextProvider>
-          <ClientProvider>
-            <ThemeApplier>{children}</ThemeApplier>
-          </ClientProvider>
-        </ThemeContextProvider>
+        <StyledComponentsRegistry>
+          <ThemeContextProvider>
+            <ClientProvider>
+              <ThemeApplier>{children}</ThemeApplier>
+            </ClientProvider>
+          </ThemeContextProvider>
+        </StyledComponentsRegistry>
       </body>
     </html>
   );

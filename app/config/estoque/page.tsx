@@ -52,6 +52,7 @@ export default function ConfiguracaoEstoquePage() {
     const [loading, setLoading] = useState(false);
     const [locais, setLocais] = useState<any[]>([]);
     const [categorias, setCategorias] = useState<any[]>([]);
+    const [gruposIngredientes, setGruposIngredientes] = useState<any[]>([]);
     const [setores, setSetores] = useState<any[]>([]);
     const [equipamentos, setEquipamentos] = useState<any[]>([]);
 
@@ -65,7 +66,9 @@ export default function ConfiguracaoEstoquePage() {
     const [grupoEquipParaAdicionar, setGrupoEquipParaAdicionar] = useState('');
     const [categoriaPaiId, setCategoriaPaiId] = useState<string | null>(null);
     const [expandedCategorias, setExpandedCategorias] = useState<string[]>([]);
-    const [modalidadeParaNovaCategoria, setModalidadeParaNovaCategoria] = useState('ALIMENTOS');
+    const [novaSubCategoriaIngrediente, setNovaSubCategoriaIngrediente] = useState('');
+    const [categoriaPaiSubIngrediente, setCategoriaPaiSubIngrediente] = useState<string | null>(null);
+    const [modalidadeParaNovaCategoria, setModalidadeParaNovaCategoria] = useState<string | null>(null);
     const [expandedModalityIds, setExpandedModalityIds] = useState<string[]>([]);
 
     // Feedback visual
@@ -90,15 +93,17 @@ export default function ConfiguracaoEstoquePage() {
         if (!activeClientId || !ctxUnidadeId) return;
         setLoading(true);
         try {
-            const [localesRes, catRes, setoresRes, equipRes] = await Promise.all([
+            const [localesRes, catRes, setoresRes, equipRes, gruposRes] = await Promise.all([
                 (supabase as any).from('cliente_locais_estoque').select('*').eq('unidade_id', ctxUnidadeId).order('nome'),
                 (supabase as any).from('cliente_categorias_produto').select('*').eq('cliente_id', activeClientId).order('nome'),
                 (supabase as any).from('cliente_setores_producao').select('*').eq('cliente_id', activeClientId).order('nome'),
-                (supabase as any).from('cliente_equipamentos_config').select('*').eq('cliente_id', activeClientId).order('grupo, nome')
+                (supabase as any).from('cliente_equipamentos_config').select('*').eq('cliente_id', activeClientId).order('grupo, nome'),
+                (supabase as any).from('ingredientes_grupos').select('*').eq('cliente_id', activeClientId).order('nome')
             ]);
 
             setLocais(localesRes.data || []);
             setCategorias(catRes.data || []);
+            setGruposIngredientes(gruposRes.data || []);
             setSetores(setoresRes.data || []);
             setEquipamentos(equipRes.data || []);
         } catch (err: any) {
@@ -206,6 +211,36 @@ export default function ConfiguracaoEstoquePage() {
         }
     };
 
+    const handleAddSubCategoriaIngrediente = async (categoriaId: string) => {
+        if (!novaSubCategoriaIngrediente.trim() || !activeClientId) return;
+        try {
+            const { error } = await (supabase as any).from('ingredientes_grupos')
+                .insert({ 
+                    cliente_id: activeClientId, 
+                    categoria_id: categoriaId,
+                    nome: novaSubCategoriaIngrediente.trim() 
+                });
+            if (error) throw error;
+            setMsg({ open: true, text: 'Subcategoria adicionada!', type: 'success' });
+            setNovaSubCategoriaIngrediente('');
+            setCategoriaPaiSubIngrediente(null);
+            loadDados();
+        } catch (err: any) {
+            setMsg({ open: true, text: 'Erro ao salvar.', type: 'error' });
+        }
+    };
+
+    const handleRemoveSubCategoriaIngrediente = async (id: string) => {
+        if (!confirm('Deseja excluir esta subcategoria?')) return;
+        try {
+            const { error } = await (supabase as any).from('ingredientes_grupos').delete().eq('id', id);
+            if (error) throw error;
+            loadDados();
+        } catch (err: any) {
+            setMsg({ open: true, text: 'Erro ao excluir.', type: 'error' });
+        }
+    };
+
     // --- FUNÇÕES DE SETORES ---
     const handleAddSetor = async () => {
         if (!novoSetor.trim() || !activeClientId) return;
@@ -261,8 +296,8 @@ export default function ConfiguracaoEstoquePage() {
     };
 
     const toggleExpandCategoria = (id: string) => {
-        setExpandedCategorias(prev => 
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        setExpandedCategorias((prev: string[]) => 
+            prev.includes(id) ? prev.filter((i: string) => i !== id) : [...prev, id]
         );
     };
     
@@ -559,7 +594,7 @@ export default function ConfiguracaoEstoquePage() {
                                             <TextField 
                                                 size="small" 
                                                 fullWidth 
-                                                placeholder="Adicionar..." 
+                                                placeholder={mod.id === 'ALIMENTOS' ? "Novo Grupo (Ex: Farinhas...)" : "Adicionar..."} 
                                                 value={modalidadeParaNovaCategoria === mod.id ? novaCategoria : ''} 
                                                 onChange={e => { setModalidadeParaNovaCategoria(mod.id); setNovaCategoria(e.target.value); }}
                                                 onKeyDown={e => e.key === 'Enter' && handleAddCategoria(mod.id)}
@@ -568,14 +603,59 @@ export default function ConfiguracaoEstoquePage() {
                                                 <Plus size={16} />
                                             </Button>
                                         </Box>
-                                        <List dense sx={{ maxHeight: 200, overflow: 'auto' }}>
+                                        <List dense sx={{ maxHeight: mod.id === 'ALIMENTOS' ? 400 : 200, overflow: 'auto' }}>
                                             {categorias.filter(c => c.modalidade === mod.id || (mod.id === 'ALIMENTOS' && !c.modalidade)).map(cat => (
-                                                <ListItem key={cat.id} sx={{ py: 0.5 }}>
-                                                    <ListItemText primary={cat.nome} primaryTypographyProps={{ variant: 'caption', fontWeight: 500 }} />
-                                                    <ListItemSecondaryAction>
-                                                        <IconButton size="small" onClick={() => handleRemoveCategoria(cat.id)}><Trash2 size={12} /></IconButton>
-                                                    </ListItemSecondaryAction>
-                                                </ListItem>
+                                                <Box key={cat.id}>
+                                                    <ListItem sx={{ py: 0.5 }}>
+                                                        {mod.id === 'ALIMENTOS' && (
+                                                            <IconButton size="small" onClick={() => toggleExpandCategoria(cat.id)} sx={{ mr: 1, p: 0.5 }}>
+                                                                {expandedCategorias.includes(cat.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                                            </IconButton>
+                                                        )}
+                                                        <ListItemText 
+                                                            primary={cat.nome} 
+                                                            primaryTypographyProps={{ variant: 'caption', fontWeight: 600, color: mod.id === 'ALIMENTOS' ? 'primary.main' : 'text.primary' }} 
+                                                        />
+                                                        <ListItemSecondaryAction>
+                                                            <IconButton size="small" onClick={() => handleRemoveCategoria(cat.id)}><Trash2 size={12} /></IconButton>
+                                                        </ListItemSecondaryAction>
+                                                    </ListItem>
+                                                    
+                                                    {mod.id === 'ALIMENTOS' && expandedCategorias.includes(cat.id) && (
+                                                        <Box sx={{ pl: 4, pr: 1, pb: 1 }}>
+                                                            <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+                                                                <Typography variant="caption" fontWeight="bold" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>Subcategorias (Nível 3)</Typography>
+                                                                <List dense>
+                                                                    {gruposIngredientes.filter(g => g.categoria_id === cat.id).map(grp => (
+                                                                        <ListItem key={grp.id} sx={{ py: 0, px: 1 }}>
+                                                                            <ListItemIcon sx={{ minWidth: 20 }}>
+                                                                                <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: 'primary.main' }} />
+                                                                            </ListItemIcon>
+                                                                            <ListItemText primary={grp.nome} primaryTypographyProps={{ variant: 'caption', fontSize: '0.7rem' }} />
+                                                                            <ListItemSecondaryAction>
+                                                                                <IconButton size="small" onClick={() => handleRemoveSubCategoriaIngrediente(grp.id)}><Trash2 size={10} /></IconButton>
+                                                                            </ListItemSecondaryAction>
+                                                                        </ListItem>
+                                                                    ))}
+                                                                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                                                        <TextField 
+                                                                            size="small" 
+                                                                            fullWidth 
+                                                                            placeholder="Nova Subcategoria..." 
+                                                                            value={categoriaPaiSubIngrediente === cat.id ? novaSubCategoriaIngrediente : ''}
+                                                                            onChange={e => { setCategoriaPaiSubIngrediente(cat.id); setNovaSubCategoriaIngrediente(e.target.value); }}
+                                                                            onKeyDown={e => e.key === 'Enter' && handleAddSubCategoriaIngrediente(cat.id)}
+                                                                            inputProps={{ style: { fontSize: '0.7rem', padding: '4px 8px' } }}
+                                                                        />
+                                                                        <Button variant="contained" size="small" onClick={() => handleAddSubCategoriaIngrediente(cat.id)} sx={{ minWidth: 28, height: 28 }}>
+                                                                            <Plus size={14} />
+                                                                        </Button>
+                                                                    </Box>
+                                                                </List>
+                                                            </Box>
+                                                        </Box>
+                                                    )}
+                                                </Box>
                                             ))}
                                             {categorias.filter(c => c.modalidade === mod.id || (mod.id === 'ALIMENTOS' && !c.modalidade)).length === 0 && (
                                                 <Typography variant="caption" color="text.disabled" sx={{ p: 2, display: 'block', textAlign: 'center' }}>Vazio</Typography>

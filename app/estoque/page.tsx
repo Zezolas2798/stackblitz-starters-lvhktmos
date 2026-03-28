@@ -17,7 +17,7 @@ import {
   Package, Search, Filter, ArrowUpRight, ArrowDownLeft, Clock, 
   AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Info,
   Trash2, Edit, Save, Plus, MoveHorizontal, Truck, ScanLine, Tag, MapPin, ArrowRightLeft, History,
-  CheckCircle2
+  CheckCircle2, ClipboardCheck
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -27,7 +27,9 @@ import MovimentacaoEstoqueDialog from '@/components/MovimentacaoEstoqueDialog';
 import MovimentacaoGeralDialog from '@/components/MovimentacaoGeralDialog';
 import EtiquetaPrinter from '@/components/etiquetas/EtiquetaPrinter';
 import MovimentoEtiquetaDialog from '@/components/etiquetas/MovimentoEtiquetaDialog';
+import InventarioHistoricoDialog from '@/components/estoque/InventarioHistoricoDialog';
 import { DadosEtiqueta } from '@/lib/iot/zplGenerator';
+import InventarioDialog from '@/components/estoque/InventarioDialog';
 
 const STATUS_VALIDADE_OPTIONS = [
   { value: 'VENCIDO', label: '🔴 Vencidos (< 0 dias)' },
@@ -94,6 +96,8 @@ export default function EstoquePage() {
   // --- MOVIMENTAÇÃO ---
   const [movimentacaoOpen, setMovimentacaoOpen] = useState(false);
   const [loteSelecionado, setLoteSelecionado] = useState<any>(null);
+  const [inventarioOpen, setInventarioOpen] = useState(false);
+  const [historicoOpen, setHistoricoOpen] = useState(false);
   const [buscaGeralOpen, setBuscaGeralOpen] = useState(false);
 
   const handleOpenMovimentacao = (lote: any) => {
@@ -911,8 +915,11 @@ export default function EstoquePage() {
         </Box>
         {activeTab === 0 && (
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button variant="outlined" startIcon={<History size={18} />} color="inherit">
+            <Button variant="outlined" startIcon={<History size={18} />} color="inherit" onClick={() => setHistoricoOpen(true)}>
               Histórico
+            </Button>
+            <Button variant="outlined" startIcon={<ClipboardCheck size={18} />} color="secondary" onClick={() => setInventarioOpen(true)}>
+              Inventário
             </Button>
             <Button
               variant="contained"
@@ -1732,6 +1739,17 @@ export default function EstoquePage() {
         contextoDestino={etiquetaModalData.opContext}
         userName={userName}
         unidadeInfo={unidadeInfo}
+      />
+
+      <InventarioDialog
+        open={inventarioOpen}
+        onClose={() => setInventarioOpen(false)}
+        onFinished={() => { setInventarioOpen(false); loadEstoque(); }}
+      />
+
+      <InventarioHistoricoDialog 
+        open={historicoOpen}
+        onClose={() => setHistoricoOpen(false)}
       />
     </Container>
   );

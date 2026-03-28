@@ -8,7 +8,7 @@ import {
   ListItemText, ListItemIcon, Paper, Divider, LinearProgress,
   Grid, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow,
   ListItemButton, Alert, CircularProgress, TextField, InputAdornment,
-  Accordion, AccordionSummary, AccordionDetails, useTheme, alpha, TableContainer
+  Accordion, AccordionSummary, AccordionDetails, useTheme, alpha, TableContainer, MenuItem
 } from '@mui/material';
 import {
   Printer,
@@ -22,7 +22,7 @@ import {
 import { ThemeProvider } from '@mui/material/styles';
 import { getTheme } from '@/lib/theme';
 
-import { TabelaVertical, LupaFrontalANVISA, RenderBlocoDeclaracoes } from '@/components/NutritionalLabel';
+import NutritionalLabel, { LupaFrontalANVISA, RenderBlocoDeclaracoes } from '@/components/NutritionalLabel';
 import { ResultadoCalculo } from '@/lib/types';
 
 // --- TIPOS ---
@@ -55,6 +55,8 @@ export default function RelatoriosPage() {
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [modoImpressao, setModoImpressao] = useState<'FICHA' | 'NUTRICIONAL' | null>(null);
+  const [layoutTabela, setLayoutTabela] = useState<any>('VERTICAL');
+  const [layoutLupa, setLayoutLupa] = useState<any>('HORIZONTAL');
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -244,8 +246,37 @@ export default function RelatoriosPage() {
         `}</style>
 
           {/* CONTROLES */}
-          <Paper className="no-print" elevation={8} sx={{ position: 'fixed', bottom: 30, zIndex: 9999, px: 3, py: 2, borderRadius: 10, display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Paper className="no-print" elevation={8} sx={{ position: 'fixed', bottom: 30, zIndex: 9999, px: 3, py: 2, borderRadius: 10, display: 'flex', gap: 2, alignItems: 'center', bgcolor: 'background.paper', border: '1px solid #ddd' }}>
             <Typography fontWeight="bold" sx={{ mr: 2 }}>{itensParaImprimir.length} receitas geradas</Typography>
+            
+            <TextField
+              select
+              size="small"
+              label="Layout Tabela"
+              value={layoutTabela}
+              onChange={(e) => setLayoutTabela(e.target.value)}
+              sx={{ width: 140 }}
+            >
+              <MenuItem value="VERTICAL">Vertical</MenuItem>
+              <MenuItem value="VERTICAL_QUEBRADA">Vert. Quebrada</MenuItem>
+              <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+              <MenuItem value="HORIZONTAL_QUEBRADA">Horiz. Quebrada</MenuItem>
+              <MenuItem value="LINEAR">Linear</MenuItem>
+            </TextField>
+
+            <TextField
+              select
+              size="small"
+              label="Layout Lupa"
+              value={layoutLupa}
+              onChange={(e) => setLayoutLupa(e.target.value)}
+              sx={{ width: 140 }}
+            >
+              <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+              <MenuItem value="VERTICAL">Vertical</MenuItem>
+              <MenuItem value="MISTO">Misto</MenuItem>
+            </TextField>
+
             <Button variant="contained" onClick={() => window.print()} startIcon={<Printer />}>IMPRIMIR / PDF</Button>
             <Button variant="outlined" color="inherit" onClick={() => setModoImpressao(null)}>FECHAR</Button>
           </Paper>
@@ -349,7 +380,7 @@ export default function RelatoriosPage() {
                         }}
                       >
                         {receita.tabelaCalculada ? (
-                          <TabelaVertical tabela={receita.tabelaCalculada} />
+                          <NutritionalLabel tabela={receita.tabelaCalculada} modelo={layoutTabela} />
                         ) : (
                           <Typography color="error">Cálculo pendente.</Typography>
                         )}
@@ -367,7 +398,7 @@ export default function RelatoriosPage() {
                               </Typography>
                               <Box sx={{ display: 'flex', justifyContent: 'center', py: 1, mt: 1 }}>
                                 {/* Layout Horizontal para economizar altura */}
-                                <LupaFrontalANVISA lupas={receita.tabelaCalculada.lupas} areaPainelCm2={null} layout="HORIZONTAL" />
+                                <LupaFrontalANVISA lupas={receita.tabelaCalculada.lupas} areaPainelCm2={null} layout={layoutLupa} />
                               </Box>
                             </Box>
 

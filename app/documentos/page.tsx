@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, Fragment } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Box, Typography, Button, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, IconButton, Container,
@@ -11,7 +12,7 @@ import {
 import {
   Folder, InsertDriveFile, Warning, CheckCircle,
   UploadFile, CreateNewFolder, MoreVert, ExpandLess, ExpandMore,
-  Add, Edit, Delete, ArrowBack, NavigateNext, Download, Link as LinkIcon, DriveFileMove, Visibility
+  Add, Edit, Delete, ArrowBack, NavigateNext, Download, Link as LinkIcon, DriveFileMove, Visibility, CloudUpload
 } from '@mui/icons-material';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -39,6 +40,17 @@ interface Arquivo {
 }
 
 export default function GEDPage() {
+  return (
+    <Suspense fallback={<Box sx={{ p: 5, textAlign: 'center' }}><Skeleton variant="rectangular" height={400} /></Box>}>
+      <GEDContent />
+    </Suspense>
+  );
+}
+
+function GEDContent() {
+  const searchParams = useSearchParams();
+  const pastaIdParam = searchParams.get('pastaId') || searchParams.get('folderId');
+
   const { activeClientId } = useClient();
   const [loading, setLoading] = useState(false);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -48,6 +60,7 @@ export default function GEDPage() {
   // ESTADOS DE NAVEGAÇÃO DRIVE
   const [activeCategoriaId, setActiveCategoriaId] = useState<string | null>(null);
   const [activePastaId, setActivePastaId] = useState<string | null>(null);
+  const [docsObrigatorios, setDocsObrigatorios] = useState<string[]>([]);
 
   // SANFONA SIDEBAR
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
@@ -143,16 +156,16 @@ export default function GEDPage() {
 
   // GRID VISUAL (QUADRADOS)
   const getFoldersToShow = () => {
-    if (!activeCategoriaId) {
-      return categorias.map(c => ({ id: c.id, nome: c.nome, type: 'categoria' }));
-    }
-    if (activeCategoriaId && !activePastaId) {
-      return pastas.filter(p => p.categoria_id === activeCategoriaId && p.parent_id === null).map(p => ({ ...p, type: 'pasta', categoria_id: p.categoria_id }));
-    }
+    // Se estivermos dentro de uma pasta, mostramos apenas as subpastas desta pasta
     if (activePastaId) {
       return pastas.filter(p => p.parent_id === activePastaId).map(p => ({ ...p, type: 'pasta', categoria_id: p.categoria_id }));
     }
-    return [];
+    // Se estivermos em uma categoria (sem pasta selecionada ainda), mostramos as pastas raiz dessa categoria
+    if (activeCategoriaId) {
+      return pastas.filter(p => p.categoria_id === activeCategoriaId && p.parent_id === null).map(p => ({ ...p, type: 'pasta', categoria_id: p.categoria_id }));
+    }
+    // Se estivermos na raiz absoluta do GED, mostramos apenas as categorias
+    return categorias.map(c => ({ id: c.id, nome: c.nome, type: 'categoria' }));
   };
 
   const handleGridFolderClick = (node: any) => {
@@ -239,24 +252,104 @@ export default function GEDPage() {
   useEffect(() => {
     if (activePastaId) {
       fetchArquivos(activePastaId);
+      // Se a pasta tiver uma categoria, buscar os documentos obrigatórios dela
+      if (activeCategoriaId) {
+        fetchDocsObrigatorios(activeCategoriaId);
+      }
+    } else if (activeCategoriaId) {
+      // Se selecionou apenas a categoria, buscar TODOS os arquivos de todas as pastas dela
+      fetchArquivosDaCategoria(activeCategoriaId);
+      fetchDocsObrigatorios(activeCategoriaId);
     } else {
       setArquivosAtuais([]);
+      setDocsObrigatorios([]);
     }
-  }, [activePastaId]);
+  }, [activePastaId, activeCategoriaId]);
 
   async function fetchEstruturaRaiz() {
     setLoading(true);
-    const { data: catData } = await (supabase as any).from('documentos_categorias')
-      .select('*')
-      .order('nome', { ascending: true });
+    try {
+      const { data: catData } = await (supabase as any).from('documentos_categorias')
+        .select('*')
+        .eq('cliente_id', activeClientId)
+        .order('nome', { ascending: true });
+      
+      setCategorias(catData || []);
 
-    const { data: pastData } = await (supabase as any).from('documentos_pastas')
-      .select('*')
-      .order('nome', { ascending: true });
+      const { data: pastaData } = await (supabase as any).from('documentos_pastas')
+        .select('*')
+        .is('deleted_at', null)
+        .order('nome', { ascending: true });
+      
+      setPastas(pastaData || []);
 
-    if (catData) setCategorias(catData);
-    if (pastData) setPastas(pastData);
-    setLoading(false);
+      // Se temos um ID de pasta na URL, navega até ele
+      if (pastaIdParam && pastaData) {
+        const target = pastaData.find((p: any) => p.id === pastaIdParam);
+        if (target) {
+          setActiveCategoriaId(target.categoria_id);
+          setActivePastaId(target.id);
+          fetchArquivos(target.id);
+          
+          // Expandir pais na sidebar
+          let current = target;
+          const toExpand: Record<string, boolean> = { [target.id]: true };
+          while (current && current.parent_id) {
+            toExpand[current.parent_id] = true;
+            current = pastaData.find((p: any) => p.id === current.parent_id);
+          }
+          setExpandedFolders(prev => ({ ...prev, ...toExpand }));
+          if (target.categoria_id) {
+            setExpandedCategories(prev => ({ ...prev, [target.categoria_id]: true }));
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching GED structure:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchDocsObrigatorios(catId: string) {
+    const { data } = await (supabase as any)
+      .from('categorias_config')
+      .select('documentos_obrigatorios')
+      .eq('id', catId) // Aqui usamos o id da documentos_categorias se for o mesmo que categorias_config.id
+      // Nota: No nosso sistema, categorias_config.id refere-se à configuração. 
+      // Precisamos garantir que estamos buscando pelo ID correto.
+      // Se activeCategoriaId for o ID de documentos_categorias, precisamos buscar em categorias_config vinculando pelo nome ou outro campo se necessário.
+      // Mas wait, categorias_config TEM a coluna nome. 
+      // Vamos buscar pelo nome da categoria ativa para maior robustez se os IDs divergirem.
+      .is('deleted_at', null);
+    
+    // Se não encontrou pelo ID padrão, tenta pelo nome
+    if (!data || data.length === 0) {
+      const cat = categorias.find(c => c.id === catId);
+      if (cat) {
+        const { data: dataByName } = await (supabase as any)
+          .from('categorias_config')
+          .select('documentos_obrigatorios')
+          .eq('nome', cat.nome)
+          .eq('cliente_id', activeClientId)
+          .is('deleted_at', null);
+        
+        if (dataByName) {
+          const todos = dataByName.flatMap((d: any) => 
+            (d.documentos_obrigatorios || []).map((doc: any) => typeof doc === 'string' ? doc : doc.nome)
+          );
+          setDocsObrigatorios(Array.from(new Set(todos)));
+          return;
+        }
+      }
+    }
+
+    if (data) {
+      const todos = data.flatMap((d: any) => 
+        (d.documentos_obrigatorios || []).map((doc: any) => typeof doc === 'string' ? doc : doc.nome)
+      );
+      setDocsObrigatorios(Array.from(new Set(todos)));
+    }
   }
 
   async function fetchArquivos(pastaId: string) {
@@ -267,6 +360,38 @@ export default function GEDPage() {
       .order('created_at', { ascending: false });
 
     if (data) setArquivosAtuais(data);
+  }
+
+  async function fetchArquivosDaCategoria(catId: string) {
+    setLoading(true);
+    try {
+      // 1. Pegar todas as pastas desta categoria
+      const { data: catPastas } = await (supabase as any)
+        .from('documentos_pastas')
+        .select('id')
+        .eq('categoria_id', catId);
+        
+      if (!catPastas || catPastas.length === 0) {
+        setArquivosAtuais([]);
+        return;
+      }
+      
+      const ids = catPastas.map((p: any) => p.id);
+      
+      // 2. Buscar arquivos em qualquer uma dessas pastas
+      const { data } = await (supabase as any)
+        .from('documentos_arquivos')
+        .select('*')
+        .in('pasta_id', ids)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+        
+      if (data) setArquivosAtuais(data);
+    } catch (err) {
+      console.error("Erro ao buscar arquivos da categoria:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const checkVencido = (validade: string | null) => {
@@ -302,24 +427,43 @@ export default function GEDPage() {
 
       if (uploadError) throw uploadError;
 
-      // 3. Registra os MetaDados Padrão GxP na Tabela SQl
-      const { error: insertError } = await (supabase as any).from('documentos_arquivos').insert({
-        pasta_id: activePastaId,
-        nome_arquivo: docNome,
-        data_emissao: docEmissao || null,
-        data_validade: docIndeterminado ? null : (docValidade || null),
-        frequencia_verificacao: docIndeterminado ? docFrequencia : null,
-        url_storage: uploadData!.path
-      });
+      const finalNome = docNome || fileToUpload.name;
 
-      if (insertError) {
-        // Fallback: se der erro no SQL, tentar deletar a sujeira no Bucket (Boas práticas GxP)
-        await supabase.storage.from('ged_documentos').remove([uploadData.path]);
-        throw insertError;
+      if (activeFileForMenu && !activeFileForMenu.url_storage) {
+        // ATUALIZAR PLACEHOLDER
+        const { error: updateError } = await (supabase as any).from('documentos_arquivos').update({
+          nome_arquivo: finalNome,
+          data_emissao: editDocEmissao || docEmissao || null,
+          data_validade: docIndeterminado ? null : (editDocValidade || docValidade || null),
+          frequencia_verificacao: docIndeterminado ? docFrequencia : null,
+          url_storage: uploadData!.path,
+          created_at: new Date().toISOString()
+        }).eq('id', activeFileForMenu.id);
+
+        if (updateError) {
+          await supabase.storage.from('ged_documentos').remove([uploadData.path]);
+          throw updateError;
+        }
+      } else {
+        // INSERIR NOVO
+        const { error: insertError } = await (supabase as any).from('documentos_arquivos').insert({
+          pasta_id: activePastaId,
+          nome_arquivo: finalNome,
+          data_emissao: docEmissao || null,
+          data_validade: docIndeterminado ? null : (docValidade || null),
+          frequencia_verificacao: docIndeterminado ? docFrequencia : null,
+          url_storage: uploadData!.path
+        });
+
+        if (insertError) {
+          await supabase.storage.from('ged_documentos').remove([uploadData.path]);
+          throw insertError;
+        }
       }
 
       setUploadDialogOpen(false);
-      fetchArquivos(activePastaId); // Reativa e refaz a query
+      fetchArquivos(activePastaId);
+      setActiveFileForMenu(null);
     } catch (err: any) {
       console.error('Falha crítica no Upload:', err);
       alert('Erro ao enviar documento. ' + err.message);
@@ -690,11 +834,48 @@ export default function GEDPage() {
               </Box>
             )}
 
-            {/* SEÇÃO 2: ARQUIVOS (TABELA) - SÓ ATIVA QUANDO UMA PASTA FINAL ESTÁ SELECIONADA */}
-            {activePastaId && (
+            {/* SEÇÃO 2: CHECKLIST (ITENS PARA ANEXAR) */}
+            {activePastaId && docsObrigatorios.length > 0 && (
+              <Box sx={{ mb: 4, p: 2, bgcolor: 'grey.50', borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
+                <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <UploadFile fontSize="small" color="primary" /> Checklist de Documentos Obrigatórios
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {docsObrigatorios.map((doc) => {
+                    const anexado = arquivosAtuais.some(a => 
+                      a.nome_arquivo.toLowerCase().includes(doc.toLowerCase()) || 
+                      doc.toLowerCase().includes(a.nome_arquivo.toLowerCase())
+                    );
+                    return (
+                      <Chip
+                        key={doc}
+                        label={doc}
+                        size="small"
+                        color={anexado ? 'success' : 'warning'}
+                        variant={anexado ? 'filled' : 'outlined'}
+                        icon={anexado ? <CheckCircle fontSize="small" /> : <Warning fontSize="small" />}
+                        onClick={() => {
+                          if (!anexado) {
+                            setDocNome(doc);
+                            handleOpenUploadDialog();
+                          }
+                        }}
+                        sx={{ fontWeight: 'bold', cursor: anexado ? 'default' : 'pointer' }}
+                      />
+                    );
+                  })}
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                  Clique em um item pendente para anexar rapidamente.
+                </Typography>
+              </Box>
+            )}
+
+            {/* SEÇÃO 3: ARQUIVOS (TABELA) - ATIVA QUANDO UMA CATEGORIA OU PASTA ESTÁ SELECIONADA */}
+            {(activePastaId || activeCategoriaId) && (
               <Box>
                 <Typography variant="overline" color="text.secondary" fontWeight="bold" sx={{ display: 'block', mb: 2 }}>
-                  Arquivos nesta Pasta
+                  {activePastaId ? 'Arquivos nesta Pasta' : 'Todos os Arquivos desta Categoria'}
                 </Typography>
                 <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                   <Table size="small">
@@ -710,76 +891,103 @@ export default function GEDPage() {
                       {arquivosAtuais.length === 0 && (
                         <TableRow><TableCell colSpan={4} align="center" sx={{ py: 6, color: 'text.secondary' }}>Nenhum documento encontrado nesta pasta.</TableCell></TableRow>
                       )}
-                      {arquivosAtuais.map((arq) => {
-                        let vencido = false;
-                        let dataLimite: Date | null = null;
+                      {(() => {
+                        // Agrupar e Renderizar por Empresa (Prefixos [Empresa])
+                        const groups: Record<string, Arquivo[]> = {};
+                        arquivosAtuais.forEach(arq => {
+                          const match = arq.nome_arquivo.match(/^\[(.*?)\]/);
+                          const group = match ? match[1] : 'Arquivos Gerais';
+                          if (!groups[group]) groups[group] = [];
+                          groups[group].push(arq);
+                        });
 
-                        if (arq.data_validade) {
-                          vencido = isBefore(new Date(arq.data_validade), new Date());
-                        } else if (arq.data_emissao && arq.frequencia_verificacao) {
-                          const emissao = new Date(arq.data_emissao);
-                          if (arq.frequencia_verificacao === 'Mensal') dataLimite = addMonths(emissao, 1);
-                          else if (arq.frequencia_verificacao === 'Trimestral') dataLimite = addMonths(emissao, 3);
-                          else if (arq.frequencia_verificacao === 'Semestral') dataLimite = addMonths(emissao, 6);
-                          else if (arq.frequencia_verificacao === 'Anual') dataLimite = addYears(emissao, 1);
-                          else if (arq.frequencia_verificacao === 'Bienal') dataLimite = addYears(emissao, 2);
-                          
-                          if (dataLimite) {
-                            vencido = isBefore(dataLimite, new Date());
-                          }
-                        }
+                        return Object.entries(groups).map(([groupName, files]) => (
+                          <Fragment key={groupName}>
+                            {Object.keys(groups).length > 1 && (
+                              <TableRow sx={{ bgcolor: 'grey.100' }}>
+                                <TableCell colSpan={4} sx={{ py: 1, px: 2, fontWeight: 'bold', fontSize: '0.75rem', color: 'text.secondary' }}>
+                                  🏢 {groupName.toUpperCase()}
+                                </TableCell>
+                              </TableRow>
+                            )}
+                            {files.map((arq) => {
+                              let vencido = false;
+                              let dataLimite: Date | null = null;
 
-                        return (
-                          <TableRow key={arq.id} hover>
-                            <TableCell>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <InsertDriveFile color="action" />
-                                <Typography fontWeight="500" variant="body2">{arq.nome_arquivo}</Typography>
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              {arq.data_validade 
-                                ? format(new Date(arq.data_validade), 'dd/MM/yyyy') 
-                                : (arq.frequencia_verificacao ? `Periódico: ${arq.frequencia_verificacao}` : 'Sem Vencimento')}
-                            </TableCell>
-                            <TableCell>
-                              {arq.data_validade ? (
-                                <Chip
-                                  label={vencido ? 'Vencido' : 'Vigente'}
-                                  color={vencido ? 'error' : 'success'}
-                                  size="small"
-                                  icon={vencido ? <Warning fontSize="small" /> : <CheckCircle fontSize="small" />}
-                                />
-                              ) : arq.frequencia_verificacao ? (
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                  <Chip
-                                    label={vencido ? 'Vencido' : 'Vigente'}
-                                    color={vencido ? 'error' : 'success'}
-                                    size="small"
-                                    icon={vencido ? <Warning fontSize="small" /> : <CheckCircle fontSize="small" />}
-                                  />
-                                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-                                    Verificação Periódica
-                                  </Typography>
-                                </Box>
-                              ) : (
-                                <Chip label="Permanente" size="small" variant="outlined" />
-                              )}
-                            </TableCell>
-                            <TableCell align="right">
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  setActiveFileForMenu(arq);
-                                  setFileMenuAnchorEl(e.currentTarget);
-                                }}
-                              >
-                                <MoreVert />
-                              </IconButton>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                              if (arq.data_validade) {
+                                vencido = isBefore(new Date(arq.data_validade), new Date());
+                              } else if (arq.data_emissao && arq.frequencia_verificacao) {
+                                const emissao = new Date(arq.data_emissao);
+                                if (arq.frequencia_verificacao === 'Mensal') dataLimite = addMonths(emissao, 1);
+                                else if (arq.frequencia_verificacao === 'Trimestral') dataLimite = addMonths(emissao, 3);
+                                else if (arq.frequencia_verificacao === 'Semestral') dataLimite = addMonths(emissao, 6);
+                                else if (arq.frequencia_verificacao === 'Anual') dataLimite = addYears(emissao, 1);
+                                else if (arq.frequencia_verificacao === 'Bienal') dataLimite = addYears(emissao, 2);
+                                
+                                if (dataLimite) {
+                                  vencido = isBefore(dataLimite, new Date());
+                                }
+                              }
+
+                              return (
+                                <TableRow key={arq.id} hover>
+                                  <TableCell>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <InsertDriveFile color={arq.url_storage ? "primary" : "disabled"} fontSize="small" />
+                                      <Typography fontWeight={arq.url_storage ? "500" : "400"} variant="body2" sx={{ color: arq.url_storage ? 'text.primary' : 'text.secondary' }}>
+                                        {arq.nome_arquivo}
+                                      </Typography>
+                                    </Box>
+                                  </TableCell>
+                                  <TableCell>
+                                    {arq.data_validade 
+                                      ? format(new Date(arq.data_validade), 'dd/MM/yyyy') 
+                                      : (arq.frequencia_verificacao ? `Periódico: ${arq.frequencia_verificacao}` : '-')}
+                                  </TableCell>
+                                  <TableCell>
+                                    {!arq.url_storage ? (
+                                      <Chip
+                                        label="Pendente"
+                                        color="warning"
+                                        size="small"
+                                        variant="outlined"
+                                        icon={<CloudUpload sx={{ fontSize: '14px' }} />}
+                                        onClick={() => { setDocNome(arq.nome_arquivo); setActiveFileForMenu(arq); setUploadDialogOpen(true); }}
+                                        sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'warning.50' } }}
+                                      />
+                                    ) : (
+                                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                        <Chip
+                                          label={vencido ? 'Vencido' : 'Vigente'}
+                                          color={vencido ? 'error' : 'success'}
+                                          size="small"
+                                          icon={vencido ? <Warning fontSize="small" /> : <CheckCircle fontSize="small" />}
+                                        />
+                                        {arq.frequencia_verificacao && (
+                                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                            Verificação Periódica
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    )}
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(e) => {
+                                        setActiveFileForMenu(arq);
+                                        setFileMenuAnchorEl(e.currentTarget);
+                                      }}
+                                    >
+                                      <MoreVert />
+                                    </IconButton>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </Fragment>
+                        ));
+                      })()}
                     </TableBody>
                   </Table>
                 </TableContainer>
@@ -1044,9 +1252,26 @@ export default function GEDPage() {
               />
             </Button>
 
-            {/* Metadados */}
+            {/* Seletor de Documento Obrigatório (Ajuda o usuário) */}
+            {docsObrigatorios.length > 0 && (
+              <FormControl fullWidth size="small">
+                <InputLabel>Vincular a Documento Obrigatório</InputLabel>
+                <Select
+                  value={docsObrigatorios.includes(docNome) ? docNome : ""}
+                  label="Vincular a Documento Obrigatório"
+                  onChange={(e) => setDocNome(e.target.value as string)}
+                  disabled={isUploading}
+                >
+                  <MenuItem value=""><em>Nenhum / Nome Personalizado</em></MenuItem>
+                  {docsObrigatorios.map((doc) => (
+                    <MenuItem key={doc} value={doc}>{doc}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
             <TextField
-              label="Nome de Apresentação (Visível no Drive)"
+              label="Nome do Arquivo (Exibição)"
               placeholder="Ex: Alvará de Funcionamento 2026"
               fullWidth
               variant="outlined"

@@ -40,7 +40,7 @@ import NutritionalLabel, { LupaFrontalANVISA } from '@/components/NutritionalLab
 
 // --- TIPOS ---
 type TabelaLayout = 'VERTICAL' | 'VERTICAL_QUEBRADA' | 'HORIZONTAL' | 'HORIZONTAL_QUEBRADA' | 'LINEAR';
-type LupaLayout = 'VERTICAL' | 'HORIZONTAL' | 'COMPACTO';
+type LupaLayout = 'VERTICAL' | 'HORIZONTAL' | 'V1' | 'V2' | 'V3';
 
 type ComposicaoDisplayItem = { 
   id: string; 
@@ -111,7 +111,7 @@ export default function DetalhesReceitaPage() {
     try {
       const { data: recData, error: recError } = await (supabase as any)
         .from('receitas')
-        .select('*, anvisa_categorias(*), composicao_receitas(*), tipos_receita(*)')
+        .select('*, anvisa_categorias(*), composicao_receitas(*), tipos_receita(*), modo_conservacao')
         .eq('id', recipeId)
         .eq('cliente_id', activeClientId!)
         .single();
@@ -131,7 +131,7 @@ export default function DetalhesReceitaPage() {
       await processarComposicao(recData.composicao_receitas);
 
       if (recData.composicao_receitas?.length > 0) {
-          handleCalculateInitial(recipeId);
+          handleCalculateInitial(recipeId, recData);
       }
 
     } catch (err: any) {
@@ -259,6 +259,7 @@ export default function DetalhesReceitaPage() {
                   ...receitaAtual,
                   nome: versao.nome_snapshot,
                   modo_preparo: versao.modo_preparo_snapshot,
+                  modo_conservacao: versao.modo_conservacao_snapshot,
                   rendimento_total_g: versao.rendimento_snapshot,
                   status: 'HISTORICO',
                   data_aprovacao: versao.data_aprovacao
@@ -291,10 +292,17 @@ export default function DetalhesReceitaPage() {
     }
   };
 
-  const handleCalculateInitial = async (id: string) => {
+  const handleCalculateInitial = async (id: string, recBase?: any) => {
       try {
         const { data } = await supabase.functions.invoke('calcular-nutrientes', { body: { receita_id: id } });
-        if (data && !data.error) setTabela(data as ResultadoCalculo);
+        if (data && !data.error) {
+          const result = data as ResultadoCalculo;
+          const conservacao = recBase?.modo_conservacao || receitaExibida?.modo_conservacao;
+          if (conservacao) {
+            result.declaracoes.modo_conservacao = conservacao;
+          }
+          setTabela(result);
+        }
       } catch (e) { console.error("Auto-calc failed", e); }
   };
 
@@ -303,7 +311,11 @@ export default function DetalhesReceitaPage() {
     try {
       const { data, error } = await supabase.functions.invoke('calcular-nutrientes', { body: { receita_id: recipeId } });
       if (error) throw error; if (data.error) throw new Error(data.error);
-      setTabela(data as ResultadoCalculo);
+      const result = data as ResultadoCalculo;
+      if (receitaExibida?.modo_conservacao) {
+        result.declaracoes.modo_conservacao = receitaExibida.modo_conservacao;
+      }
+      setTabela(result);
     } catch (err: any) { setError(err.message); } finally { setCalculating(false); }
   };
 
@@ -622,7 +634,9 @@ export default function DetalhesReceitaPage() {
                             <InputLabel>Formato da Tabela</InputLabel>
                             <Select value={layoutTabela} label="Formato da Tabela" onChange={(e) => setLayoutTabela(e.target.value as TabelaLayout)}>
                               <MenuItem value="VERTICAL">Vertical</MenuItem>
+                              <MenuItem value="VERTICAL_QUEBRADA">Vertical Quebrada</MenuItem>
                               <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+                              <MenuItem value="HORIZONTAL_QUEBRADA">Horizontal Quebrada</MenuItem>
                               <MenuItem value="LINEAR">Linear</MenuItem>
                             </Select>
                           </FormControl>
@@ -631,8 +645,11 @@ export default function DetalhesReceitaPage() {
                           <FormControl size="small" fullWidth>
                             <InputLabel>Layout da Lupa</InputLabel>
                             <Select value={lupaLayout} label="Layout da Lupa" onChange={(e) => setLupaLayout(e.target.value as LupaLayout)}>
-                              <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+                               <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
                               <MenuItem value="VERTICAL">Vertical</MenuItem>
+                              <MenuItem value="V1">Misto V1</MenuItem>
+                              <MenuItem value="V2">Misto V2</MenuItem>
+                              <MenuItem value="V3">Misto V3</MenuItem>
                             </Select>
                           </FormControl>
                         </Grid>

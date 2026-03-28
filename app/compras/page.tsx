@@ -46,6 +46,7 @@ import { useClient } from '@/lib/ClientContext';
 import { format, parseISO } from 'date-fns';
 import { Fornecedor } from '@/lib/types';
 import QuickIngredienteDialog from '@/components/QuickIngredienteDialog';
+import PreCadastroFornecedorDialog from '@/components/PreCadastroFornecedorDialog';
 import { processNFFile } from '@/lib/utils/nf-parser';
 
 interface RequisicaoFalta {
@@ -92,6 +93,7 @@ export default function ComprasPage() {
   const [dataNf, setDataNf] = useState(''); 
   const [dataVencimentoNf, setDataVencimentoNf] = useState(''); 
   const [valorTotalNfLido, setValorTotalNfLido] = useState<number | null>(null); 
+  const [preCadastroOpen, setPreCadastroOpen] = useState(false);
 
   useEffect(() => {
     // Evita erro de hidratação
@@ -542,6 +544,18 @@ export default function ComprasPage() {
         if (insertErr) throw insertErr;
       }
 
+      // --- ATUALIZAR CATEGORIAS DO FORNECEDOR ---
+      // Adicionar a modalidade atual às categorias do fornecedor se não existir
+      const currentCats = fornecedorNf.categorias_compras || [];
+      if (!currentCats.includes(modalidade)) {
+        await (supabase as any)
+          .from('fornecedores')
+          .update({
+            categorias_compras: [...currentCats, modalidade]
+          })
+          .eq('id', fornecedorNf.id);
+      }
+
       // --- GERAR DESPESA FINANCEIRA ---
       if (valorTotalNFCalculado > 0) {
         // Tentar buscar uma categoria padrão baseada na modalidade
@@ -789,6 +803,16 @@ export default function ComprasPage() {
         categoriaPrincipal={modalidade}
       />
 
+      <PreCadastroFornecedorDialog
+        open={preCadastroOpen}
+        onClose={() => setPreCadastroOpen(false)}
+        onSuccess={(novo) => {
+          setListaFornecedores(prev => [novo, ...prev]);
+          setFornecedorNf(novo);
+        }}
+        defaultModalidade={modalidade}
+      />
+
       <Paper elevation={0} sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
           <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)} sx={{ px: 2 }}>
@@ -981,8 +1005,9 @@ export default function ComprasPage() {
                       <MenuItem value="PRIMEIROS_SOCORROS">Primeiros Socorros</MenuItem>
                     </TextField>
                   </Grid>
-                  <Grid item xs={12} md={9}>
+                  <Grid item xs={12} md={9} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                     <Autocomplete
+                      fullWidth
                       options={listaFornecedores}
                       getOptionLabel={(option) => option.nome_fantasia || option.razao_social || 'Sem Nome'}
                       value={fornecedorNf}
@@ -996,6 +1021,15 @@ export default function ComprasPage() {
                       )}
                       noOptionsText="Nenhum fornecedor encontrado"
                     />
+                    <Tooltip title="Pré-cadastro de Fornecedor (CNPJ IA)">
+                      <IconButton 
+                        color="primary" 
+                        onClick={() => setPreCadastroOpen(true)}
+                        sx={{ mt: 0.5, border: '1px solid', borderColor: 'primary.light', borderRadius: 2 }}
+                      >
+                        <Plus size={20} />
+                      </IconButton>
+                    </Tooltip>
                   </Grid>
                   <Grid item xs={12} md={3}>
                     <TextField

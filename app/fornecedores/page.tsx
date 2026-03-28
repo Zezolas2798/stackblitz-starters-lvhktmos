@@ -9,10 +9,11 @@ import {
   TableCell, TableContainer, TableHead, TableRow, Chip, IconButton,
   Tooltip, CircularProgress, InputAdornment, TextField,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
-  Snackbar, Alert
+  Snackbar, Alert, Tabs, Tab, Divider
 } from '@mui/material';
-import { Plus, Edit, Search, CheckCircle, AlertTriangle, HelpCircle, Truck, Trash2 } from 'lucide-react';
+import { Plus, Edit, Search, CheckCircle, AlertTriangle, HelpCircle, Truck, Trash2, Settings } from 'lucide-react';
 import { format } from 'date-fns';
+import PreCadastroFornecedorDialog from '@/components/PreCadastroFornecedorDialog';
 
 export default function FornecedoresPage() {
   const router = useRouter();
@@ -24,6 +25,12 @@ export default function FornecedoresPage() {
   const [selectedFornecedor, setSelectedFornecedor] = useState<any>(null);
   const [deleting, setDeleting] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'info' });
+  const [categoriaFiltro, setCategoriaFiltro] = useState('TODOS');
+  const [preCadastroOpen, setPreCadastroOpen] = useState(false);
+
+  const CATEGORIAS = [
+    'TODOS', 'ALIMENTOS', 'EMBALAGENS', 'LIMPEZA', 'MANUTENCAO', 'UTENSILIOS', 'EPI_EPC', 'UNIFORMES', 'PRIMEIROS_SOCORROS'
+  ];
 
   useEffect(() => {
     if (activeClientId) {
@@ -43,7 +50,9 @@ export default function FornecedoresPage() {
     if (error) {
       console.error('Erro ao buscar fornecedores:', error);
     } else {
-      setFornecedores(data || []);
+      // Filtrar em JS para evitar erro caso a coluna 'tipo' não exista ou tenha NULL
+      const filtered = (data || []).filter((f: any) => !f.tipo || f.tipo === 'FORNECEDOR');
+      setFornecedores(filtered);
     }
     setLoading(false);
   };
@@ -71,11 +80,16 @@ export default function FornecedoresPage() {
     }
   };
 
-  const filteredFornecedores = fornecedores.filter(f =>
-    f.razao_social?.toLowerCase().includes(busca.toLowerCase()) ||
-    f.nome_fantasia?.toLowerCase().includes(busca.toLowerCase()) ||
-    f.cnpj?.includes(busca)
-  );
+  const filteredFornecedores = fornecedores.filter(f => {
+    const matchBusca = f.razao_social?.toLowerCase().includes(busca.toLowerCase()) ||
+                      f.nome_fantasia?.toLowerCase().includes(busca.toLowerCase()) ||
+                      f.cnpj?.includes(busca);
+    
+    const matchCategoria = categoriaFiltro === 'TODOS' || 
+                          (f.categorias_compras && f.categorias_compras.includes(categoriaFiltro));
+    
+    return matchBusca && matchCategoria;
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -109,6 +123,24 @@ export default function FornecedoresPage() {
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
+            variant="outlined"
+            size="large"
+            startIcon={<Settings />}
+            onClick={() => router.push('/config/categorias?tipo=FORNECEDOR')}
+            sx={{ fontWeight: 'bold' }}
+          >
+            Configurar Categorias
+          </Button>
+          <Button
+            variant="outlined"
+            size="large"
+            startIcon={<Search />}
+            onClick={() => setPreCadastroOpen(true)}
+            sx={{ fontWeight: 'bold' }}
+          >
+            Pré-cadastro (CNPJ)
+          </Button>
+          <Button
             variant="contained"
             size="large"
             startIcon={<Plus />}
@@ -120,17 +152,36 @@ export default function FornecedoresPage() {
         </Box>
       </Box>
 
-      <Paper elevation={0} sx={{ p: 2, mb: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Buscar por Razão Social, Nome Fantasia ou CNPJ..."
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          InputProps={{
-            startAdornment: <InputAdornment position="start"><Search size={18} /></InputAdornment>,
-          }}
-        />
+      <Paper elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+        <Box sx={{ p: 2 }}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Buscar por Razão Social, Nome Fantasia ou CNPJ..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><Search size={18} /></InputAdornment>,
+            }}
+          />
+        </Box>
+        <Divider />
+        <Tabs 
+          value={categoriaFiltro} 
+          onChange={(_, v) => setCategoriaFiltro(v)}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{ px: 1, minHeight: 48 }}
+        >
+          {CATEGORIAS.map(cat => (
+            <Tab 
+              key={cat} 
+              value={cat} 
+              label={cat === 'TODOS' ? 'Todos' : cat} 
+              sx={{ fontWeight: 'bold', fontSize: '0.75rem' }} 
+            />
+          ))}
+        </Tabs>
       </Paper>
 
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
@@ -158,11 +209,22 @@ export default function FornecedoresPage() {
                   <TableRow key={forn.id} hover>
                     <TableCell>
                       <Typography fontWeight="bold" variant="body2">{forn.razao_social}</Typography>
-                      {forn.nome_fantasia && (
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          {forn.nome_fantasia}
-                        </Typography>
-                      )}
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                        {forn.nome_fantasia && (
+                          <Typography variant="caption" color="text.secondary" sx={{ mr: 1, display: 'inline-block' }}>
+                            {forn.nome_fantasia}
+                          </Typography>
+                        )}
+                        {forn.categorias_compras?.map((cat: string) => (
+                          <Chip 
+                            key={cat} 
+                            label={cat} 
+                            size="small" 
+                            variant="outlined" 
+                            sx={{ height: 16, fontSize: '0.6rem', fontWeight: 'bold' }} 
+                          />
+                        ))}
+                      </Box>
                     </TableCell>
                     <TableCell>{forn.cnpj || '-'}</TableCell>
                     <TableCell>
@@ -257,6 +319,16 @@ export default function FornecedoresPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <PreCadastroFornecedorDialog
+        open={preCadastroOpen}
+        onClose={() => setPreCadastroOpen(false)}
+        tipo="FORNECEDOR"
+        onSuccess={(novo) => {
+          setFornecedores(prev => [novo, ...prev]);
+          router.push(`/fornecedores/${novo.id}`);
+        }}
+      />
     </Container>
   );
 }

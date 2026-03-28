@@ -21,16 +21,27 @@ interface Arquivo {
   data_emissao: string | null;
   data_validade: string | null;
   url_storage: string | null;
+  pasta_id: string;
+}
+
+interface CategoriaConfig {
+  nome: string;
+  ged_pasta_id?: string;
+  documentos_obrigatorios: any[];
 }
 
 interface Props {
   pastaId: string;
+  categoriasSelecionadas: string[];
+  razaoSocial?: string;
 }
 
-export default function DocumentosFornecedor({ pastaId }: Props) {
+export default function DocumentosFornecedor({ pastaId, categoriasSelecionadas, razaoSocial }: Props) {
   const { activeClientId } = useClient();
   const [loading, setLoading] = useState(true);
   const [arquivos, setArquivos] = useState<Arquivo[]>([]);
+  const [docsObrigatorios, setDocsObrigatorios] = useState<string[]>([]);
+  const [categoriasConfig, setCategoriasConfig] = useState<CategoriaConfig[]>([]);
   
   // Estados de Upload
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -51,19 +62,68 @@ export default function DocumentosFornecedor({ pastaId }: Props) {
     if (pastaId) {
       fetchArquivos();
     }
-  }, [pastaId]);
+  }, [pastaId, categoriasConfig]);
+
+  useEffect(() => {
+    if (categoriasSelecionadas && categoriasSelecionadas.length > 0) {
+      fetchDocsObrigatorios();
+    } else {
+      setDocsObrigatorios([]);
+    }
+  }, [categoriasSelecionadas]);
+
+  const fetchDocsObrigatorios = async () => {
+    const { data } = await (supabase as any)
+      .from('categorias_config')
+      .select('nome, ged_pasta_id, documentos_obrigatorios')
+      .in('nome', categoriasSelecionadas)
+      .eq('cliente_id', activeClientId)
+      .is('deleted_at', null);
+    
+    if (data) {
+      setCategoriasConfig(data);
+      const todos = data.flatMap((d: any) => 
+        (d.documentos_obrigatorios || []).map((doc: any) => typeof doc === 'string' ? doc : doc.nome)
+      );
+      setDocsObrigatorios(Array.from(new Set(todos)));
+    }
+  };
 
   const fetchArquivos = async () => {
     setLoading(true);
+    // 1. Coleta todas as pastas onde o documento pode estar
+    const idsDePasta = new Set<string>();
+    if (pastaId) idsDePasta.add(pastaId);
+    
+    categoriasConfig.forEach(c => {
+      // Adiciona pasta da categoria
+      if (c.ged_pasta_id) idsDePasta.add(c.ged_pasta_id);
+      
+      // Adiciona pastas específicas de cada documento configurado
+      if (c.documentos_obrigatorios && Array.isArray(c.documentos_obrigatorios)) {
+        c.documentos_obrigatorios.forEach((doc: any) => {
+          if (typeof doc === 'object' && doc.ged_pasta_id) {
+            idsDePasta.add(doc.ged_pasta_id);
+          }
+        });
+      }
+    });
+
     const { data, error } = await (supabase as any)
       .from('documentos_arquivos')
       .select('*')
-      .eq('pasta_id', pastaId)
+      .in('pasta_id', Array.from(idsDePasta))
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
     if (!error && data) {
-      setArquivos(data);
+      // Filtrar por prefixo da empresa apenas se razaoSocial for fornecido
+      if (razaoSocial) {
+        const prefix = `[${razaoSocial}]`.toLowerCase();
+        setArquivos(data.filter((a: any) => a.nome_arquivo.toLowerCase().startsWith(prefix)));
+      } else {
+        setArquivos(data);
+      }
     }
     setLoading(false);
   };
@@ -96,21 +156,43 @@ export default function DocumentosFornecedor({ pastaId }: Props) {
 
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await (supabase as any).from('documentos_arquivos').insert({
-        pasta_id: pastaId,
-        nome_arquivo: docNome || fileToUpload.name,
-        data_emissao: docEmissao || null,
-        data_validade: docValidade || null,
-        url_storage: uploadData!.path
-      });
+      const finalNome = razaoSocial 
+        ? (docNome.startsWith(`[${razaoSocial}]`) ? docNome : `[${razaoSocial}] ${docNome}`)
+        : docNome || fileToUpload.name;
 
-      if (insertError) {
-        await supabase.storage.from('ged_documentos').remove([uploadData.path]);
-        throw insertError;
+      if (activeFile && !activeFile.url_storage) {
+        // ATUALIZAR PLACEHOLDER EXISTENTE
+        const { error: updateError } = await (supabase as any).from('documentos_arquivos').update({
+          nome_arquivo: finalNome,
+          data_emissao: docEmissao || null,
+          data_validade: docValidade || null,
+          url_storage: uploadData!.path,
+          created_at: new Date().toISOString()
+        }).eq('id', activeFile.id);
+
+        if (updateError) {
+          await supabase.storage.from('ged_documentos').remove([uploadData.path]);
+          throw updateError;
+        }
+      } else {
+        // INSERIR NOVO REGISTRO
+        const { error: insertError } = await (supabase as any).from('documentos_arquivos').insert({
+          pasta_id: pastaId,
+          nome_arquivo: finalNome,
+          data_emissao: docEmissao || null,
+          data_validade: docValidade || null,
+          url_storage: uploadData!.path
+        });
+
+        if (insertError) {
+          await supabase.storage.from('ged_documentos').remove([uploadData!.path]);
+          throw insertError;
+        }
       }
 
       setUploadDialogOpen(false);
       fetchArquivos();
+      setActiveFile(null); // Limpa seleção após upload
     } catch (err: any) {
       console.error(err);
       alert('Erro ao enviar documento: ' + err.message);
@@ -194,10 +276,70 @@ export default function DocumentosFornecedor({ pastaId }: Props) {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6" fontWeight="bold">Documentos Anexos</Typography>
-        <Button variant="contained" startIcon={<Upload size={18} />} onClick={handleOpenUpload}>
-          Anexar Documento
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button 
+            variant="outlined" 
+            onClick={() => window.open(`/documentos?folderId=${pastaId}`, '_blank')}
+          >
+            Ver no GED
+          </Button>
+          <Button variant="contained" startIcon={<Upload size={18} />} onClick={handleOpenUpload}>
+            Anexar Documento
+          </Button>
+        </Box>
       </Box>
+
+      {docsObrigatorios.length > 0 && (
+        <Paper variant="outlined" sx={{ p: 2, mb: 3, bgcolor: 'grey.50', borderRadius: 2 }}>
+          <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AlertTriangle size={16} color="#ed6c02" />
+            Checklist de Documentos Exigidos por Categoria
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {docsObrigatorios.map((doc) => {
+              const searchDoc = razaoSocial ? `[${razaoSocial}] ${doc}`.toLowerCase() : doc.toLowerCase();
+              const anexado = arquivos.some(a => 
+                a.nome_arquivo.toLowerCase().includes(searchDoc) || 
+                (razaoSocial && a.nome_arquivo.toLowerCase().includes(doc.toLowerCase()))
+              );
+
+              const handleChipClick = () => {
+                const placeholder = arquivos.find(a => 
+                  !a.url_storage && (
+                    a.nome_arquivo.toLowerCase().includes(searchDoc) || 
+                    (razaoSocial && a.nome_arquivo.toLowerCase().includes(doc.toLowerCase()))
+                  )
+                );
+                
+                setDocNome(doc);
+                if (placeholder) {
+                  setActiveFile(placeholder);
+                } else {
+                  setActiveFile(null);
+                }
+                setUploadDialogOpen(true);
+              };
+
+              return (
+                <Chip
+                  key={doc}
+                  label={doc}
+                  size="small"
+                  color={anexado ? 'success' : 'warning'}
+                  variant={anexado ? 'filled' : 'outlined'}
+                  icon={anexado ? <CheckCircle size={14} /> : <AlertTriangle size={14} />}
+                  onClick={handleChipClick}
+                  sx={{ 
+                    fontWeight: 'bold', 
+                    cursor: 'pointer',
+                    '&:hover': { opacity: 0.8 } 
+                  }}
+                />
+              );
+            })}
+          </Box>
+        </Paper>
+      )}
 
       <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
         <Table size="small">
@@ -222,23 +364,37 @@ export default function DocumentosFornecedor({ pastaId }: Props) {
                   <TableRow key={arq.id} hover>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <FileText size={16} color="gray" />
-                        <Typography variant="body2" fontWeight="500">{arq.nome_arquivo}</Typography>
+                        <FileText size={16} color={arq.url_storage ? "primary.main" : "gray"} />
+                        <Typography variant="body2" fontWeight={arq.url_storage ? "600" : "400"} color={arq.url_storage ? "text.primary" : "text.secondary"}>
+                          {arq.nome_arquivo}
+                        </Typography>
                       </Box>
                     </TableCell>
                     <TableCell>{arq.data_emissao ? format(new Date(arq.data_emissao), 'dd/MM/yyyy') : '-'}</TableCell>
                     <TableCell>{arq.data_validade ? format(new Date(arq.data_validade), 'dd/MM/yyyy') : 'Sem Vencimento'}</TableCell>
                     <TableCell>
-                       {arq.data_validade ? (
-                         <Chip
-                           label={vencido ? 'Vencido' : 'Vigente'}
-                           color={vencido ? 'error' : 'success'}
-                           size="small"
-                           icon={vencido ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
-                         />
-                       ) : (
-                         <Chip label="Permanente" size="small" variant="outlined" />
-                       )}
+                      {!arq.url_storage ? (
+                        <Chip 
+                          label="Anexar" 
+                          size="small" 
+                          color="warning" 
+                          variant="filled" 
+                          onClick={() => {
+                            setActiveFile(arq);
+                            setDocNome(arq.nome_arquivo);
+                            setUploadDialogOpen(true);
+                          }}
+                          sx={{ fontWeight: 'bold', cursor: 'pointer' }}
+                          icon={<Upload size={14} />}
+                        />
+                      ) : (
+                        <Chip
+                          label={vencido ? 'Vencido' : 'Vigente'}
+                          color={vencido ? 'error' : 'success'}
+                          size="small"
+                          icon={vencido ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+                        />
+                      )}
                     </TableCell>
                     <TableCell align="right">
                       <IconButton size="small" onClick={(e) => { setActiveFile(arq); setMenuAnchorEl(e.currentTarget); }}>
@@ -255,7 +411,11 @@ export default function DocumentosFornecedor({ pastaId }: Props) {
 
       {/* Meus de Ação do Arquivo */}
       <Menu anchorEl={menuAnchorEl} open={Boolean(menuAnchorEl)} onClose={() => setMenuAnchorEl(null)}>
-        <MenuItem onClick={handleDownload}><Download size={16} className="mr-2" /> Baixar</MenuItem>
+        {activeFile?.url_storage ? (
+          <MenuItem onClick={handleDownload}><Download size={16} className="mr-2" /> Baixar</MenuItem>
+        ) : (
+          <MenuItem onClick={() => { setUploadDialogOpen(true); setMenuAnchorEl(null); }}><Upload size={16} className="mr-2" /> Anexar Arquivo</MenuItem>
+        )}
         <MenuItem onClick={handleOpenEdit}><Edit size={16} className="mr-2" /> Editar Dados</MenuItem>
         <MenuItem onClick={handleDelete} sx={{ color: 'error.main' }}><Trash2 size={16} className="mr-2" /> Excluir</MenuItem>
       </Menu>

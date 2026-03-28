@@ -71,6 +71,7 @@ export interface Fornecedor {
   licenca_sanitaria_validade?: string | null; // Controle de vencimento
   status_homologacao: StatusHomologacao;
   categorias_fornecidas?: string[] | null;
+  categorias_compras?: string[] | null; // Novo: Categorias de compras vinculadas
   contato_qualidade_nome?: string | null;
   contato_qualidade_email?: string | null;
   contato_qualidade_telefone?: string | null;
@@ -163,6 +164,9 @@ export interface Ingrediente {
     nome: string;
   } | null;
 
+  is_corante_artificial: boolean;
+  is_corante_carmim: boolean;
+
   created_at?: string;
 }
 
@@ -253,6 +257,7 @@ export interface Receita {
   tipo_receita_id: string | null;
   risco_contaminacao_cruzada_ids: number[] | null; 
   area_painel_principal_cm2: number | null; 
+  modo_conservacao: string | null;
   
   custo_total_estimado?: number;
   custo_embalagem?: number;
@@ -304,6 +309,9 @@ export interface DeclaracoesObrigatorias {
   alergenicos: string | null;
   contem_gluten: boolean;
   contem_lactose: boolean;
+  modo_conservacao?: string | null;
+  colorido_artificialmente?: boolean;
+  colorido_carmim?: boolean;
 }
 
 export interface InfoPorcao {

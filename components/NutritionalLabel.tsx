@@ -5,6 +5,7 @@ import React from 'react';
 import { Box, Typography, Stack, Tooltip } from '@mui/material';
 import { ResultadoCalculo, LupasFrontais, DeclaracoesObrigatorias, InfoPorcao } from '@/lib/types';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { SVG_TEMPLATES } from '@/lib/svg-templates';
 
 // =====================================================================
 // PARTE 0: HELPERS VISUAIS (FORMATAR NÚMEROS E FRAÇÕES)
@@ -45,237 +46,148 @@ function formatarMedidaCaseira(info: InfoPorcao): string {
 }
 
 // =====================================================================
-// PARTE 1: GEOMETRIA DA LUPA (MALHA CONSTRUTIVA IN 75 - ANEXO XVIII)
-// =====================================================================
+// ANVISA Nutrient Order according to IN 75/2020
+const NUTRIENT_ORDER = ['acucar', 'gordura', 'sodio'];
 
-// Conversão de unidades
-const mmToPx = (mm: number) => mm * (96 / 25.4); // 96 DPI padrão web
-
-// Definição da Malha baseada na Área do Painel Principal (APP)
-// Fonte: Tabela do Anexo XVIII da IN 75
-function getMalhaStyles(areaCm2: number | null | undefined) {
-  const area = areaCm2 || 100; // Fallback seguro
-
-  let h_min_mm: number; // Altura mínima da letra (Y)
-
-  if (area < 50) h_min_mm = 1.5;
-  else if (area < 100) h_min_mm = 2.0;
-  else if (area < 150) h_min_mm = 2.5;
-  else if (area < 350) h_min_mm = 3.0;
-  else if (area < 500) h_min_mm = 3.5;
-  else if (area < 2000) h_min_mm = 4.0;
-  else h_min_mm = 5.0; // > 2000 cm2
-
-  // Fator de escala para visualização em tela (opcional, para não ficar minúsculo em telas grandes)
-  // Na impressão real, scaleFactor deve ser 1.
-  const scaleFactor = 1.5;
-
-  const Y = mmToPx(h_min_mm) * scaleFactor;
-
-  // Z é a largura da letra "I". Na fonte Arial Narrow Bold, a razão largura/altura é aprox 0.26
-  const Z = Y * 0.26;
-
-  return {
-    Y, Z,
-    h_min_mm,
-    area_painel: area,
-    // Dimensões dos Blocos (IN 75)
-    blockHeight: 3 * Y,
-    blockWidth: 8 * Y,
-    borderWidth: 1 * Z,
-    borderRadius: 0.5 * Y, // Aproximação visual (canto arredondado)
-    gap: 2 * Z,            // Distância entre blocos
-    paddingX: 2 * Z,       // Margem interna lateral
-
-    // Tipografia
-    fontFamily: '"Arial Narrow", "Helvetica Condensed", sans-serif',
-    fontWeight: 700, // Bold
-    fontSizeAltoEm: Y, // Altura da letra A = Y
-    fontSizeNutriente: Y * 0.85, // Ajuste ótico para caber no bloco
-
-    // Geometria da Lupa (Anexo XVIII)
-    lupaDiameter: 1.7 * Y,
-    lupaThickness: 1.4 * Z,
-    handleLength: 1.3 * Y,
-    handleThickness: 2.6 * Z,
-    handleAngle: 30 * (Math.PI / 180), // 30 graus em radianos
-    safeZone: 2 * Z // Margem de respiro
-  };
-}
-
-// Ícone da Lupa Vetorial (SVG Path exato)
-const LupaIconSVG = ({ s }: { s: ReturnType<typeof getMalhaStyles> }) => {
-  const R = s.lupaDiameter / 2; // Raio externo
-  const thickness = s.lupaThickness;
-  const r = R - (thickness / 2); // Raio do traço (centerline)
-
-  // Cabo da lupa (Handle)
-  const handleW = s.handleThickness;
-  const handleL = s.handleLength;
-
-  // Cálculos trigonométricos para o cabo a 30 graus
-  // O cabo sai do quadrante inferior direito
-  const cx = R;
-  const cy = R;
-
-  // O tamanho total do SVG precisa acomodar o círculo + o cabo inclinado
-  // Projeção do cabo
-  const handleProjX = handleL * Math.sin(s.handleAngle);
-  const handleProjY = handleL * Math.cos(s.handleAngle);
-
-  const totalW = (2 * R) + handleProjX;
-  const totalH = (2 * R) + handleProjY;
-
-  return (
-    <svg width={totalW * 1.2} height={totalH * 1.2} viewBox={`0 0 ${totalW * 1.2} ${totalH * 1.2}`} style={{ overflow: 'visible' }}>
-      {/* 1. O Aro da Lupa */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="none"
-        stroke="black"
-        strokeWidth={thickness}
-      />
-
-      {/* 2. O Cabo da Lupa (Rotacionado 30 graus em relação à vertical, ou -60 do eixo X padrão) */}
-      {/* A norma diz 30 graus da vertical. Vamos usar transform para facilitar */}
-      <g transform={`translate(${cx}, ${cy}) rotate(-60)`}>
-        {/* O cabo começa na borda do círculo (R) e vai até R + handleL */}
-        <rect
-          x={R}
-          y={-handleW / 2}
-          width={handleL}
-          height={handleW}
-          rx={handleW / 2} // Bordas arredondadas do cabo
-          fill="black"
-        />
-      </g>
-    </svg>
-  );
+// Map labels to ANVISA standard line breaks
+const LABEL_LINES: Record<string, string[]> = {
+  acucar: ["AÇÚCAR", "ADICIONADO"],
+  gordura: ["GORDURA", "SATURADA"],
+  sodio: ["SÓDIO", ""]
 };
 
-const BlocoAltoEm = ({ s }: { s: ReturnType<typeof getMalhaStyles> }) => (
-  <Box sx={{
-    display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
-    position: 'relative', height: s.blockHeight, width: s.blockWidth,
-    bgcolor: 'background.paper', color: '#000', border: `${s.borderWidth}px solid black`,
-    boxSizing: 'border-box',
-    pl: `calc(${s.lupaDiameter}px + ${s.paddingX}px)`, // Espaço reservado para a lupa
-    overflow: 'visible'
-  }}>
-    {/* Lupa Posicionada Absolutamente à Esquerda */}
-    <Box sx={{ position: 'absolute', left: s.paddingX, top: '50%', transform: 'translateY(-50%)', zIndex: 1 }}>
-      <LupaIconSVG s={s} />
+// =====================================================================
+// ANVISA Front-of-Pack (FOP) - Pure CSS Implementation (IN 75/2020)
+// =====================================================================
+
+/**
+ * Geometric standards according to IN 75/2020:
+ * Y = Height reference (Standard usually 4.8mm or 4.77mm)
+ * Z = Width reference (Standard usually 1.2mm or 1.19mm)
+ * Block Height = 3Y
+ * Block Width = 8Y
+ * Gaps = 2Z
+ * Lupa Height = 1.7Y
+ */
+const Y = 4.8; // mm
+const Z = 1.2; // mm
+
+const mm = (val: number) => `${val}mm`;
+
+type Alerta = { id: string; label: string; line1: string; line2: string };
+
+const ALERTS_CONFIG: Record<string, Alerta> = {
+  acucar: { id: 'acucar', label: 'AÇÚCAR', line1: 'AÇÚCAR', line2: 'ADICIONADO' },
+  gordura: { id: 'gordura', label: 'GORDURA', line1: 'GORDURA', line2: 'SATURADA' },
+  sodio: { id: 'sodio', label: 'SÓDIO', line1: 'SÓDIO', line2: '' },
+};
+
+function LupaIconCSS({ blocksSpanned = 1 }: { blocksSpanned?: number }) {
+  // According to IN 75/2020:
+  // Height of Lupa icon itself is 1.7Y (Circle)
+  // But if it spans multiple blocks, the container height is (blocksSpanned * 3Y) + ((blocksSpanned - 1) * 2Z)
+  const totalHeight = (blocksSpanned * 3 * Y) + ((blocksSpanned - 1) * 2 * Z);
+  
+  return (
+    <Box sx={{ 
+      width: mm(6 * Z), // Icon container width
+      height: mm(totalHeight), 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      position: 'relative',
+      mr: mm(1.5 * Z),
+      flexShrink: 0
+    }}>
+      {/* Search Circle (1.7Y) */}
+      <Box sx={{
+        width: mm(1.7 * Y),
+        height: mm(1.7 * Y),
+        border: `${mm(1.4 * Z)} solid black`,
+        borderRadius: '50%',
+        position: 'absolute',
+        top: blocksSpanned === 1 ? mm(0.15 * Y) : '50%',
+        transform: blocksSpanned === 1 ? 'none' : 'translateY(-60%)',
+      }} />
+      {/* Handle (1.2Z) */}
+      <Box sx={{
+        width: mm(1.2 * Z),
+        height: mm(1.2 * Z),
+        backgroundColor: 'black',
+        position: 'absolute',
+        top: blocksSpanned === 1 ? mm(2.3 * Y) : '55%',
+        right: mm(0.1 * Z),
+        transform: 'rotate(45deg)'
+      }} />
     </Box>
-    <Typography sx={{
-      fontFamily: s.fontFamily,
-      fontWeight: s.fontWeight,
-      fontSize: s.fontSizeAltoEm,
-      lineHeight: 1,
-      letterSpacing: '-0.02em' // Arial Narrow é bem "apertada"
+  );
+}
+
+function NutrientBlock({ alerta }: { alerta: Alerta }) {
+  return (
+    <Box sx={{
+      width: mm(8 * Y),
+      height: mm(3 * Y),
+      backgroundColor: 'black',
+      color: 'white',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: '"Inter", "Arial", sans-serif',
+      boxSizing: 'border-box',
+      flexShrink: 0
     }}>
-      ALTO EM
-    </Typography>
-  </Box>
-);
+      <Typography sx={{ 
+        fontSize: mm(0.6 * Y),
+        fontWeight: 700, 
+        lineHeight: 1,
+        mb: mm(0.1 * Y),
+        textTransform: 'uppercase'
+      }}>
+        ALTO EM
+      </Typography>
+      <Typography sx={{ 
+        fontSize: mm(0.9 * Y),
+        fontWeight: 900, 
+        lineHeight: 0.9,
+        textAlign: 'center',
+        textTransform: 'uppercase'
+      }}>
+        {alerta.line1}<br/>{alerta.line2}
+      </Typography>
+    </Box>
+  );
+}
 
-const BlocoNutriente = ({ label, s, style }: { label: string, s: ReturnType<typeof getMalhaStyles>, style?: React.CSSProperties }) => (
-  <Box sx={{
-    display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-    height: s.blockHeight, width: s.blockWidth, bgcolor: 'background.paper', color: '#000',
-    border: `${s.borderWidth}px solid black`, boxSizing: 'border-box', ...style
-  }}>
-    <Typography sx={{
-      fontFamily: s.fontFamily,
-      fontWeight: s.fontWeight,
-      fontSize: s.fontSizeNutriente,
-      lineHeight: 1.1,
-      whiteSpace: 'pre-line'
-    }}>
-      {label}
-    </Typography>
-  </Box>
-);
+import { AnvisaFopLabel, AnvisaAlerta, AnvisaLayout } from './AnvisaFopLabel';
 
-// === COMPONENTE PRINCIPAL DA LUPA ===
-export function LupaFrontalANVISA({ lupas, areaPainelCm2, layout = 'VERTICAL' }: { lupas: LupasFrontais, areaPainelCm2: number | null | undefined, layout?: 'VERTICAL' | 'HORIZONTAL' | 'COMPACTO' }) {
-  const s = getMalhaStyles(areaPainelCm2);
+export function LupaFrontalANVISA({ lupas, layout = 'VERTICAL', areaPainelCm2 }: { lupas: LupasFrontais, layout?: string, areaPainelCm2?: number }) {
+  const alertas: AnvisaAlerta[] = [];
+  if (lupas?.alto_em_acucar_adicionado) alertas.push('AÇÚCAR ADICIONADO');
+  if (lupas?.alto_em_gordura_saturada) alertas.push('GORDURA SATURADA');
+  if (lupas?.alto_em_sodio) alertas.push('SÓDIO');
 
-  const alertasAtivos = [
-    { id: 'acucar', show: lupas?.alto_em_acucar_adicionado, label: 'AÇÚCAR\nADICIONADO' },
-    { id: 'gordura', show: lupas?.alto_em_gordura_saturada, label: 'GORDURA\nSATURADA' },
-    { id: 'sodio', show: lupas?.alto_em_sodio, label: 'SÓDIO' },
-  ].filter(a => a.show);
+  if (alertas.length === 0) return null;
 
-  if (alertasAtivos.length === 0) return null;
-
-  // Renderização Condicional do Layout
-  let content = null;
-
-  if (layout === 'VERTICAL' || layout === 'COMPACTO') {
-    content = (
-      <Box sx={{ width: s.blockWidth, display: 'flex', flexDirection: 'column' }}>
-        <Box sx={{ '& > div': { borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottom: 0 } }}>
-          <BlocoAltoEm s={s} />
-        </Box>
-        {alertasAtivos.map((alerta, idx) => {
-          const isLast = idx === alertasAtivos.length - 1;
-          return (
-            <Box key={alerta.id} sx={{ '& > div': { borderTop: '1px solid black' } }}>
-              <BlocoNutriente
-                label={alerta.label}
-                s={s}
-                style={{
-                  borderBottomLeftRadius: isLast ? s.borderRadius : 0,
-                  borderBottomRightRadius: isLast ? s.borderRadius : 0,
-                  borderBottom: isLast ? undefined : 0,
-                  color: '#000'
-                }}
-              />
-            </Box>
-          );
-        })}
-      </Box>
-    );
-  } else if (layout === 'HORIZONTAL') {
-    content = (
-      <Stack direction="row" spacing={s.gap / 4} alignItems="flex-start">
-        <BlocoAltoEm s={s} /> {/* No horizontal, o Alto Em tem cantos arredondados completos */}
-        {alertasAtivos.map(alerta => (
-          <BlocoNutriente key={alerta.id} label={alerta.label} s={s} style={{ borderRadius: s.borderRadius }} />
-        ))}
-      </Stack>
-    );
+  // Map incoming layout string to AnvisaLayout type
+  let safeLayout: AnvisaLayout = 'VERTICAL';
+  if (['HORIZONTAL', 'V1', 'V2', 'V3', 'VERTICAL'].includes(layout)) {
+    safeLayout = layout as AnvisaLayout;
   }
 
-  // Wrapper com Informações Técnicas (Tooltip)
   return (
-    <Box>
-      <Tooltip title={
-        <Box sx={{ p: 1 }}>
-          <Typography variant="caption" display="block">📏 <strong>Dimensões Técnicas (IN 75)</strong></Typography>
-          <Typography variant="caption" display="block">Área Painel: {s.area_painel} cm²</Typography>
-          <Typography variant="caption" display="block">Altura Mínima (Y): {s.h_min_mm} mm</Typography>
-          <Typography variant="caption" display="block">Status: Em Conformidade</Typography>
-        </Box>
-      } arrow placement="top">
-        <Box sx={{
-          cursor: 'help',
-          display: 'inline-flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          p: 1,
-          border: '1px dashed #ccc',
-          borderRadius: 2
+    <Box sx={{ display: 'flex', justifyContent: 'center', my: 2, overflow: 'visible' }}>
+      <Tooltip title={`FOP ANVISA (Arquitetura Sênior) - Layout: ${layout}`}>
+        <Box sx={{ 
+          // Scale it down for the UI since 22mm/7mm is very large
+          transformOrigin: 'top center',
+          zoom: 0.5 
         }}>
-          {content}
-          <Stack direction="row" alignItems="center" gap={0.5} sx={{ mt: 1, opacity: 0.6 }}>
-            <InfoOutlinedIcon sx={{ fontSize: 12 }} />
-            <Typography variant="caption" sx={{ fontSize: '0.65rem' }}>
-              Malha IN 75 (Y={s.h_min_mm}mm)
-            </Typography>
-          </Stack>
+          <AnvisaFopLabel 
+            alertas={alertas} 
+            layout={safeLayout}
+          />
         </Box>
       </Tooltip>
     </Box>
@@ -283,242 +195,464 @@ export function LupaFrontalANVISA({ lupas, areaPainelCm2, layout = 'VERTICAL' }:
 }
 
 // =====================================================================
-// PARTE 2: TABELAS NUTRICIONAIS (MANTIDAS DA VERSÃO ANTERIOR)
+// PARTE 2: TABELAS NUTRICIONAIS (ANVISA RDC 429/2020)
 // =====================================================================
 
-const font = "Arial, Helvetica, sans-serif";
-const borderThick = '2pt solid black';
-const borderThin = '1pt solid black';
+const font = '"Arial", sans-serif';
+const borderThick = '3px solid black'; 
+const borderMedium = '1px solid black';
+const borderThin = '0.25px solid black';
+const fontSizeTitle = '10px';
+const fontSizeLabel = '8px';
+const fontSizeFooter = '6px';
+const bullet = ' ● '; 
 
-const getAllNutrientes = (tabela: ResultadoCalculo) => {
-  const { porPorcao, percentualVD } = tabela;
-  const n = [
-    { key: 'energia_kcal', label: 'Valor energético (kcal)', unidade: '', recuo: 0 },
-    { key: 'carboidrato_g', label: 'Carboidratos', unidade: 'g', recuo: 0 },
-    { key: 'acucar_total_g', label: 'Açúcares totais', unidade: 'g', recuo: 1 },
-    { key: 'acucar_adicionado_g', label: 'Açúcares adicionados', unidade: 'g', recuo: 2 },
-    { key: 'proteina_g', label: 'Proteínas', unidade: 'g', recuo: 0 },
-    { key: 'lipideos_g', label: 'Gorduras totais', unidade: 'g', recuo: 0 },
-    { key: 'gordura_saturada_g', label: 'Gorduras saturadas', unidade: 'g', recuo: 1 },
-    { key: 'gordura_trans_g', label: 'Gorduras trans', unidade: 'g', recuo: 1 },
-    { key: 'fibra_alimentar_g', label: 'Fibra alimentar', unidade: 'g', recuo: 0 },
-    { key: 'sodio_mg', label: 'Sódio', unidade: 'mg', recuo: 0 },
-  ];
-  return n;
+const getIndent = (level: number) => {
+  if (level === 1) return '4.5px';
+  if (level === 2) return '9px';
+  return '0';
 };
 
-// 1. VERTICAL PADRÃO
+
+const ALL_NUTRIENTS_REGISTRY = [
+  { key: 'energia_kcal', label: 'Valor energético', unidade: 'kcal', recuo: 0, mandatory: true },
+  { key: 'carboidrato_g', label: 'Carboidratos', unidade: 'g', recuo: 0, mandatory: true },
+  { key: 'acucar_total_g', label: 'Açúcares totais', unidade: 'g', recuo: 1, mandatory: true },
+  { key: 'acucar_adicionado_g', label: 'Açúcares adicionados', unidade: 'g', recuo: 2, mandatory: true },
+  { key: 'lactose_g', label: 'Lactose', unidade: 'g', recuo: 1, mandatory: false },
+  { key: 'galactose_g', label: 'Galactose', unidade: 'g', recuo: 1, mandatory: false },
+  { key: 'poliois_totais_g', label: 'Polióis totais', unidade: 'g', recuo: 1, mandatory: false },
+  { key: 'sorbitol_g', label: 'Sorbitol', unidade: 'g', recuo: 2, mandatory: false },
+  { key: 'manitol_g', label: 'Manitol', unidade: 'g', recuo: 2, mandatory: false },
+  { key: 'xilitol_g', label: 'Xilitol', unidade: 'g', recuo: 2, mandatory: false },
+  { key: 'maltitol_g', label: 'Maltitol', unidade: 'g', recuo: 2, mandatory: false },
+  { key: 'eritritol_g', label: 'Eritritol', unidade: 'g', recuo: 2, mandatory: false },
+  { key: 'amido_g', label: 'Amido', unidade: 'g', recuo: 1, mandatory: false },
+  { key: 'proteina_g', label: 'Proteínas', unidade: 'g', recuo: 0, mandatory: true },
+  { key: 'lipideos_g', label: 'Gorduras totais', unidade: 'g', recuo: 0, mandatory: true },
+  { key: 'gordura_saturada_g', label: 'Gorduras saturadas', unidade: 'g', recuo: 1, mandatory: true },
+  { key: 'gordura_trans_g', label: 'Gorduras trans', unidade: 'g', recuo: 1, mandatory: true },
+  { key: 'gordura_mono_g', label: 'Gorduras monoinsaturadas', unidade: 'g', recuo: 1, mandatory: false },
+  { key: 'gordura_poli_g', label: 'Gorduras poli-insaturadas', unidade: 'g', recuo: 1, mandatory: false },
+  { key: 'colesterol_mg', label: 'Colesterol', unidade: 'mg', recuo: 1, mandatory: false },
+  { key: 'fibra_alimentar_g', label: 'Fibra alimentar', unidade: 'g', recuo: 0, mandatory: true },
+  { key: 'sodio_mg', label: 'Sódio', unidade: 'mg', recuo: 0, mandatory: true },
+];
+
+const VITAMIN_MINERAL_MAP: Record<string, { label: string, unidade: string }> = {
+  'vitamina_a_mcg': { label: 'Vitamina A', unidade: 'mcg' },
+  'vitamina_d_mcg': { label: 'Vitamina D', unidade: 'mcg' },
+  'vitamina_e_mg': { label: 'Vitamina E', unidade: 'mg' },
+  'vitamina_k_mcg': { label: 'Vitamina K', unidade: 'mcg' },
+  'vitamina_c_mg': { label: 'Vitamina C', unidade: 'mg' },
+  'vitamina_b1_mg': { label: 'Vitamina B1', unidade: 'mg' },
+  'vitamina_b2_mg': { label: 'Vitamina B2', unidade: 'mg' },
+  'vitamina_b3_mg': { label: 'Vitamina B3', unidade: 'mg' },
+  'vitamina_b5_mg': { label: 'Vitamina B5', unidade: 'mg' },
+  'vitamina_b6_mg': { label: 'Vitamina B6', unidade: 'mg' },
+  'vitamina_b7_mcg': { label: 'Vitamina B7', unidade: 'mcg' },
+  'vitamina_b9_mcg': { label: 'Vitamina B9', unidade: 'mcg' },
+  'vitamina_b12_mcg': { label: 'Vitamina B12', unidade: 'mcg' },
+  'calcio_mg': { label: 'Cálcio', unidade: 'mg' },
+  'cloreto_mg': { label: 'Cloreto', unidade: 'mg' },
+  'cobre_mcg': { label: 'Cobre', unidade: 'mcg' },
+  'cromo_mcg': { label: 'Cromo', unidade: 'mcg' },
+  'ferro_mg': { label: 'Ferro', unidade: 'mg' },
+  'fluor_mg': { label: 'Flúor', unidade: 'mg' },
+  'fosforo_mg': { label: 'Fósforo', unidade: 'mg' },
+  'iodo_mcg': { label: 'Iodo', unidade: 'mcg' },
+  'magnesio_mg': { label: 'Magnésio', unidade: 'mg' },
+  'manganes_mg': { label: 'Manganês', unidade: 'mg' },
+  'molibdenio_mcg': { label: 'Molibdênio', unidade: 'mcg' },
+  'potassio_mg': { label: 'Potássio', unidade: 'mg' },
+  'selenio_mcg': { label: 'Selênio', unidade: 'mcg' },
+  'zinco_mg': { label: 'Zinco', unidade: 'mg' },
+};
+
+const getAllNutrientes = (tabela: ResultadoCalculo) => {
+  const condsorted = (tabela.nutrientesCondicionais || []).sort();
+  const list = ALL_NUTRIENTS_REGISTRY.filter(n => {
+    if (n.mandatory) return true;
+    if (tabela.nutrientesCondicionais?.includes(n.key)) return true;
+    // Fallback: se tiver valor significativo (ex: vindo de ingrediente sem CLAIM mas o usuário quer mostrar)
+    const val = parseFloat(tabela.por100g[n.key] || '0');
+    return val > 0;
+  });
+
+  // Adicionar Vitaminas e Minerais ao final
+  const vits = condsorted
+    .filter(k => VITAMIN_MINERAL_MAP[k])
+    .map(k => ({
+      key: k,
+      label: VITAMIN_MINERAL_MAP[k].label,
+      unidade: VITAMIN_MINERAL_MAP[k].unidade,
+      recuo: 0,
+      mandatory: false
+    }));
+
+  return [...list, ...vits];
+};
+
+
 export const TabelaVertical = React.forwardRef<HTMLDivElement, { tabela: ResultadoCalculo }>(({ tabela }, ref) => {
   const nutrientes = getAllNutrientes(tabela);
   const medida = formatarMedidaCaseira(tabela.infoPorcao);
   const porcaoCabecalho = formatarNumero(tabela.infoPorcao.porcao_g_ml);
 
   return (
-    <div ref={ref} style={{ border: borderThick, background: 'var(--mui-palette-background-paper)', width: 'fit-content', padding: '4px', fontFamily: font, color: '#000' }}>
-      <div style={{ fontSize: '10pt', fontWeight: 'bold', borderBottom: 'none' }}>INFORMAÇÃO NUTRICIONAL</div>
-      <div style={{ fontSize: '10pt', marginBottom: '4px' }}>
+    <div ref={ref} style={{ border: borderThin, background: '#fff', width: '240px', padding: '0', fontFamily: font, color: '#231f20', boxSizing: 'border-box', margin: '0 auto' }}>
+      <div style={{ padding: '8px 4px', borderBottom: borderThin, textAlign: 'center' }}>
+        <div style={{ fontSize: fontSizeTitle, fontWeight: 'bold', letterSpacing: '0.02em', textTransform: 'uppercase' }}>INFORMAÇÃO NUTRICIONAL</div>
+      </div>
+      <div style={{ fontSize: fontSizeLabel, padding: '4px 6px', borderBottom: borderThick, lineHeight: '1.2' }}>
         Porções por embalagem: {tabela.infoPorcao.total_porcoes_embalagem} <br />
         Porção: {medida}
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: borderThick }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ borderBottom: borderThick }}>
-            <th style={{ textAlign: 'left', width: '150px', fontSize: '10pt', padding: '2px', borderRight: borderThin }}> </th>
-            <th style={{ width: '50px', fontSize: '10pt', borderRight: borderThin, padding: '2px' }}>100 g</th>
-            <th style={{ width: '50px', fontSize: '10pt', borderRight: borderThin, padding: '2px' }}>{porcaoCabecalho} g</th>
-            <th style={{ width: '40px', fontSize: '10pt', padding: '2px' }}>%VD*</th>
+          <tr style={{ borderBottom: borderMedium }}>
+            <th style={{ textAlign: 'left', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', borderRight: borderThin }}></th>
+            <th style={{ width: '45px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>100 g</th>
+            <th style={{ width: '50px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>{porcaoCabecalho} g</th>
+            <th style={{ width: '40px', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', textAlign: 'center' }}>%VD*</th>
           </tr>
         </thead>
         <tbody>
           {nutrientes.map((n) => (
             <tr key={n.key} style={{ borderBottom: borderThin }}>
-              <td style={{ fontSize: '10pt', padding: '2px', paddingLeft: `${4 + n.recuo * 8}px`, borderRight: borderThin, whiteSpace: 'nowrap' }}>
+              <td style={{ fontSize: fontSizeLabel, padding: '2px 4px', paddingLeft: `calc(4px + ${getIndent(n.recuo)})`, borderRight: borderThin, whiteSpace: 'nowrap' }}>
                 {n.label} {n.unidade ? `(${n.unidade})` : ''}
               </td>
-              <td style={{ fontSize: '10pt', textAlign: 'center', borderRight: borderThin, padding: '2px' }}>{tabela.por100g[n.key] ?? '0'}</td>
-              <td style={{ fontSize: '10pt', textAlign: 'center', borderRight: borderThin, padding: '2px' }}>{tabela.porPorcao[n.key] ?? '0'}</td>
-              <td style={{ fontSize: '10pt', textAlign: 'center', padding: '2px' }}>{tabela.percentualVD[n.key] ? `${tabela.percentualVD[n.key]}%` : '0%'}</td>
+              <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin, padding: '2px 4px' }}>{tabela.por100g[n.key] ?? '0'}</td>
+              <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin, padding: '2px 4px' }}>{tabela.porPorcao[n.key] ?? '0'}</td>
+              <td style={{ fontSize: fontSizeLabel, textAlign: 'center', padding: '2px 4px' }}>{tabela.percentualVD[n.key] ? `${tabela.percentualVD[n.key]}%` : '0%'}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <div style={{ fontSize: '8pt', marginTop: '2px' }}>*Percentual de valores diários fornecidos pela porção.</div>
+      <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1' }}>
+        *Percentual de valores diários fornecidos pela porção.
+      </div>
     </div>
   );
 });
 TabelaVertical.displayName = 'TabelaVertical';
 
-// 2. VERTICAL QUEBRADA
+
 export const TabelaVerticalQuebrada = React.forwardRef<HTMLDivElement, { tabela: ResultadoCalculo }>(({ tabela }, ref) => {
   const nutrientes = getAllNutrientes(tabela);
   const splitIndex = Math.ceil(nutrientes.length / 2);
   const col1 = nutrientes.slice(0, splitIndex);
   const col2 = nutrientes.slice(splitIndex);
   const medida = formatarMedidaCaseira(tabela.infoPorcao);
+  const porcaoCabecalho = formatarNumero(tabela.infoPorcao.porcao_g_ml);
 
   return (
-    <div ref={ref} style={{ border: borderThick, background: 'var(--mui-palette-background-paper)', width: '100%', padding: '4px', fontFamily: font, color: '#000' }}>
-      <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>INFORMAÇÃO NUTRICIONAL</div>
-      <div style={{ fontSize: '10pt', marginBottom: '4px' }}>
-        Porções por embalagem: {tabela.infoPorcao.total_porcoes_embalagem} • Porção: {medida}
+    <div ref={ref} style={{ border: borderThin, background: '#fff', width: '450px', padding: '0', fontFamily: font, color: '#231f20', boxSizing: 'border-box', margin: '0 auto' }}>
+      <div style={{ padding: '8px 4px', borderBottom: borderThin, textAlign: 'center' }}>
+        <div style={{ fontSize: fontSizeTitle, fontWeight: 'bold', letterSpacing: '0.02em', textTransform: 'uppercase' }}>INFORMAÇÃO NUTRICIONAL</div>
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: borderThick }}>
-        <thead>
-          <tr style={{ borderBottom: borderThick }}>
-            <th style={{ width: '30%', textAlign: 'left', fontSize: '9pt', borderRight: borderThin, padding: '2px' }}> </th>
-            <th style={{ width: '10%', fontSize: '9pt', borderRight: borderThin, padding: '2px' }}>100g</th>
-            <th style={{ width: '5%', fontSize: '9pt', borderRight: borderThick, padding: '2px' }}>%VD*</th>
-            <th style={{ width: '30%', textAlign: 'left', fontSize: '9pt', borderRight: borderThin, padding: '2px' }}> </th>
-            <th style={{ width: '10%', fontSize: '9pt', borderRight: borderThin, padding: '2px' }}>100g</th>
-            <th style={{ width: '5%', fontSize: '9pt', padding: '2px' }}>%VD*</th>
-          </tr>
-        </thead>
-        <tbody>
-          {col1.map((n1, i) => {
-            const n2 = col2[i];
-            return (
-              <tr key={n1.key} style={{ borderBottom: borderThin }}>
-                <td style={{ fontSize: '9pt', paddingLeft: `${4 + n1.recuo * 6}px`, borderRight: borderThin, whiteSpace: 'nowrap' }}>{n1.label} {n1.unidade}</td>
-                <td style={{ fontSize: '9pt', textAlign: 'center', borderRight: borderThin }}>{tabela.por100g[n1.key] ?? '0'}</td>
-                <td style={{ fontSize: '9pt', textAlign: 'center', borderRight: borderThick }}>{tabela.percentualVD[n1.key] ? `${tabela.percentualVD[n1.key]}%` : '0%'}</td>
-                <td style={{ fontSize: '9pt', paddingLeft: n2 ? `${4 + n2.recuo * 6}px` : '0', borderRight: borderThin, whiteSpace: 'nowrap' }}>{n2 ? `${n2.label} ${n2.unidade}` : ''}</td>
-                <td style={{ fontSize: '9pt', textAlign: 'center', borderRight: borderThin }}>{n2 ? (tabela.por100g[n2.key] ?? '0') : ''}</td>
-                <td style={{ fontSize: '9pt', textAlign: 'center' }}>{n2 ? (tabela.percentualVD[n2.key] ? `${tabela.percentualVD[n2.key]}%` : '0%') : ''}</td>
+      <div style={{ fontSize: fontSizeLabel, padding: '4px 6px', borderBottom: borderThick, lineHeight: '1.2' }}>
+        Porções por embalagem: {tabela.infoPorcao.total_porcoes_embalagem} {bullet} Porção: {medida}
+      </div>
+      <div style={{ display: 'flex' }}>
+        <table style={{ width: '50%', borderCollapse: 'collapse', borderRight: borderMedium }}>
+          <thead>
+            <tr style={{ borderBottom: borderMedium }}>
+              <th style={{ textAlign: 'left', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', borderRight: borderThin }}></th>
+              <th style={{ width: '35px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>100 g</th>
+              <th style={{ width: '40px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>{porcaoCabecalho} g</th>
+              <th style={{ width: '30px', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', textAlign: 'center' }}>%VD*</th>
+            </tr>
+          </thead>
+          <tbody>
+            {col1.map((n) => (
+              <tr key={n.key} style={{ borderBottom: borderThin }}>
+                <td style={{ fontSize: fontSizeLabel, padding: '2px 4px', paddingLeft: `calc(4px + ${getIndent(n.recuo)})`, borderRight: borderThin, whiteSpace: 'nowrap' }}>
+                  {n.label} ({n.unidade})
+                </td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.por100g[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.porPorcao[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center' }}>{tabela.percentualVD[n.key] ? `${tabela.percentualVD[n.key]}%` : '0%'}</td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <div style={{ fontSize: '8pt', marginTop: '2px' }}>*Percentual de valores diários fornecidos pela porção.</div>
+            ))}
+          </tbody>
+        </table>
+        <table style={{ width: '50%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: borderMedium }}>
+              <th style={{ textAlign: 'left', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', borderRight: borderThin }}></th>
+              <th style={{ width: '35px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>100 g</th>
+              <th style={{ width: '40px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>{porcaoCabecalho} g</th>
+              <th style={{ width: '30px', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', textAlign: 'center' }}>%VD*</th>
+            </tr>
+          </thead>
+          <tbody>
+            {col2.map((n) => (
+              <tr key={n.key} style={{ borderBottom: borderThin }}>
+                <td style={{ fontSize: fontSizeLabel, padding: '2px 4px', paddingLeft: `calc(4px + ${getIndent(n.recuo)})`, borderRight: borderThin, whiteSpace: 'nowrap' }}>
+                  {n.label} ({n.unidade})
+                </td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.por100g[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.porPorcao[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center' }}>{tabela.percentualVD[n.key] ? `${tabela.percentualVD[n.key]}%` : '0%'}</td>
+              </tr>
+            ))}
+            {/* Fill empty rows to maintain symmetry if needed */}
+            {Array.from({ length: Math.max(0, col1.length - col2.length) }).map((_, i) => (
+              <tr key={`empty-${i}`} style={{ borderBottom: borderThin }}><td colSpan={4}>&nbsp;</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1' }}>
+        *Percentual de valores diários fornecidos pela porção.
+      </div>
     </div>
   );
 });
 TabelaVerticalQuebrada.displayName = 'TabelaVerticalQuebrada';
 
-// 3. HORIZONTAL
+
 export const TabelaHorizontal = React.forwardRef<HTMLDivElement, { tabela: ResultadoCalculo }>(({ tabela }, ref) => {
   const nutrientes = getAllNutrientes(tabela);
   const medida = formatarMedidaCaseira(tabela.infoPorcao);
   const porcaoCabecalho = formatarNumero(tabela.infoPorcao.porcao_g_ml);
 
   return (
-    <div ref={ref} style={{ border: borderThick, background: 'var(--mui-palette-background-paper)', width: '100%', display: 'flex', fontFamily: font, color: '#000' }}>
-      <div style={{ width: '30%', padding: '6px', borderRight: borderThick, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <div style={{ fontSize: '10pt', fontWeight: 'bold', marginBottom: '4px' }}>INFORMAÇÃO NUTRICIONAL</div>
-        <div style={{ fontSize: '10pt' }}>Porções por embalagem: {tabela.infoPorcao.total_porcoes_embalagem}</div>
-        <div style={{ fontSize: '10pt' }}>Porção: {medida}</div>
+    <div ref={ref} style={{ border: borderThin, background: '#fff', width: '450px', display: 'flex', fontFamily: font, color: '#231f20', boxSizing: 'border-box', margin: '0 auto' }}>
+      <div style={{ width: '40%', padding: '6px', borderRight: borderThick, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ fontSize: fontSizeTitle, fontWeight: 'bold', marginBottom: '8px', lineHeight: '1', textAlign: 'left', textTransform: 'uppercase' }}>
+          INFORMAÇÃO<br/>NUTRICIONAL
+        </div>
+        <div style={{ fontSize: fontSizeLabel, lineHeight: '1.2' }}>Porções por emb.: {tabela.infoPorcao.total_porcoes_embalagem}</div>
+        <div style={{ fontSize: fontSizeLabel, lineHeight: '1.2' }}>Porção: {medida}</div>
       </div>
-      <div style={{ width: '70%', padding: '4px' }}>
+      <div style={{ width: '60%', padding: '0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ borderBottom: borderThick }}>
-              <th style={{ textAlign: 'left', fontSize: '10pt', borderRight: borderThin, padding: '2px' }}> </th>
-              <th style={{ fontSize: '10pt', borderRight: borderThin, padding: '2px' }}>100 g</th>
-              <th style={{ fontSize: '10pt', borderRight: borderThin, padding: '2px' }}>{porcaoCabecalho} g</th>
-              <th style={{ fontSize: '10pt', padding: '2px' }}>%VD*</th>
+            <tr style={{ borderBottom: borderMedium }}>
+              <th style={{ textAlign: 'left', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px' }}></th>
+              <th style={{ width: '45px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>100 g</th>
+              <th style={{ width: '50px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>{porcaoCabecalho} g</th>
+              <th style={{ width: '40px', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', textAlign: 'center' }}>%VD*</th>
             </tr>
           </thead>
           <tbody>
             {nutrientes.map((n) => (
               <tr key={n.key} style={{ borderBottom: borderThin }}>
-                <td style={{ fontSize: '10pt', paddingLeft: `${4 + n.recuo * 8}px`, borderRight: borderThin, whiteSpace: 'nowrap' }}>{n.label} {n.unidade}</td>
-                <td style={{ fontSize: '10pt', textAlign: 'center', borderRight: borderThin }}>{tabela.por100g[n.key] ?? '0'}</td>
-                <td style={{ fontSize: '10pt', textAlign: 'center', borderRight: borderThin }}>{tabela.porPorcao[n.key] ?? '0'}</td>
-                <td style={{ fontSize: '10pt', textAlign: 'center' }}>{tabela.percentualVD[n.key] ? `${tabela.percentualVD[n.key]}%` : '0%'}</td>
+                <td style={{ fontSize: fontSizeLabel, padding: '2px 4px', paddingLeft: `calc(4px + ${getIndent(n.recuo)})`, borderRight: borderThin, whiteSpace: 'nowrap' }}>
+                  {n.label} {n.unidade ? `(${n.unidade})` : ''}
+                </td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.por100g[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.porPorcao[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center' }}>{tabela.percentualVD[n.key] ? `${tabela.percentualVD[n.key]}%` : '0%'}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div style={{ fontSize: '8pt', marginTop: '2px' }}>*Percentual de valores diários fornecidos pela porção.</div>
+        <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1' }}>
+          *Percentual de valores diários fornecidos pela porção.
+        </div>
       </div>
     </div>
   );
 });
 TabelaHorizontal.displayName = 'TabelaHorizontal';
 
-// 4. HORIZONTAL QUEBRADA
+
 export const TabelaHorizontalQuebrada = React.forwardRef<HTMLDivElement, { tabela: ResultadoCalculo }>(({ tabela }, ref) => {
+  const { infoPorcao } = tabela;
   const nutrientes = getAllNutrientes(tabela);
-  const half = Math.ceil(nutrientes.length / 2);
-  const col1 = nutrientes.slice(0, half);
-  const col2 = nutrientes.slice(half);
-  const medida = formatarMedidaCaseira(tabela.infoPorcao);
+  const medida = formatarMedidaCaseira(infoPorcao);
+  const porcaoCabecalho = formatarNumero(infoPorcao.porcao_g_ml);
+  const splitIndex = Math.ceil(nutrientes.length / 2);
+  const col1 = nutrientes.slice(0, splitIndex);
+  const col2 = nutrientes.slice(splitIndex);
 
   return (
-    <div ref={ref} style={{ border: borderThick, background: 'var(--mui-palette-background-paper)', width: '100%', display: 'flex', fontFamily: font, color: '#000' }}>
-      <div style={{ width: '20%', padding: '6px', borderRight: borderThick, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <div style={{ fontSize: '9pt', fontWeight: 'bold' }}>INFORMAÇÃO NUTRICIONAL</div>
-        <div style={{ fontSize: '9pt' }}>Porções: {tabela.infoPorcao.total_porcoes_embalagem}</div>
-        <div style={{ fontSize: '9pt' }}>Porção: {medida}</div>
+    <div ref={ref} style={{ border: borderThin, background: '#fff', width: '650px', display: 'flex', fontFamily: font, color: '#231f20', boxSizing: 'border-box', margin: '0 auto' }}>
+      <div style={{ width: '25%', padding: '6px', borderRight: borderThick, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ fontSize: fontSizeTitle, fontWeight: 'bold', marginBottom: '8px', lineHeight: '1', textAlign: 'left', textTransform: 'uppercase' }}>
+          INFORMAÇÃO<br/>NUTRICIONAL
+        </div>
+        <div style={{ fontSize: fontSizeLabel, lineHeight: '1.2' }}>Porções por emb.: {infoPorcao.total_porcoes_embalagem}</div>
+        <div style={{ fontSize: fontSizeLabel, lineHeight: '1.2' }}>Porção: {medida}</div>
       </div>
-      <div style={{ width: '80%', padding: '4px' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={{ width: '75%', display: 'flex' }}>
+        <table style={{ width: '50%', borderCollapse: 'collapse', borderRight: borderMedium }}>
           <thead>
-            <tr style={{ borderBottom: borderThick }}>
-              <th style={{ textAlign: 'left', fontSize: '9pt', borderRight: borderThin }}> </th>
-              <th style={{ fontSize: '9pt', borderRight: borderThin }}>100g</th>
-              <th style={{ fontSize: '9pt', borderRight: borderThick }}>%VD*</th>
-              <th style={{ textAlign: 'left', fontSize: '9pt', borderRight: borderThin, paddingLeft: '4px' }}> </th>
-              <th style={{ fontSize: '9pt', borderRight: borderThin }}>100g</th>
-              <th style={{ fontSize: '9pt' }}>%VD*</th>
+            <tr style={{ borderBottom: borderMedium }}>
+              <th style={{ textAlign: 'left', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', borderRight: borderThin }}></th>
+              <th style={{ width: '35px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>100 g</th>
+              <th style={{ width: '40px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>{porcaoCabecalho} g</th>
+              <th style={{ width: '30px', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', textAlign: 'center' }}>%VD*</th>
             </tr>
           </thead>
           <tbody>
-            {col1.map((n1, i) => {
-              const n2 = col2[i];
-              return (
-                <tr key={n1.key} style={{ borderBottom: borderThin }}>
-                  <td style={{ fontSize: '9pt', paddingLeft: `${4 + n1.recuo * 6}px`, borderRight: borderThin, whiteSpace: 'nowrap' }}>{n1.label} {n1.unidade}</td>
-                  <td style={{ fontSize: '9pt', textAlign: 'center', borderRight: borderThin }}>{tabela.por100g[n1.key] ?? '0'}</td>
-                  <td style={{ fontSize: '9pt', textAlign: 'center', borderRight: borderThick }}>{tabela.percentualVD[n1.key] ? `${tabela.percentualVD[n1.key]}%` : '0%'}</td>
-                  <td style={{ fontSize: '9pt', paddingLeft: n2 ? `${4 + n2.recuo * 6}px` : '0', borderRight: borderThin, whiteSpace: 'nowrap' }}>{n2 ? `${n2.label} ${n2.unidade}` : ''}</td>
-                  <td style={{ fontSize: '9pt', textAlign: 'center', borderRight: borderThin }}>{n2 ? (tabela.por100g[n2.key] ?? '0') : ''}</td>
-                  <td style={{ fontSize: '9pt', textAlign: 'center' }}>{n2 ? (tabela.percentualVD[n2.key] ? `${tabela.percentualVD[n2.key]}%` : '0%') : ''}</td>
-                </tr>
-              );
-            })}
+            {col1.map((n) => (
+              <tr key={n.key} style={{ borderBottom: borderThin }}>
+                <td style={{ fontSize: fontSizeLabel, padding: '2px 4px', paddingLeft: `calc(4px + ${getIndent(n.recuo)})`, borderRight: borderThin, whiteSpace: 'nowrap' }}>
+                  {n.label} ({n.unidade})
+                </td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.por100g[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.porPorcao[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center' }}>{tabela.percentualVD[n.key] ? `${tabela.percentualVD[n.key]}%` : '0%'}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
-        <div style={{ fontSize: '8pt', marginTop: '2px' }}>*Percentual de valores diários fornecidos pela porção.</div>
+        <table style={{ width: '50%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: borderMedium }}>
+              <th style={{ textAlign: 'left', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', borderRight: borderThin }}></th>
+              <th style={{ width: '35px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>100 g</th>
+              <th style={{ width: '40px', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px', textAlign: 'center' }}>{porcaoCabecalho} g</th>
+              <th style={{ width: '30px', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', textAlign: 'center' }}>%VD*</th>
+            </tr>
+          </thead>
+          <tbody>
+            {col2.map((n) => (
+              <tr key={n.key} style={{ borderBottom: borderThin }}>
+                <td style={{ fontSize: fontSizeLabel, padding: '2px 4px', paddingLeft: `calc(4px + ${getIndent(n.recuo)})`, borderRight: borderThin, whiteSpace: 'nowrap' }}>
+                  {n.label} ({n.unidade})
+                </td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.por100g[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{tabela.porPorcao[n.key] ?? '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center' }}>{tabela.percentualVD[n.key] ? `${tabela.percentualVD[n.key]}%` : '0%'}</td>
+              </tr>
+            ))}
+            {Array.from({ length: Math.max(0, col1.length - col2.length) }).map((_, i) => (
+              <tr key={`empty-${i}`} style={{ borderBottom: borderThin }}><td colSpan={4}>&nbsp;</td></tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 });
 TabelaHorizontalQuebrada.displayName = 'TabelaHorizontalQuebrada';
 
-// 5. LINEAR
+
+
+export const TabelaAgregada = React.forwardRef<HTMLDivElement, { tabela: ResultadoCalculo, extras?: ResultadoCalculo[] }>(({ tabela, extras = [] }, ref) => {
+  const todosProdutos = [tabela, ...extras];
+  const nutrientes = getAllNutrientes(tabela);
+
+  return (
+    <div ref={ref} style={{ border: borderThin, background: '#fff', width: 'fit-content', padding: '0', fontFamily: font, color: '#231f20', boxSizing: 'border-box', margin: '0 auto' }}>
+      <div style={{ display: 'flex', borderBottom: borderMedium }}>
+        <div style={{ padding: '8px 4px', borderRight: borderThick, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '120px', flexShrink: 0 }}>
+          <div style={{ fontSize: fontSizeTitle, fontWeight: 'bold', textAlign: 'center', textTransform: 'uppercase' }}>INFORMAÇÃO NUTRICIONAL</div>
+        </div>
+        {todosProdutos.map((p, idx) => (
+          <div key={idx} style={{ padding: '4px 6px', flex: 1, borderRight: idx < todosProdutos.length - 1 ? borderThin : 'none', minWidth: '100px' }}>
+            <div style={{ fontSize: fontSizeLabel, fontWeight: 'bold', borderBottom: borderThin, marginBottom: '2px' }}>Produto {idx + 1}</div>
+            <div style={{ fontSize: '7px', lineHeight: '1' }}>Porções por emb.: {p.infoPorcao.total_porcoes_embalagem}</div>
+            <div style={{ fontSize: '7px', lineHeight: '1' }}>Porção: {formatarNumero(p.infoPorcao.porcao_g_ml)}g ({p.infoPorcao.medida_caseira_nome})</div>
+          </div>
+        ))}
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ borderBottom: borderMedium }}>
+            <th style={{ textAlign: 'left', fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, padding: '2px 4px' }}></th>
+            {todosProdutos.map((_, idx) => (
+              <React.Fragment key={idx}>
+                <th style={{ fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: borderThin, textAlign: 'center', width: '40px' }}>100 g</th>
+                <th style={{ fontSize: fontSizeLabel, fontWeight: 'bold', borderRight: idx < todosProdutos.length - 1 ? borderThin : 'none', textAlign: 'center', width: '35px' }}>%VD*</th>
+              </React.Fragment>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {nutrientes.map((n) => (
+            <tr key={n.key} style={{ borderBottom: borderThin }}>
+              <td style={{ fontSize: fontSizeLabel, padding: '2px 4px', paddingLeft: `calc(4px + ${getIndent(n.recuo)})`, borderRight: borderThin, whiteSpace: 'nowrap' }}>
+                {n.label} ({n.unidade})
+              </td>
+              {todosProdutos.map((p, idx) => (
+                <React.Fragment key={idx}>
+                  <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: borderThin }}>{p.por100g[n.key] ?? '0'}</td>
+                  <td style={{ fontSize: fontSizeLabel, textAlign: 'center', borderRight: idx < todosProdutos.length - 1 ? borderThin : 'none' }}>{p.percentualVD[n.key] ? `${p.percentualVD[n.key]}%` : '0%'}</td>
+                </React.Fragment>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1' }}>
+        *Percentual de valores diários fornecidos pela porção.
+      </div>
+    </div>
+  );
+});
+TabelaAgregada.displayName = 'TabelaAgregada';
+
 export const TabelaLinear = React.forwardRef<HTMLDivElement, { tabela: ResultadoCalculo }>(({ tabela }, ref) => {
   const { infoPorcao, por100g, porPorcao, percentualVD } = tabela;
   const nutrientes = getAllNutrientes(tabela);
-  const medida = formatarMedidaCaseira(tabela.infoPorcao);
-  const porcaoFmt = formatarNumero(tabela.infoPorcao.porcao_g_ml);
+  const medida = formatarMedidaCaseira(infoPorcao);
+  const porcaoFmt = formatarNumero(infoPorcao.porcao_g_ml);
 
-  const itensTexto = nutrientes.map(n => {
+  const formatItem = (n: any) => {
     const v100 = por100g[n.key] ?? '0';
     const vPorc = porPorcao[n.key] ?? '0';
     const vd = percentualVD[n.key] ? `${percentualVD[n.key]}%` : '0%';
-    const label = n.key === 'energia_kcal' ? 'Valor energético' : n.label;
+    const label = n.label;
     const un = n.unidade;
-    return `${label} ${v100}${un} (${vPorc}${un}, ${vd})`;
-  });
+    
+    let prefix = "";
+    if (n.key === 'acucar_total_g') prefix = " dos quais ";
+    if (n.key === 'acucar_adicionado_g') prefix = " ";
+    if (n.key === 'gordura_saturada_g' || n.key === 'gordura_trans_g') prefix = " ";
 
+    return (
+      <span key={n.key}>
+        {prefix}{label} {v100} {un} (<strong>{vPorc} {un}, {vd}</strong>)
+      </span>
+    );
+  };
+  
   return (
-    <div ref={ref} style={{ padding: '6px', border: borderThick, fontFamily: font, background: 'var(--mui-palette-background-paper)', color: 'text.primary' }}>
-      <div style={{ fontSize: '9pt', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '4px' }}>INFORMAÇÃO NUTRICIONAL:</div>
-      <div style={{ fontSize: '9pt', lineHeight: 1.4, textAlign: 'justify' }}>
-        Porções por embalagem: {infoPorcao.total_porcoes_embalagem}. Porção: {medida}.
+    <div ref={ref} style={{ border: borderThin, background: '#fff', width: '500px', fontFamily: font, color: '#231f20', boxSizing: 'border-box', margin: '0 auto' }}>
+      <div style={{ backgroundColor: 'black', color: 'white', padding: '4px', textAlign: 'center' }}>
+        <div style={{ fontSize: fontSizeTitle, fontWeight: 'bold', textTransform: 'uppercase' }}>INFORMAÇÃO NUTRICIONAL</div>
+      </div>
+      <div style={{ padding: '6px', fontSize: fontSizeLabel, lineHeight: '1.4', textAlign: 'justify' }}>
+        <strong>Porções por embalagem:</strong> {infoPorcao.total_porcoes_embalagem} {bullet} <strong>Porção:</strong> {medida}.
+        <br />
+        <strong>Por 100 g ({porcaoFmt} g, %VD*):</strong>
         {' '}
-        Por 100 g ({porcaoFmt} g, %VD*): {itensTexto.join('; ')}.
-        {' '}
-        *Percentual de valores diários fornecidos pela porção.
+        {nutrientes.map((n, idx) => {
+           const isSubItem = n.recuo > 0;
+           return (
+            <React.Fragment key={n.key}>
+              {idx > 0 && !isSubItem && bullet}
+              {idx > 0 && isSubItem && ", "}
+              {formatItem(n)}
+            </React.Fragment>
+           );
+        })}
+        <br />
+        <span style={{ fontSize: fontSizeFooter }}>*Percentual de valores diários fornecidos pela porção.</span>
       </div>
     </div>
   );
 });
 TabelaLinear.displayName = 'TabelaLinear';
 
+
 export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: DeclaracoesObrigatorias }) {
-  const { lista_ingredientes, contem_gluten, contem_lactose, alergenicos } = declaracoes;
+  const { 
+    lista_ingredientes, 
+    contem_gluten, 
+    contem_lactose, 
+    alergenicos, 
+    modo_conservacao,
+    colorido_artificialmente,
+    colorido_carmim 
+  } = declaracoes;
 
   let ingredientesTexto = lista_ingredientes || '...';
   ingredientesTexto = ingredientesTexto.replace(/^ingredientes:?\s*/i, '').toLowerCase();
@@ -530,35 +664,48 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
   }
 
   return (
-    <Box sx={{ mt: 2, p: 2, border: '1px dashed #999', fontFamily: font, bgcolor: 'background.paper' }}>
-      <Typography sx={{ fontSize: '10pt', mb: 1, color: '#000', lineHeight: 1.4 }}>
+    <Box sx={{ mt: 2, p: '4pt', border: borderMedium, fontFamily: font, bgcolor: 'background.paper' }}>
+      <Typography sx={{ fontSize: fontSizeLabel, mb: '2pt', color: '#000', lineHeight: 1.2 }}>
         <strong>Ingredientes:</strong> {ingredientesTexto}
       </Typography>
       {alergenicosTexto && (
-        <Typography sx={{ fontSize: '10pt', fontWeight: 'bold', textTransform: 'uppercase', mb: 1, color: '#000' }}>
+        <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', mb: '2pt', color: '#000', lineHeight: 1.1 }}>
           {alergenicosTexto}
         </Typography>
       )}
-      <Typography sx={{ fontSize: '10pt', fontWeight: 'bold', textTransform: 'uppercase', color: '#000' }}>
+      <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', lineHeight: 1.1 }}>
         {contem_gluten ? "CONTÉM GLÚTEN." : "NÃO CONTÉM GLÚTEN."} {contem_lactose ? "CONTÉM LACTOSE." : ""}
       </Typography>
+      
+      {(colorido_artificialmente || colorido_carmim) && (
+        <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', mt: '2pt', lineHeight: 1.1 }}>
+          {colorido_artificialmente && "COLORIDO ARTIFICIALMENTE. "}
+          {colorido_carmim && "CONTÉM CORANTE CARMIM DE COCHONILHA. "}
+        </Typography>
+      )}
+
+      {modo_conservacao && (
+        <Typography sx={{ fontSize: fontSizeLabel, color: '#000', mt: '4pt', lineHeight: 1.1 }}>
+          <strong>Modo de conservação:</strong> {modo_conservacao}
+        </Typography>
+      )}
     </Box>
   );
 }
 
-// === COMPONENTE PADRÃO (TODOS OS MODELOS) ===
-export default function NutritionalLabel({ tabela, modelo = 'VERTICAL' }: { tabela: ResultadoCalculo, modelo?: 'VERTICAL' | 'VERTICAL_QUEBRADA' | 'HORIZONTAL' | 'HORIZONTAL_QUEBRADA' | 'LINEAR' }) {
+export default function NutritionalLabel({ tabela, modelo = 'VERTICAL', extras = [] }: { tabela: ResultadoCalculo, modelo?: 'VERTICAL' | 'VERTICAL_QUEBRADA' | 'HORIZONTAL' | 'HORIZONTAL_QUEBRADA' | 'LINEAR' | 'AGREGADA', extras?: ResultadoCalculo[] }) {
   return (
-    <Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: 2 }}>
       {modelo === 'VERTICAL' && <TabelaVertical tabela={tabela} />}
       {modelo === 'VERTICAL_QUEBRADA' && <TabelaVerticalQuebrada tabela={tabela} />}
       {modelo === 'HORIZONTAL' && <TabelaHorizontal tabela={tabela} />}
       {modelo === 'HORIZONTAL_QUEBRADA' && <TabelaHorizontalQuebrada tabela={tabela} />}
       {modelo === 'LINEAR' && <TabelaLinear tabela={tabela} />}
-
-      <RenderBlocoDeclaracoes declaracoes={tabela.declaracoes} />
+      {modelo === 'AGREGADA' && <TabelaAgregada tabela={tabela} extras={extras} />}
+      
+      <Box sx={{ width: 'fit-content', margin: '0 auto' }}>
+        <RenderBlocoDeclaracoes declaracoes={tabela.declaracoes} />
+      </Box>
     </Box>
   );
 }
-
-

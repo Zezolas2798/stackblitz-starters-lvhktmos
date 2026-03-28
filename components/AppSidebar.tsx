@@ -49,7 +49,10 @@ import {
   Payments,
   Assessment,
   AttachMoney,
-  Inventory2
+  Inventory2,
+  Engineering,
+  Category,
+  BusinessCenter
 } from '@mui/icons-material';
 
 interface AppSidebarProps {
@@ -119,16 +122,10 @@ export function AppSidebar({ width }: AppSidebarProps) {
           visible: can('stock.balance.view') || can('production.order.create') || can('production.picking.view')
         },
         {
-          label: 'Fornecedores',
-          href: '/fornecedores',
-          icon: <VerifiedUser />,
-          visible: can('stock.suppliers.manage')
-        },
-        {
           label: 'Documentos e GED',
           href: '/documentos',
           icon: <Description />,
-          visible: can('stock.suppliers.manage') // Pode ser refeito p/ admin depois
+          visible: can('stock.suppliers.manage')
         },
         {
           label: 'Gestão de Tarefas',
@@ -141,6 +138,23 @@ export function AppSidebar({ width }: AppSidebarProps) {
           href: '/etiquetas',
           icon: <Tag />,
           visible: can('production.picking.view') || can('stock.balance.view')
+        },
+      ]
+    },
+    {
+      title: 'FORNECEDORES E SERVIÇOS',
+      items: [
+        {
+          label: 'Fornecedores',
+          href: '/fornecedores',
+          icon: <VerifiedUser />,
+          visible: can('stock.suppliers.manage')
+        },
+        {
+          label: 'Serviços',
+          href: '/servicos',
+          icon: <Engineering />,
+          visible: can('stock.suppliers.manage')
         },
       ]
     },
@@ -175,6 +189,12 @@ export function AppSidebar({ width }: AppSidebarProps) {
           label: 'Contas a pagar e Vencimentos',
           href: '/financeiro/contas-pagar',
           icon: <EventNote />,
+          visible: can('quality.audit.perform') || can('sys.roles.manage')
+        },
+        {
+          label: 'Análise Financeira Estoque',
+          href: '/financeiro/estoque',
+          icon: <Inventory />,
           visible: can('quality.audit.perform') || can('sys.roles.manage')
         },
       ]

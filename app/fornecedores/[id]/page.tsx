@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import {
@@ -10,7 +10,11 @@ import {
   FormControl, InputLabel, Chip, Tooltip, InputAdornment, Snackbar,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
 } from '@mui/material';
-import { ArrowLeft, Save, Search, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, HelpCircle, ChevronRight, Settings, Search, Loader2, Trash2 } from 'lucide-react';
+
+const MODALIDADES_COMPRAS = [
+  'ALIMENTOS', 'EMBALAGENS', 'LIMPEZA', 'MANUTENCAO', 'UTENSILIOS', 'EPI_EPC', 'UNIFORMES', 'PRIMEIROS_SOCORROS'
+];
 import DocumentosFornecedor from '@/components/documentos/DocumentosFornecedor';
 
 interface BrasilApiCnpjResponse {
@@ -37,6 +41,8 @@ export default function EditFornecedorPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
+  const searchParams = useSearchParams();
+  const queryTipo = searchParams?.get('tipo') || 'FORNECEDOR';
   const isNew = id === 'novo';
   const { activeClientId } = useClient();
 
@@ -47,6 +53,7 @@ export default function EditFornecedorPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'info' });
+  const [categoriasConfig, setCategoriasConfig] = useState<any[]>([]);
 
   const [fornecedor, setFornecedor] = useState<any>({
     razao_social: '',
@@ -60,11 +67,15 @@ export default function EditFornecedorPage() {
     email: '',
     cnae_principal: '',
     cnaes_secundarios: null,
-    situacao_cadastral: ''
+    situacao_cadastral: '',
+    categorias_compras: [],
+    tipo: queryTipo
   });
+  const [originalFornecedor, setOriginalFornecedor] = useState<any>(null);
 
   const loadFornecedor = useCallback(async () => {
     if (isNew) {
+      setFornecedor((prev: any) => ({ ...prev, tipo: queryTipo }));
       setLoading(false);
       return;
     }
@@ -77,12 +88,15 @@ export default function EditFornecedorPage() {
       .single();
 
     if (data) {
-      setFornecedor({
+      const formatted = {
         ...data,
         licenca_sanitaria_validade: data.licenca_sanitaria_validade
           ? new Date(data.licenca_sanitaria_validade).toISOString().split('T')[0]
-          : ''
-      });
+          : '',
+        categorias_compras: data.categorias_compras || []
+      };
+      setFornecedor(formatted);
+      setOriginalFornecedor(formatted);
     }
     setLoading(false);
   }, [id, isNew]);
@@ -90,6 +104,34 @@ export default function EditFornecedorPage() {
   useEffect(() => {
     loadFornecedor();
   }, [loadFornecedor]);
+
+  useEffect(() => {
+    if (activeClientId) {
+      fetchCategorias();
+    }
+  }, [activeClientId, fornecedor.tipo]);
+
+  const fetchCategorias = async () => {
+    const { data } = await (supabase as any)
+      .from('categorias_config')
+      .select('*')
+      .eq('cliente_id', activeClientId)
+      .eq('tipo', fornecedor.tipo)
+      .is('deleted_at', null)
+      .order('nome', { ascending: true });
+    
+    let cats = data || [];
+    if (fornecedor.tipo === 'FORNECEDOR') {
+      // Garantir que as modalidades de compras básicas sempre existam na lista de opções
+      const existingNames = cats.map((c: any) => c.nome);
+      MODALIDADES_COMPRAS.forEach(m => {
+        if (!existingNames.includes(m)) {
+          cats.push({ nome: m, documentos_obrigatorios: [] });
+        }
+      });
+    }
+    setCategoriasConfig(cats);
+  };
 
   const handleChange = (field: string, value: any) => {
     setFornecedor((prev: any) => ({ ...prev, [field]: value }));
@@ -165,6 +207,8 @@ export default function EditFornecedorPage() {
         cnae_principal: fornecedor.cnae_principal || null,
         cnaes_secundarios: fornecedor.cnaes_secundarios || null,
         situacao_cadastral: fornecedor.situacao_cadastral || null,
+        categorias_compras: fornecedor.categorias_compras || [],
+        tipo: fornecedor.tipo
       };
 
       if (isNew) {
@@ -175,6 +219,11 @@ export default function EditFornecedorPage() {
       } else {
         const { error } = await (supabase as any).from('fornecedores').update(payload).eq('id', id);
         if (error) throw error;
+
+        // ─── Lógica de Sincronização GED Automatizada ───
+        await ensureFolderExists();
+
+        setOriginalFornecedor({ ...fornecedor });
         setSnackbar({ open: true, message: 'Fornecedor atualizado com sucesso!', severity: 'success' });
       }
     } catch (err: any) {
@@ -209,46 +258,96 @@ export default function EditFornecedorPage() {
 
   // ─── Criação Automática de Pasta GED ───
   const ensureFolderExists = async () => {
-    if (isNew || fornecedor.pasta_documentos_id) return;
-    if (!activeClientId) {
-      setFolderError('ID do Cliente não encontrado. Verifique sua conexão.');
-      return;
-    }
+    if (isNew || !activeClientId) return;
 
     try {
       setFolderError(null);
-      // Buscar a pasta pai "3.1.1 Controle da Homologação dos Fornecedores"
-      const { data: parentFolder, error: parentFetchError } = await (supabase as any)
+      
+      // 1. Identificar a pasta base padrão (3.1.1 ou 3.2) como fallback global
+      const searchNome = fornecedor.tipo === 'SERVICO' ? '%3.2%' : '%3.1.1%';
+      const { data: baseFolder } = await (supabase as any)
         .from('documentos_pastas')
-        .select('id, categoria_id')
-        .ilike('nome', '%3.1.1 Controle da Homologação dos Fornecedores%')
-        .single();
+        .select('id, documentos_categorias!inner(cliente_id)')
+        .eq('documentos_categorias.cliente_id', activeClientId)
+        .ilike('nome', searchNome)
+        .limit(1)
+        .maybeSingle();
 
-      if (parentFetchError) throw new Error('Pasta pai 3.1.1 não encontrada no GED.');
+      const targetParentId = baseFolder?.id || null;
 
-      const { data: newPasta, error: pastaErr } = await (supabase as any)
-        .from('documentos_pastas')
-        .insert({
-          categoria_id: parentFolder.categoria_id,
-          parent_id: parentFolder.id,
-          nome: fornecedor.razao_social || fornecedor.nome_fantasia || 'Sem Nome'
-        })
-        .select().single();
+      // 2. Sincronizar placeholders para as categorias do fornecedor
+      const categoriesToProcess = fornecedor.categorias_compras || [];
+      const razaoSocial = fornecedor.razao_social;
 
-      if (pastaErr) throw pastaErr;
+      // Se ainda não temos uma pasta vinculada ao fornecedor (ou se mudou), tentamos atualizar o registro
+      if (targetParentId && fornecedor.pasta_documentos_id !== targetParentId) {
+        await (supabase as any)
+          .from('fornecedores')
+          .update({ pasta_documentos_id: targetParentId })
+          .eq('id', id);
+        setFornecedor((prev: any) => ({ ...prev, pasta_documentos_id: targetParentId }));
+      }
 
-      const { error: updateErr } = await (supabase as any)
-        .from('fornecedores')
-        .update({ pasta_documentos_id: newPasta.id })
-        .eq('id', id);
+      if (categoriesToProcess.length === 0) return;
 
-      if (updateErr) throw updateErr;
+      // 3. Gerar placeholders para documentos obrigatórios
+      // Buscar o que já existe para o fornecedor para evitar duplicatas
+      const { data: allExistingFiles } = await (supabase as any)
+        .from('documentos_arquivos')
+        .select('id, nome_arquivo, pasta_id')
+        .filter('nome_arquivo', 'ilike', `%[${razaoSocial}]%`)
+        .is('deleted_at', null);
 
-      setFornecedor((prev: any) => ({ ...prev, pasta_documentos_id: newPasta.id }));
+      for (const catName of categoriesToProcess) {
+        const { data: catDocs } = await (supabase as any)
+          .from('categorias_config')
+          .select('documentos_obrigatorios, ged_pasta_id')
+          .eq('cliente_id', activeClientId)
+          .eq('nome', catName)
+          .maybeSingle();
 
+        if (catDocs?.documentos_obrigatorios && Array.isArray(catDocs.documentos_obrigatorios)) {
+          const categoryDefaultFolder = catDocs.ged_pasta_id || targetParentId;
+
+          for (const doc of catDocs.documentos_obrigatorios) {
+            const docName = typeof doc === 'string' ? doc : doc.nome;
+            const docPastaId = typeof doc === 'object' ? doc.ged_pasta_id : null;
+            const finalTargetFolderId = docPastaId || categoryDefaultFolder;
+            
+            if (!finalTargetFolderId) continue;
+
+            const fullTargetName = `[${razaoSocial}] ${docName}`;
+            
+            // Verificar se o documento JÁ EXISTE nesta pasta específica
+            const existsInFolder = allExistingFiles?.some((f: any) => 
+              f.pasta_id === finalTargetFolderId && 
+              f.nome_arquivo.toLowerCase() === fullTargetName.toLowerCase()
+            );
+
+            if (!existsInFolder) {
+              await (supabase as any)
+                .from('documentos_arquivos')
+                .insert({
+                  pasta_id: finalTargetFolderId,
+                  nome_arquivo: fullTargetName,
+                  url_storage: null, // Placeholder pendente
+                  versao: 1
+                });
+              
+              // Adicionamos à lista local para evitar duplicatas por múltiplas categorias
+              if (allExistingFiles) {
+                allExistingFiles.push({ pasta_id: finalTargetFolderId, nome_arquivo: fullTargetName });
+              }
+            }
+          }
+        }
+      }
     } catch (err: any) {
-      console.error('Erro ao gerar pasta automática:', err);
-      setFolderError(`Erro ao criar pasta no GED: ${err.message || 'Erro desconhecido'}`);
+      console.error('Erro ao gerar placeholders automáticos:', err);
+      // O erro só bloqueia visualmente se realmente não conseguimos nem uma pasta raiz
+      if (!fornecedor.pasta_documentos_id) {
+        setFolderError(`Atenção: Algumas pastas do GED podem não ter sido localizadas.`);
+      }
     }
   };
 
@@ -276,12 +375,15 @@ export default function EditFornecedorPage() {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 4 }}>
-        <Button startIcon={<ArrowLeft />} onClick={() => router.push('/fornecedores')} variant="outlined">
+        <Button startIcon={<ArrowLeft />} onClick={() => router.push(fornecedor.tipo === 'SERVICO' ? '/servicos' : '/fornecedores')} variant="outlined">
           Voltar
         </Button>
         <Box>
           <Typography variant="h4" fontWeight="800">
-            {isNew ? 'Novo Fornecedor' : fornecedor.razao_social || 'Editar Fornecedor'}
+            {isNew 
+              ? (fornecedor.tipo === 'SERVICO' ? 'Novo Prestador' : 'Novo Fornecedor') 
+              : (fornecedor.razao_social || (fornecedor.tipo === 'SERVICO' ? 'Editar Prestador' : 'Editar Fornecedor'))
+            }
           </Typography>
         </Box>
       </Box>
@@ -353,6 +455,44 @@ export default function EditFornecedorPage() {
                   value={fornecedor.razao_social}
                   onChange={(e) => handleChange('razao_social', e.target.value)}
                 />
+              </Grid>
+
+              {/* ── Categorias (Destaque) ── */}
+              <Grid item xs={12}>
+                <Paper variant="outlined" sx={{ p: 2, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.100' }}>
+                  <Typography variant="subtitle2" color="primary.main" fontWeight="bold" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {fornecedor.tipo === 'SERVICO' ? 'Categorias de Serviço' : 'Categorias de Compras'}
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                    {(categoriasConfig.length > 0 ? categoriasConfig : []).map((catObj) => {
+                      const cat = catObj.nome;
+                      return (
+                        <Chip
+                          key={cat}
+                          label={cat}
+                          onClick={() => {
+                            const current = fornecedor.categorias_compras || [];
+                            const next = current.includes(cat)
+                              ? current.filter((c: string) => c !== cat)
+                              : [...current, cat];
+                            handleChange('categorias_compras', next);
+                          }}
+                          color={fornecedor.categorias_compras?.includes(cat) ? 'primary' : 'default'}
+                          variant={fornecedor.categorias_compras?.includes(cat) ? 'filled' : 'outlined'}
+                          sx={{ fontWeight: 'bold' }}
+                        />
+                      );
+                    })}
+                    {categoriasConfig.length === 0 && (
+                      <Typography variant="body2" color="text.secondary">
+                        Nenhuma categoria configurada. Vá em "Gerenciar Categorias" para definir.
+                      </Typography>
+                    )}
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    As categorias definem a organização no GED e os documentos exigidos para homologação.
+                  </Typography>
+                </Paper>
               </Grid>
 
               {/* ── Nome Fantasia ── */}
@@ -427,6 +567,7 @@ export default function EditFornecedorPage() {
                 </Grid>
               )}
 
+
               <Grid item xs={12}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
                   <Button
@@ -446,7 +587,7 @@ export default function EditFornecedorPage() {
                       startIcon={<Trash2 size={18} />}
                       onClick={() => setDeleteDialogOpen(true)}
                     >
-                      Excluir Fornecedor
+                      {fornecedor.tipo === 'SERVICO' ? 'Excluir Prestador' : 'Excluir Fornecedor'}
                     </Button>
                   )}
                 </Box>
@@ -499,7 +640,11 @@ export default function EditFornecedorPage() {
                   </Grid>
 
                   {fornecedor.pasta_documentos_id ? (
-                    <DocumentosFornecedor pastaId={fornecedor.pasta_documentos_id} />
+                    <DocumentosFornecedor 
+                      pastaId={fornecedor.pasta_documentos_id} 
+                      categoriasSelecionadas={fornecedor.categorias_compras} 
+                      razaoSocial={fornecedor.razao_social}
+                    />
                   ) : folderError ? (
                     <Alert severity="error" action={
                       <Button color="inherit" size="small" onClick={ensureFolderExists}>
