@@ -26,7 +26,7 @@ interface AditivoMestre {
     ins: string;
     nome: string;
     funcao_principal: string | null;
-    is_artificial?: boolean;
+    is_artificial?: boolean | null;
 }
 
 interface AnvisaAlergenico {
@@ -84,8 +84,7 @@ export default function EditarIngredientePage() {
         declaracao_ingredientes_fornecedor: '',
         funcao_aditivo: '',
         ins_code: '',
-        is_corante_artificial: false,
-        is_corante_carmim: false,
+        is_transgenico: false,
 
         // Macronutrientes Obrigatórios
         energia_kcal: null, carboidrato_g: null, proteina_g: null, lipideos_g: null,
@@ -164,8 +163,7 @@ export default function EditarIngredientePage() {
                         ...ing,
                         tipo_ingrediente: ing.tipo_ingrediente as TipoIngrediente,
                         contem_gluten: !!ing.contem_gluten,
-                        is_corante_artificial: !!ing.is_corante_artificial,
-                        is_corante_carmim: !!ing.is_corante_carmim,
+                        is_transgenico: !!ing.is_transgenico,
                         categoria_produto_id: ing.categoria_produto_id || null
                     } as Partial<Ingrediente>);
 
@@ -243,12 +241,7 @@ export default function EditarIngredientePage() {
                 setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, fonte: 'Tabela INS ANVISA' }));
             }
 
-            // Detecção Automática de Corantes Específicos
-            setFormData(prev => ({ 
-                ...prev, 
-                is_corante_artificial: !!aditivo.is_artificial,
-                is_corante_carmim: aditivo.ins === '120'
-            }));
+            // A detecção de corantes agora é automatizada na Edge Function via ins_code
         }
     };
 
@@ -276,6 +269,7 @@ export default function EditarIngredientePage() {
 
             const payload: any = {
                 ...formData,
+                especie_transgenica: formData.is_transgenico ? formData.especie_transgenica : null,
                 alergenicos_ids: idsAlergenicos,
                 updated_at: new Date().toISOString()
             };
@@ -499,8 +493,18 @@ export default function EditarIngredientePage() {
                                 </Typography>
                                 <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
                                     <FormControlLabel control={<Checkbox checked={!!formData.contem_gluten} onChange={e => handleChange('contem_gluten', e.target.checked)} color="error" />} label="CONTÉM GLÚTEN" />
-                                    <FormControlLabel control={<Checkbox checked={!!formData.is_corante_artificial} onChange={e => handleChange('is_corante_artificial', e.target.checked)} color="error" />} label="CORANTE ARTIFICIAL" />
-                                    <FormControlLabel control={<Checkbox checked={!!formData.is_corante_carmim} onChange={e => handleChange('is_corante_carmim', e.target.checked)} color="error" />} label="CARMIM (INS 120)" />
+                                    <FormControlLabel control={<Checkbox checked={!!formData.is_transgenico} onChange={e => handleChange('is_transgenico', e.target.checked)} color="error" />} label="ALIMENTO TRANSGÊNICO" />
+                                    {formData.is_transgenico && (
+                                        <TextField
+                                            size="small"
+                                            label="Espécie Transgênica (ex: Soja, Milho)"
+                                            value={formData.especie_transgenica || ''}
+                                            onChange={(e) => handleChange('especie_transgenica', e.target.value)}
+                                            fullWidth
+                                            sx={{ mt: 1 }}
+                                            helperText="A legislação exige informar a espécie doadora do gene."
+                                        />
+                                    )}
                                 </Stack>
                                 <Autocomplete
                                     options={listaMestraAlergenicos.filter(a => !alergenosSelecionados.find(s => s.alergenico_id === a.id))}

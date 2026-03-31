@@ -162,7 +162,7 @@ function NutrientBlock({ alerta }: { alerta: Alerta }) {
 
 import { AnvisaFopLabel, AnvisaAlerta, AnvisaLayout } from './AnvisaFopLabel';
 
-export function LupaFrontalANVISA({ lupas, layout = 'VERTICAL', areaPainelCm2 }: { lupas: LupasFrontais, layout?: string, areaPainelCm2?: number }) {
+export function LupaFrontalANVISA({ lupas, layout = 'VERTICAL', areaPainelCm2 }: { lupas: LupasFrontais, layout?: string, areaPainelCm2?: number | null }) {
   const alertas: AnvisaAlerta[] = [];
   if (lupas?.alto_em_acucar_adicionado) alertas.push('AÇÚCAR ADICIONADO');
   if (lupas?.alto_em_gordura_saturada) alertas.push('GORDURA SATURADA');
@@ -643,6 +643,32 @@ export const TabelaLinear = React.forwardRef<HTMLDivElement, { tabela: Resultado
 TabelaLinear.displayName = 'TabelaLinear';
 
 
+
+export function GMOIcon({ width = 18 }: { width?: number }) {
+  const height = width * (87 / 100);
+  return (
+    <Box 
+      component="span"
+      sx={{ 
+        width: `${width}px`, 
+        height: `${height}px`, 
+        display: 'inline-flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        mr: 0.8,
+        verticalAlign: 'middle',
+        lineHeight: 0,
+        flexShrink: 0
+      }}
+    >
+      <svg width="100%" height="100%" viewBox="0 0 100 87" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M50 5L95 82H5L50 5Z" fill="#FEE000" stroke="black" strokeWidth="6"/>
+        <text x="50" y="72" fontSize="60" fontWeight="900" fontFamily="Arial, sans-serif" textAnchor="middle" fill="black">T</text>
+      </svg>
+    </Box>
+  );
+}
+
 export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: DeclaracoesObrigatorias }) {
   const { 
     lista_ingredientes, 
@@ -651,12 +677,20 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
     alergenicos, 
     modo_conservacao,
     colorido_artificialmente,
-    colorido_carmim 
+    colorido_carmim,
+    alerta_gmo,
+    alerta_laxativo,
+    alerta_gluten,
+    alerta_lactose
   } = declaracoes;
 
-  let ingredientesTexto = lista_ingredientes || '...';
-  ingredientesTexto = ingredientesTexto.replace(/^ingredientes:?\s*/i, '').toLowerCase();
-  if (ingredientesTexto.length > 0) ingredientesTexto = ingredientesTexto.charAt(0).toUpperCase() + ingredientesTexto.slice(1);
+  let ingredientesTexto = lista_ingredientes || '';
+  if (ingredientesTexto) {
+    ingredientesTexto = ingredientesTexto.replace(/^ingredientes:?\s*/i, '').toLowerCase();
+    if (ingredientesTexto.length > 0) {
+      ingredientesTexto = ingredientesTexto.charAt(0).toUpperCase() + ingredientesTexto.slice(1);
+    }
+  }
 
   let alergenicosTexto = alergenicos || '';
   if (alergenicosTexto && /[^.]\s+PODE CONTER/.test(alergenicosTexto)) {
@@ -664,23 +698,48 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
   }
 
   return (
-    <Box sx={{ mt: 2, p: '4pt', border: borderMedium, fontFamily: font, bgcolor: 'background.paper' }}>
+    <Box sx={{ mt: 2, p: '4pt', border: borderMedium, fontFamily: font, bgcolor: 'background.paper', width: '240px', boxSizing: 'border-box' }}>
       <Typography sx={{ fontSize: fontSizeLabel, mb: '2pt', color: '#000', lineHeight: 1.2 }}>
         <strong>Ingredientes:</strong> {ingredientesTexto}
       </Typography>
+
       {alergenicosTexto && (
         <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', mb: '2pt', color: '#000', lineHeight: 1.1 }}>
           {alergenicosTexto}
         </Typography>
       )}
+
       <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', lineHeight: 1.1 }}>
-        {contem_gluten ? "CONTÉM GLÚTEN." : "NÃO CONTÉM GLÚTEN."} {contem_lactose ? "CONTÉM LACTOSE." : ""}
+        {alerta_gluten || (contem_gluten ? "CONTÉM GLÚTEN." : "NÃO CONTÉM GLÚTEN.")}
       </Typography>
+
+      {(alerta_lactose || contem_lactose) && (
+        <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', lineHeight: 1.1 }}>
+          {alerta_lactose || "CONTÉM LACTOSE."}
+        </Typography>
+      )}
       
-      {(colorido_artificialmente || colorido_carmim) && (
+      {alerta_gmo && (
         <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', mt: '2pt', lineHeight: 1.1 }}>
-          {colorido_artificialmente && "COLORIDO ARTIFICIALMENTE. "}
-          {colorido_carmim && "CONTÉM CORANTE CARMIM DE COCHONILHA. "}
+          {alerta_gmo}
+        </Typography>
+      )}
+
+      {colorido_artificialmente && (
+        <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', mt: '2pt', lineHeight: 1.1 }}>
+          COLORIDO ARTIFICIALMENTE.
+        </Typography>
+      )}
+
+      {colorido_carmim && (
+        <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', mt: '2pt', lineHeight: 1.1 }}>
+          CONTÉM CORANTE CARMIM DE COCHONILHA.
+        </Typography>
+      )}
+
+      {alerta_laxativo && (
+        <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', mt: '2pt', lineHeight: 1.1 }}>
+          {alerta_laxativo}.
         </Typography>
       )}
 

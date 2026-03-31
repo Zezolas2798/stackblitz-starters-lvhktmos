@@ -24,7 +24,8 @@ import {
   IconButton,
   Button,
   Skeleton,
-  Toolbar
+  Toolbar,
+  Collapse
 } from '@mui/material';
 
 // Ícones Material UI
@@ -52,7 +53,12 @@ import {
   Inventory2,
   Engineering,
   Category,
-  BusinessCenter
+  BusinessCenter,
+  ExpandLess,
+  ExpandMore,
+  ListAlt,
+  MenuBook,
+  PointOfSale
 } from '@mui/icons-material';
 
 interface AppSidebarProps {
@@ -67,6 +73,13 @@ export function AppSidebar({ width }: AppSidebarProps) {
 
   // Hook de Permissões: Traz o poder de decisão para o menu
   const { can, loading: loadingPermissions } = usePermission();
+  
+  // Estado para menus aninhados
+  const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>({});
+
+  const toggleSubmenu = (menuLabel: string) => {
+    setOpenMenus(prev => ({ ...prev, [menuLabel]: !prev[menuLabel] }));
+  };
 
   const handleLogout = async () => {
     try {
@@ -92,9 +105,41 @@ export function AppSidebar({ width }: AppSidebarProps) {
         },
         {
           label: 'Planejamento',
-          href: '/planejamento',
           icon: <EventNote />,
-          visible: can('production.order.create')
+          visible: can('production.order.create') || can('nutrition.recipe.view'),
+          subItems: [
+            {
+              label: 'Ordens de Serviço',
+              href: '/planejamento',
+              icon: <Assignment />,
+              visible: can('production.order.create')
+            },
+            {
+              label: 'Gestão de Cardápios (UAN)',
+              href: '/uan',
+              icon: <MenuBook />,
+              visible: can('nutrition.recipe.view'),
+              isGroup: true
+            },
+            {
+              label: 'Planejamento Mensal',
+              href: '/uan/cardapios',
+              icon: <EventNote />,
+              visible: can('nutrition.recipe.view')
+            },
+            {
+              label: 'Logística e Compra',
+              href: '/uan/lista-compras',
+              icon: <LocalShipping />,
+              visible: can('nutrition.recipe.view')
+            },
+            {
+              label: 'Relatório de Custos',
+              href: '/uan/custos',
+              icon: <AttachMoney />,
+              visible: can('nutrition.recipe.view')
+            }
+          ]
         },
         {
           label: 'Produção',
@@ -203,10 +248,23 @@ export function AppSidebar({ width }: AppSidebarProps) {
       title: 'TÉCNICO & P&D',
       items: [
         {
-          label: 'Receitas',
-          href: '/receitas',
+          label: 'Receitas & Fichas',
           icon: <RestaurantMenu />,
-          visible: can('nutrition.recipe.view')
+          visible: can('nutrition.recipe.view'),
+          subItems: [
+            {
+              label: 'Cardápio Ordens de Produção (Indústria)',
+              href: '/receitas',
+              icon: <ListAlt />,
+              visible: can('nutrition.recipe.view')
+            },
+            {
+              label: 'Cardápios UAN (Fichas Técnicas)',
+              href: '/uan/fichas',
+              icon: <MenuBook />,
+              visible: can('nutrition.recipe.view')
+            }
+          ]
         },
         {
           label: 'Ingredientes',
@@ -326,13 +384,79 @@ export function AppSidebar({ width }: AppSidebarProps) {
                   {group.title}
                 </Typography>
                 {visibleItems.map((item) => {
-                  const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href));
+                  const isMenuActive = item.href ? (pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href))) : false;
+                  
+                  if (item.subItems) {
+                    const visibleSubItems = item.subItems.filter((sub: any) => sub.visible);
+                    if (visibleSubItems.length === 0) return null;
+                    const isSubMenuActive = visibleSubItems.some((sub: any) => pathname === sub.href || (sub.href !== '/' && pathname?.startsWith(sub.href)));
+                    const isOpen = openMenus[item.label] || isSubMenuActive;
+
+                    return (
+                      <React.Fragment key={item.label}>
+                        <ListItem disablePadding sx={{ mb: 0.5 }}>
+                          <ListItemButton
+                            onClick={() => toggleSubmenu(item.label)}
+                            sx={{ borderRadius: 1 }}
+                          >
+                            <ListItemIcon sx={{ color: isSubMenuActive ? 'primary.main' : 'inherit', minWidth: 40 }}>
+                              {item.icon}
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={item.label}
+                              primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isSubMenuActive ? 600 : 400 }}
+                            />
+                            {isOpen ? <ExpandLess /> : <ExpandMore />}
+                          </ListItemButton>
+                        </ListItem>
+                        <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                          <List component="div" disablePadding>
+                            {visibleSubItems.map((sub: any) => {
+                              const isActive = pathname === sub.href || (sub.href !== '/' && pathname?.startsWith(sub.href));
+                              return (
+                                <ListItem key={sub.href} disablePadding sx={{ mb: 0.5, pl: 3 }}>
+                                  <Link href={sub.href} passHref style={{ width: '100%', textDecoration: 'none' }} onClick={closeMobileSidebar}>
+                                    <ListItemButton
+                                      selected={isActive}
+                                      sx={{
+                                        borderRadius: 1,
+                                        '&.Mui-selected': {
+                                          bgcolor: 'primary.light',
+                                          color: 'primary.main',
+                                        }
+                                      }}
+                                    >
+                                      {sub.icon && (
+                                        <ListItemIcon sx={{ color: isActive ? 'primary.main' : 'inherit', minWidth: 32 }}>
+                                          {sub.icon}
+                                        </ListItemIcon>
+                                      )}
+                                      <ListItemText
+                                        primary={sub.label}
+                                        primaryTypographyProps={{ 
+                                          fontSize: '0.8rem', 
+                                          fontWeight: isActive ? 600 : 400,
+                                          color: sub.isGroup ? 'text.secondary' : 'inherit',
+                                          textTransform: sub.isGroup ? 'uppercase' : 'none',
+                                          letterSpacing: sub.isGroup ? 0.5 : 0
+                                        }}
+                                      />
+                                    </ListItemButton>
+                                  </Link>
+                                </ListItem>
+                              );
+                            })}
+                          </List>
+                        </Collapse>
+                      </React.Fragment>
+                    );
+                  }
 
                   return (
                     <ListItem key={item.href} disablePadding sx={{ mb: 0.5 }}>
-                      <Link href={item.href} passHref style={{ width: '100%', textDecoration: 'none' }} onClick={closeMobileSidebar}>
+                      <Link href={item.href!} passHref style={{ width: '100%', textDecoration: 'none' }} onClick={closeMobileSidebar}>
                         <ListItemButton
-                          selected={isActive}
+                          selected={isMenuActive}
                           sx={{
                             borderRadius: 1,
                             '&.Mui-selected': {
@@ -342,12 +466,12 @@ export function AppSidebar({ width }: AppSidebarProps) {
                             }
                           }}
                         >
-                          <ListItemIcon sx={{ color: isActive ? 'primary.main' : 'inherit', minWidth: 40 }}>
+                          <ListItemIcon sx={{ color: isMenuActive ? 'primary.main' : 'inherit', minWidth: 40 }}>
                             {item.icon}
                           </ListItemIcon>
                           <ListItemText
                             primary={item.label}
-                            primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isActive ? 600 : 400 }}
+                            primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isMenuActive ? 600 : 400 }}
                           />
                         </ListItemButton>
                       </Link>

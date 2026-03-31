@@ -36,7 +36,7 @@ import LoadingButton from '@mui/lab/LoadingButton';
 import CalculateIcon from '@mui/icons-material/Calculate';
 
 import { ResultadoCalculo, ReceitaVersao } from '@/lib/types';
-import NutritionalLabel, { LupaFrontalANVISA } from '@/components/NutritionalLabel';
+import NutritionalLabel, { LupaFrontalANVISA, GMOIcon } from '@/components/NutritionalLabel';
 
 // --- TIPOS ---
 type TabelaLayout = 'VERTICAL' | 'VERTICAL_QUEBRADA' | 'HORIZONTAL' | 'HORIZONTAL_QUEBRADA' | 'LINEAR';
@@ -676,7 +676,12 @@ export default function DetalhesReceitaPage() {
                               CÓPIA CONTROLADA
                           </Box>
                       )}
-                      <Box sx={{ mb: 4, width: '100%', display: 'flex', justifyContent: 'center' }}>
+                      <Box sx={{ mb: 4, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
+                          {tabela.declaracoes?.alerta_gmo && (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                               <GMOIcon width={50} />
+                            </Box>
+                          )}
                           <LupaFrontalANVISA lupas={tabela.lupas} areaPainelCm2={receitaExibida.area_painel_principal_cm2} layout={lupaLayout} />
                       </Box>
                       <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>

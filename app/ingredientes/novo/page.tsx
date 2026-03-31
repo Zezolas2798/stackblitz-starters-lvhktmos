@@ -80,8 +80,7 @@ export default function NovoIngredientePage() {
     declaracao_ingredientes_fornecedor: '',
     funcao_aditivo: '',
     ins_code: '',
-    is_corante_artificial: false,
-    is_corante_carmim: false,
+    is_transgenico: false,
     
     // Macronutrientes Obrigatórios
     energia_kcal: null, carboidrato_g: null, proteina_g: null, lipideos_g: null,
@@ -186,13 +185,7 @@ export default function NovoIngredientePage() {
       } else {
           setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, fonte: 'Tabela INS ANVISA' }));
       }
-      
-      // Detecção Automática de Corantes Específicos
-      setFormData(prev => ({ 
-        ...prev, 
-        is_corante_artificial: !!aditivo.is_artificial,
-        is_corante_carmim: aditivo.ins === '120'
-      }));
+      // A detecção de corantes agora é automatizada na Edge Function via ins_code
     }
   };
 
@@ -218,6 +211,7 @@ export default function NovoIngredientePage() {
       const idsAlergenicos = alergenosSelecionados.map(a => a.alergenico_id);
       const payload = {
         ...formData,
+        especie_transgenica: formData.is_transgenico ? formData.especie_transgenica : null,
         cliente_id: activeClientId,
         categoria_produto_id: categoriaValue?.id || null,
         alergenicos_ids: idsAlergenicos,
@@ -416,8 +410,18 @@ export default function NovoIngredientePage() {
                   </Typography>
                   <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
                     <FormControlLabel control={<Checkbox checked={!!formData.contem_gluten} onChange={e => handleChange('contem_gluten', e.target.checked)} color="error" />} label="CONTÉM GLÚTEN" />
-                    <FormControlLabel control={<Checkbox checked={!!formData.is_corante_artificial} onChange={e => handleChange('is_corante_artificial', e.target.checked)} color="error" />} label="CORANTE ARTIFICIAL" />
-                    <FormControlLabel control={<Checkbox checked={!!formData.is_corante_carmim} onChange={e => handleChange('is_corante_carmim', e.target.checked)} color="error" />} label="CARMIM (INS 120)" />
+                    <FormControlLabel control={<Checkbox checked={!!formData.is_transgenico} onChange={e => handleChange('is_transgenico', e.target.checked)} color="error" />} label="ALIMENTO TRANSGÊNICO" />
+                    {formData.is_transgenico && (
+                      <TextField
+                        size="small"
+                        label="Espécie Transgênica (ex: Soja, Milho)"
+                        value={formData.especie_transgenica || ''}
+                        onChange={(e) => handleChange('especie_transgenica', e.target.value)}
+                        fullWidth
+                        sx={{ mt: 1 }}
+                        helperText="A legislação exige informar a espécie doadora do gene."
+                      />
+                    )}
                   </Stack>
                   <Autocomplete
                     options={listaMestraAlergenicos.filter(a => !alergenosSelecionados.find(s => s.alergenico_id === a.id))}

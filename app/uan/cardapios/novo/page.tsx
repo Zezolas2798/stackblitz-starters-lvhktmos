@@ -1,0 +1,308 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+import { useClient } from '@/lib/ClientContext';
+import { Box, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Grid, FormControl, FormLabel, FormGroup, FormControlLabel, Checkbox } from '@mui/material';
+import { ArrowLeft, Save, CalendarDays } from 'lucide-react';
+
+const DIAS_SEMANA = [
+  { id: 1, label: 'Segunda', cur: 'Seg' },
+  { id: 2, label: 'Terça', cur: 'Ter' },
+  { id: 3, label: 'Quarta', cur: 'Qua' },
+  { id: 4, label: 'Quinta', cur: 'Qui' },
+  { id: 5, label: 'Sexta', cur: 'Sex' },
+  { id: 6, label: 'Sábado', cur: 'Sáb' },
+  { id: 0, label: 'Domingo', cur: 'Dom' }
+];
+
+const REFEICOES = ['Desjejum', 'Lanche da Manhã', 'Almoço', 'Lanche da Tarde', 'Jantar', 'Ceia'];
+
+export default function NovoCardapioUANPage() {
+  const router = useRouter();
+  const { activeClientId } = useClient();
+  const [loading, setLoading] = useState(false);
+
+  const [form, setForm] = useState({
+    nome_ciclo: '',
+    mes_referencia: '',
+    dias_funcionamento: [1, 2, 3, 4, 5] as number[],
+    refeicoes_oferecidas: ['Almoço'] as string[],
+    comensais_estimados_dia: 100, 
+    comensais_modelo: {
+      "1": { "Almoço": 100 }, "2": { "Almoço": 100 }, "3": { "Almoço": 100 },
+      "4": { "Almoço": 100 }, "5": { "Almoço": 100 }, "6": { "Almoço": 0 }, "0": { "Almoço": 0 }
+    } as Record<string, Record<string, number>>,
+  });
+
+  const [horarios, setHorarios] = useState<Record<string, { inicio: string, fim: string }>>({
+    'Desjejum': { inicio: '07:00', fim: '08:30' },
+    'Almoço': { inicio: '11:00', fim: '13:30' },
+    'Lanche da Tarde': { inicio: '15:30', fim: '16:30' },
+    'Jantar': { inicio: '18:00', fim: '20:00' },
+    'Ceia': { inicio: '21:30', fim: '22:30' }
+  });
+
+  // Sincroniza comensais_modelo quando refeicoes_oferecidas mudar
+  useEffect(() => {
+    setForm(prev => {
+      const newModelo = { ...prev.comensais_modelo };
+      Object.keys(newModelo).forEach(dia => {
+        prev.refeicoes_oferecidas.forEach(ref => {
+          if (newModelo[dia][ref] === undefined) {
+             newModelo[dia][ref] = 100; // Default
+          }
+        });
+      });
+      return { ...prev, comensais_modelo: newModelo };
+    });
+
+    const defaults: Record<string, { inicio: string, fim: string }> = {
+      'Desjejum': { inicio: '07:00', fim: '08:30' },
+      'Almoço': { inicio: '11:00', fim: '13:30' },
+      'Lanche da Tarde': { inicio: '15:30', fim: '16:30' },
+      'Jantar': { inicio: '18:00', fim: '20:00' },
+      'Ceia': { inicio: '21:30', fim: '22:30' }
+    };
+    
+    const novosHorarios = { ...horarios };
+    form.refeicoes_oferecidas.forEach(r => {
+      if (!novosHorarios[r]) novosHorarios[r] = defaults[r] || { inicio: '12:00', fim: '13:00' };
+    });
+    setHorarios(novosHorarios);
+  }, [form.refeicoes_oferecidas]);
+
+  const [feriados, setFeriados] = useState<any[]>([]);
+
+  const handleSalvar = async () => {
+    if (!activeClientId) return alert('Selecione um cliente.');
+    if (!form.nome_ciclo || !form.mes_referencia) {
+      return alert('Preencha o nome do ciclo e o mês de referência.');
+    }
+    if (form.dias_funcionamento.length === 0 || form.refeicoes_oferecidas.length === 0) {
+      return alert('Selecione pelo menos um dia de funcionamento e uma refeição.');
+    }
+
+    setLoading(true);
+    try {
+      const [anoStr, mesStr] = form.mes_referencia.split('-');
+      const ano = Number(anoStr);
+      const mes = Number(mesStr) - 1;
+      
+      const dataInicio = new Date(ano, mes, 1);
+      const dataFim = new Date(Date.UTC(ano, mes + 1, 0, 12, 0, 0));
+
+      const payload = {
+        cliente_id: activeClientId,
+        status: 'Em Planejamento',
+        nome_ciclo: form.nome_ciclo,
+        comensais_estimados_dia: form.comensais_estimados_dia,
+        comensais_modelo: form.comensais_modelo,
+        horario_refeicoes: horarios,
+        dias_funcionamento: form.dias_funcionamento,
+        refeicoes_oferecidas: form.refeicoes_oferecidas,
+        data_inicio: dataInicio.toISOString().split('T')[0],
+        data_fim: dataFim.toISOString().split('T')[0],
+      };
+
+      const { data, error } = await supabase
+        .from('cardapios_uan')
+        .insert([payload])
+        .select()
+        .single();
+        
+      if (error || !data) throw error;
+
+      alert('Cardápio criado com sucesso! Agora configure a grade.');
+      router.push(`/uan/cardapios/${data.id}/grade`);
+    } catch (e: any) {
+      console.error(e);
+      alert('Erro ao criar cardápio: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Box p={4}>
+      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Button startIcon={<ArrowLeft />} onClick={() => router.push('/uan/cardapios')}>Voltar</Button>
+        <Typography variant="h5" fontWeight="bold">Novo Período/Ciclo de Cardápio</Typography>
+      </Box>
+
+      <Paper sx={{ p: 4, maxWidth: 800, margin: '0 auto' }}>
+        <Typography variant="h6" color="primary" mb={3} display="flex" alignItems="center" gap={1}>
+          <CalendarDays size={20} /> Parâmetros do Ciclo
+        </Typography>
+
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Nome do Ciclo (Ex: Maio 2026 - Lote 2)"
+              value={form.nome_ciclo}
+              onChange={e => setForm({ ...form, nome_ciclo: e.target.value })}
+              required
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Mês de Referência"
+              type="month"
+              value={form.mes_referencia}
+              onChange={e => setForm({ ...form, mes_referencia: e.target.value })}
+              required
+              InputLabelProps={{ shrink: true }}
+            />
+          </Grid>
+
+          <Grid item xs={12}>
+            <FormControl component="fieldset">
+              <FormLabel component="legend" sx={{ fontWeight: 'bold' }}>Dias da semana (Funcionamento padrão)</FormLabel>
+              <FormGroup row>
+                 {DIAS_SEMANA.map(dia => (
+                   <FormControlLabel
+                     key={dia.id}
+                     control={
+                       <Checkbox 
+                         checked={form.dias_funcionamento.includes(dia.id)} 
+                         onChange={(e) => {
+                           if (e.target.checked) setForm(p => ({...p, dias_funcionamento: [...p.dias_funcionamento, dia.id]}));
+                           else setForm(p => ({...p, dias_funcionamento: p.dias_funcionamento.filter(d => d !== dia.id)}));
+                         }}
+                       />
+                     }
+                     label={dia.label}
+                   />
+                 ))}
+              </FormGroup>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12}>
+            <FormControl component="fieldset">
+              <FormLabel component="legend" sx={{ fontWeight: 'bold' }}>Refeições Oferecidas Diariamente</FormLabel>
+              <FormGroup row>
+                 {REFEICOES.map(ref => (
+                   <FormControlLabel
+                     key={ref}
+                     control={
+                       <Checkbox 
+                         checked={form.refeicoes_oferecidas.includes(ref)} 
+                         onChange={(e) => {
+                           if (e.target.checked) setForm(p => ({...p, refeicoes_oferecidas: [...p.refeicoes_oferecidas, ref]}));
+                           else setForm(p => ({...p, refeicoes_oferecidas: p.refeicoes_oferecidas.filter(r => r !== ref)}));
+                         }}
+                       />
+                     }
+                     label={ref}
+                   />
+                 ))}
+              </FormGroup>
+            </FormControl>
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
+              Meta de Comensais por Refeição e Dia
+            </Typography>
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+              <Table size="small">
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold' }}>Dia</TableCell>
+                    {form.refeicoes_oferecidas.map(ref => (
+                      <TableCell key={ref} align="center" sx={{ fontWeight: 'bold' }}>{ref}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {DIAS_SEMANA.filter(d => form.dias_funcionamento.includes(d.id)).map(dia => (
+                    <TableRow key={dia.id}>
+                      <TableCell sx={{ py: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{dia.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">{dia.cur}</Typography>
+                      </TableCell>
+                      {form.refeicoes_oferecidas.map(ref => (
+                        <TableCell key={ref} align="center">
+                          <TextField
+                            size="small"
+                            type="number"
+                            sx={{ width: 80 }}
+                            value={form.comensais_modelo[dia.id.toString()]?.[ref] || 0}
+                            onChange={e => {
+                              const val = Number(e.target.value) || 0;
+                              setForm(prev => ({
+                                ...prev,
+                                comensais_modelo: {
+                                  ...prev.comensais_modelo,
+                                  [dia.id.toString()]: {
+                                    ...(prev.comensais_modelo[dia.id.toString()] || {}),
+                                    [ref]: val
+                                  }
+                                }
+                              }));
+                            }}
+                          />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Typography variant="subtitle1" fontWeight="bold" mt={2} mb={2}>Horários de Funcionamento</Typography>
+            <Grid container spacing={2}>
+              {form.refeicoes_oferecidas.map(ref => (
+                <Grid item xs={12} sm={6} md={4} key={ref}>
+                  <Paper variant="outlined" sx={{ p: 2, bgcolor: 'action.hover' }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ mb: 1.5 }}>{ref}</Typography>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <TextField 
+                        label="Início"
+                        type="time"
+                        size="small"
+                        fullWidth
+                        value={horarios[ref]?.inicio || ''}
+                        onChange={e => setHorarios(p => ({ ...p, [ref]: { ...p[ref], inicio: e.target.value } }))}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                      <TextField 
+                        label="Fim"
+                        type="time"
+                        size="small"
+                        fullWidth
+                        value={horarios[ref]?.fim || ''}
+                        onChange={e => setHorarios(p => ({ ...p, [ref]: { ...p[ref], fim: e.target.value } }))}
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </Grid>
+
+
+        </Grid>
+
+        <Box mt={4} display="flex" justifyContent="flex-end">
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<Save />}
+            onClick={handleSalvar}
+            disabled={loading}
+          >
+            {loading ? 'Salvando...' : 'Salvar e Ver Grade'}
+          </Button>
+        </Box>
+      </Paper>
+    </Box>
+  );
+}

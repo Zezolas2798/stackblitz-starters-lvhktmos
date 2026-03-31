@@ -17,6 +17,79 @@ export interface Cliente {
   created_at?: string | null;
 }
 
+// ==============================================================================
+// 8. FICHAS TÉCNICAS E CARDÁPIOS UAN (NOVO MÓDULO LOGÍSTICO)
+// ==============================================================================
+
+export type CategoriaUAN = 'Salada' | 'Guarnição' | 'Proteína' | 'Prato Principal' | 'Sobremesa' | 'Bebida' | 'Sopa' | 'Lanche' | 'Desjejum';
+
+export interface FichaTecnicaUAN {
+  id: string;
+  cliente_id: string;
+  nome: string;
+  categoria_uan: CategoriaUAN | string;
+  rendimento_porcoes: number;
+  peso_porcao_g: number;
+  modo_preparo: string | null;
+  tempo_preparo_min: number | null;
+  created_at?: string;
+  updated_at?: string;
+  
+  // Relacionamentos Injetados via JOIN
+  composicao?: ComposicaoFichaUAN[];
+}
+
+export interface ComposicaoFichaUAN {
+  id: string;
+  ficha_uan_id: string;
+  ingrediente_id: string;
+  referencia_id?: string | null;
+  peso_bruto_g: number;
+  peso_liquido_g: number;
+  fator_correcao: number;
+  indice_coccao: number;
+  
+  // Relacionamento Injetado via JOIN
+  ingrediente?: Ingrediente;
+  referencia_nutricional?: ReferenciaNutricional;
+}
+
+export interface CardapioUAN {
+  id: string;
+  cliente_id: string;
+  nome_ciclo: string;
+  data_inicio: string;
+  data_fim: string;
+  dias_funcionamento?: number[] | null;
+  refeicoes_oferecidas?: string[] | null;
+  status: 'Rascunho' | 'Em Planejamento' | 'Aprovado' | 'Enviado para Compras' | 'Em Execução';
+  comensais_estimados_dia: number;
+  comensais_modelo?: Record<string, Record<string, number>> | null;
+  config_excecoes_dias?: Record<string, { funciona?: boolean, comensais?: Record<string, number>, horarios?: Record<string, { inicio: string, fim: string }> }> | null;
+  horario_refeicoes?: Record<string, { inicio: string; fim: string }>;
+  created_at?: string;
+}
+
+export interface CardapioDiaUAN {
+  id: string;
+  cardapio_id: string;
+  data_consumo: string;
+  tipo_refeicao: 'Almoço' | 'Jantar' | 'Ceia' | 'Café da Manhã' | string;
+  ficha_uan_id: string;
+  fator_multiplicador: number;
+  
+  // Relacionamento
+  ficha_uan?: FichaTecnicaUAN;
+}
+
+export interface ListaCompraUAN {
+  id: string;
+  cardapio_id: string;
+  data_geracao: string;
+  status: 'Pendente' | 'Em Cotação' | 'Comprado';
+  itens_json: any; // Armazena a lista plana calculada (JSON)
+}
+
 export interface ClienteUnidade {
   id: string;
   cliente_id: string;
@@ -76,6 +149,11 @@ export interface Fornecedor {
   contato_qualidade_email?: string | null;
   contato_qualidade_telefone?: string | null;
   ativo: boolean;
+  
+  // Logística UAN
+  lead_time_dias?: number;
+  frequencia_entrega?: string | null;
+  
   created_at?: string;
 }
 
@@ -85,12 +163,40 @@ export interface Fornecedor {
 
 export type TipoIngrediente = 'SIMPLES' | 'COMPOSTO' | 'ADITIVO';
 
+export interface ReferenciaNutricional {
+  id: string;
+  nome: string;
+  fonte: string;
+  codigo_externo: string | null;
+  categoria: string | null;
+  energia_kcal: number | null;
+  proteina_g: number | null;
+  lipideos_g: number | null;
+  carboidrato_g: number | null;
+  carboidrato_disponivel_g: number | null;
+  fibra_alimentar_g: number | null;
+  calcio_mg: number | null;
+  magnesio_mg: number | null;
+  ferro_mg: number | null;
+  sodio_mg: number | null;
+  potassio_mg: number | null;
+  zinco_mg: number | null;
+  vitamina_c_mg: number | null;
+  colesterol_mg: number | null;
+  gordura_saturada_g: number | null;
+  gordura_monoinsaturada_g: number | null;
+  gordura_poliinsaturada_g: number | null;
+}
+
 export interface Ingrediente {
   id: string;
   cliente_id: string | null; 
   nome: string;
   tipo_ingrediente: TipoIngrediente;
   
+  referencia_id?: string | null;
+  referencia_nutricional?: ReferenciaNutricional | null;
+
   declaracao_ingredientes_fornecedor: string | null;
   funcao_aditivo: string | null;
   ins_code: string | null;
@@ -166,6 +272,13 @@ export interface Ingrediente {
 
   is_corante_artificial: boolean;
   is_corante_carmim: boolean;
+  is_transgenico: boolean;
+  especie_transgenica?: string | null;
+
+  // Custo & Suprimentos UAN
+  preco_ultima_compra?: number;
+  estoque_minimo_kg?: number;
+  tempo_minimo_compra_dias?: number;
 
   created_at?: string;
 }
@@ -278,6 +391,7 @@ export interface ReceitaVersao {
   versao: number;
   nome_snapshot: string;
   modo_preparo_snapshot: string | null;
+  modo_conservacao_snapshot: string | null;
   rendimento_snapshot: number;
   composicao_snapshot: any; // JSONB
   tabela_nutricional_snapshot: any; // JSONB
@@ -312,6 +426,10 @@ export interface DeclaracoesObrigatorias {
   modo_conservacao?: string | null;
   colorido_artificialmente?: boolean;
   colorido_carmim?: boolean;
+  alerta_gmo?: string | null;
+  alerta_laxativo?: string | null;
+  alerta_gluten?: string | null;
+  alerta_lactose?: string | null;
 }
 
 export interface InfoPorcao {

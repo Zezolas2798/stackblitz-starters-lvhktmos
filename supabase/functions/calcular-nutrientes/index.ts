@@ -81,9 +81,10 @@ async function loadComplianceData(supabaseAdmin: any) {
   const alergenicosPromise = supabaseAdmin.from('anvisa_alergenicos').select('id, nome');
   const alegacoesPromise = supabaseAdmin.from('anvisa_alegacoes_criterios').select('*');
   const medidasPromise = supabaseAdmin.from('anvisa_medidas_caseiras').select('nome, nome_singular');
+  const aditivosPromise = supabaseAdmin.from('anvisa_aditivos').select('ins, is_artificial');
 
-  const [vdrRes, regrasRes, lupasRes, alergenicosRes, alegacoesRes, medidasRes] = await Promise.all([
-    vdrPromise, regrasPromise, lupasPromise, alergenicosPromise, alegacoesPromise, medidasPromise
+  const [vdrRes, regrasRes, lupasRes, alergenicosRes, alegacoesRes, medidasRes, aditivosRes] = await Promise.all([
+    vdrPromise, regrasPromise, lupasPromise, alergenicosPromise, alegacoesPromise, medidasPromise, aditivosPromise
   ]);
 
   if (vdrRes.error) throw new Error(`Erro ao carregar VDR: ${vdrRes.error.message}`);
@@ -107,7 +108,8 @@ async function loadComplianceData(supabaseAdmin: any) {
     lupasMap,
     alergenicosMap,
     alegacoesRegras: alegacoesRes.data as AnvisaAlegacaoCriterio[],
-    medidasMap
+    medidasMap,
+    aditivosMap: new Map<string, any>((aditivosRes.data ?? []).map((a: any) => [a.ins, a]))
   };
 }
 
@@ -126,37 +128,56 @@ async function loadReceitaData(supabaseAdmin: any, receita_id: string) {
 // 3. CÁLCULOS E LÓGICA DE NEGÓCIO
 // ==========================================
 
-function formatarValor(valor: number, constituinte: string, regrasMap: Map<string, AnvisaRegraTabela>) {
+function formatarValor(valor: number, constituinte: string, regrasMap: Map<string, AnvisaRegraTabela>, isSignificativo = true) {
   const regra = regrasMap.get(constituinte);
+  const isInteiroObrigatorio = constituinte === 'energia_kcal' || constituinte.startsWith('vd_') || constituinte === 'percentual_vd';
+
   // RDC 429: Valores não significativos
-  if (regra && regra.limite_nao_significativo !== null && valor <= regra.limite_nao_significativo) {
+  // Se o nutriente não for significativo em NENHUMA das bases (100g ou porção), retornamos a expressão de zero
+  if (!isSignificativo && regra && regra.limite_nao_significativo !== null) {
     return regra.expressao_nao_significativa ?? '0';
   }
 
   // RDC 429 Anexo IV: Regras de Arredondamento
   let casasDecimais = -1;
   if (regra) {
-    if (constituinte === 'energia_kcal' && valor < 10 && valor >= 1) casasDecimais = 1;
+    if (isInteiroObrigatorio) casasDecimais = 0;
     else if (valor < 1 && regra.regra_arr_menor_1 !== null) casasDecimais = regra.regra_arr_menor_1;
     else if (valor < 10 && regra.regra_arr_menor_10 !== null) casasDecimais = regra.regra_arr_menor_10;
     else if (regra.regra_arr_maior_10 !== null) casasDecimais = regra.regra_arr_maior_10;
   }
-  if (casasDecimais === -1) casasDecimais = valor < 10 && valor >= 1 ? 1 : 0;
+
+  // Fallback padrão se não houver regra específica
+  if (casasDecimais === -1) {
+    casasDecimais = (valor < 10 && valor >= 1) ? 1 : 0;
+  }
+
+  // IN 75 Anexo III: Para valores entre 1 e 10, se a primeira casa decimal for 0, declarar como inteiro
+  // Ex: 1,04 -> "1"
+  if (!isInteiroObrigatorio && valor >= 1 && valor < 10) {
+    const primeiraCasaDecimal = Math.floor((valor % 1) * 10 + 1e-9);
+    if (primeiraCasaDecimal === 0) {
+      casasDecimais = 0;
+    }
+  }
 
   const m = Math.pow(10, casasDecimais);
   const v = valor * m + 1e-9;
   const vf = (v - Math.floor(v)) >= 0.5 ? Math.ceil(v) / m : Math.floor(v) / m;
 
+  // Retornamos com ponto para consistência com o motor de cálculo, 
+  // mas o arredondamento agora respeita a significância cruzada.
   return vf.toFixed(casasDecimais);
 }
 
-async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any, alergenicosMap: Map<number, string>) {
+async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any, alergenicosMap: Map<number, string>, aditivosMap: Map<string, any>) {
   const totaisBrutos: Record<string, number> = {};
   const ingredientesParaLista: any[] = [];
   const alergenicosColetados: AlergenicoDetectado[] = [];
   let contemGluten = false;
   let coloridoArtificialmente = false;
   let coloridoCarmim = false;
+  const ingredientesGMO = new Set<string>();
 
   for (const item of composicao) {
     if (item.item_type === 'ingrediente') {
@@ -165,8 +186,17 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
 
       ingredientesParaLista.push({ peso_liquido_g: item.peso_liquido_g, ingrediente: ing });
       if (ing.contem_gluten) contemGluten = true;
-      if (ing.is_corante_artificial) coloridoArtificialmente = true;
-      if (ing.is_corante_carmim) coloridoCarmim = true;
+      
+      // Automatização de Corantes via INS
+      const insLimpo = ing.ins_code ? ing.ins_code.replace(/ins/i, '').trim() : '';
+      const aditivoInfo = aditivosMap.get(insLimpo);
+      if (aditivoInfo?.is_artificial) coloridoArtificialmente = true;
+      if (insLimpo === '120') coloridoCarmim = true;
+
+      if (ing.is_transgenico) {
+        const esp = ing.especie_transgenica ? ing.especie_transgenica.trim().toLowerCase() : ing.nome.toLowerCase();
+        ingredientesGMO.add(esp);
+      }
 
       // Schema: alergenicos_ids é array de inteiros
       if (ing.alergenicos_ids && Array.isArray(ing.alergenicos_ids)) {
@@ -187,10 +217,11 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
       const { data: sub, error } = await supabaseAdmin.from('receitas').select('*, composicao_receitas(*)').eq('id', item.item_id).single();
       if (error || !sub) throw new Error(`Sub-receita ID ${item.item_id} não encontrada.`);
 
-      const resSub = await calcularNutrientesRecursivo(sub.composicao_receitas, supabaseAdmin, alergenicosMap);
+      const resSub = await calcularNutrientesRecursivo(sub.composicao_receitas, supabaseAdmin, alergenicosMap, aditivosMap);
       if (resSub.contemGluten) contemGluten = true;
       if (resSub.coloridoArtificialmente) coloridoArtificialmente = true;
       if (resSub.coloridoCarmim) coloridoCarmim = true;
+      resSub.ingredientesGMO.forEach((name: string) => ingredientesGMO.add(name));
       alergenicosColetados.push(...resSub.alergenicosColetados);
 
       const declSub = resSub.listaIngredientesFormatada.join(', ').toLowerCase();
@@ -199,7 +230,9 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
         ingrediente: { nome: sub.nome, tipo_ingrediente: 'COMPOSTO', declaracao_ingredientes_fornecedor: declSub }
       });
 
-      const fator = item.peso_liquido_g / sub.rendimento_total_g;
+      // Prevenção contra division by zero se o rendimento for 0
+      const rendimentoSub = sub.rendimento_total_g || sub.composicao_receitas.reduce((acc: any, i: any) => acc + i.peso_liquido_g, 0) || 1;
+      const fator = item.peso_liquido_g / rendimentoSub;
       for (const key in resSub.totaisBrutos) {
         totaisBrutos[key] = (totaisBrutos[key] || 0) + (resSub.totaisBrutos[key] * fator);
       }
@@ -207,7 +240,7 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
   }
 
   const listaIngredientesFormatada = gerarListaDeIngredientes(ingredientesParaLista);
-  return { totaisBrutos, alergenicosColetados, contemGluten, listaIngredientesFormatada, coloridoArtificialmente, coloridoCarmim };
+  return { totaisBrutos, alergenicosColetados, contemGluten, listaIngredientesFormatada, coloridoArtificialmente, coloridoCarmim, ingredientesGMO: Array.from(ingredientesGMO) };
 }
 
 function calculatePor100g(totais: Record<string, number>, rendimento: number) {
@@ -349,22 +382,31 @@ function gerarListaDeIngredientes(lista: any[]) {
       : base;
   });
 
-  const funcoesAditivos = new Map<string, string[]>();
+  const funcoesAditivos = new Map<string, Set<string>>();
   for (const item of aditivos) {
     const ing = item.ingrediente;
     const funcao = (ing.funcao_aditivo || 'aditivo').toLowerCase();
-    if (!funcoesAditivos.has(funcao)) funcoesAditivos.set(funcao, []);
+    if (!funcoesAditivos.has(funcao)) funcoesAditivos.set(funcao, new Set());
 
     let nomeLimpo = ing.nome.toLowerCase().replace(/\s*\(ins\s*\d+[a-z]*\)/gi, "").trim();
     if (nomeLimpo.includes('/')) nomeLimpo = nomeLimpo.split('/')[0].trim();
-    const nomeAditivoFinal = ing.ins_code ? `${nomeLimpo} (INS ${ing.ins_code.replace(/ins/i, '').trim()})` : nomeLimpo;
-    funcoesAditivos.get(funcao)!.push(nomeAditivoFinal);
+
+    const insLimpo = ing.ins_code ? ing.ins_code.replace(/ins/i, '').trim() : '';
+    let nomeAditivoFinal = ing.ins_code ? `${nomeLimpo} (INS ${insLimpo})` : nomeLimpo;
+
+    // RDC 727: Tartrazina (102) deve obrigatoriamente declarar o nome
+    if (insLimpo === '102') {
+      nomeAditivoFinal = `corante tartrazina (INS 102)`;
+    }
+
+    funcoesAditivos.get(funcao)!.add(nomeAditivoFinal);
   }
 
   const nomesAditivos: string[] = [];
   [...funcoesAditivos.keys()].sort().forEach(f => {
-    const listaNomes = funcoesAditivos.get(f)!.sort();
-    nomesAditivos.push(`${f.charAt(0).toUpperCase() + f.slice(1)}: ${formatarListaComE(listaNomes)}`);
+    const listaNomes = Array.from(funcoesAditivos.get(f)!).sort();
+    // RDC 727: Função tecnológica deve estar em CAIXA ALTA
+    nomesAditivos.push(`${f.toUpperCase()}: ${formatarListaComE(listaNomes)}`);
   });
 
   return [...nomesNormais, ...nomesAditivos];
@@ -403,13 +445,36 @@ function processarDeclaracoes(rec: any, resRec: any, por100g: any, alergenicosMa
     txtI = `Ingredientes: ${formatarListaComE(l)}.`;
   }
 
+  // Advertência de Glúten (Lei 10.674/2003)
+  const alertaGluten = contemGluten ? "CONTÉM GLÚTEN" : "NÃO CONTÉM GLÚTEN";
+
+  // Advertência de Lactose (RDC 727/2022) - Limite 100mg/100g (0.1g)
+  const lactose100g = por100g['lactose_g'] || 0;
+  const alertaLactose = lactose100g > 0.1 ? "CONTÉM LACTOSE" : null;
+
+  // Transgênicos (Decreto 4.680/2003)
+  const gmoList = resRec.ingredientesGMO || [];
+  let alertaGMO = null;
+  if (gmoList.length > 0) {
+    alertaGMO = `CONTÉM ${formatarListaComE(gmoList).toUpperCase()} TRANSGÊNICO(S).`;
+  }
+
+  // Efeito Laxativo (RDC 727/2022)
+  const poliois100g = por100g['poliois_totais_g'] || 0;
+  const alertaLaxativo = poliois100g > 10 ? "ESTE PRODUTO PODE TER EFEITO LAXATIVO" : null;
+
   return {
     contem_gluten: contemGluten,
     contem_lactose: contemLactose,
+    alerta_gluten: alertaGluten,
+    alerta_lactose: alertaLactose,
+    alerta_gmo: alertaGMO,
+    alerta_laxativo: alertaLaxativo,
     alergenicos: txtA,
     lista_ingredientes: txtI,
     colorido_artificialmente: coloridoArtificialmente,
-    colorido_carmim: coloridoCarmim
+    colorido_carmim: coloridoCarmim,
+    modo_conservacao: rec.modo_conservacao || null
   };
 }
 
@@ -511,9 +576,9 @@ serve(async (req) => {
     }
 
     // 2. Carrega Dados
-    const compliance = await loadComplianceData(supabaseAdmin); // Tabelas ANVISA são públicas e estáticas, admin OK
-    const dadosRec = await loadReceitaData(supabaseClient, receita_id); // A receita DEVE usar o client autenticado (RLS)
-    const recursivo = await calcularNutrientesRecursivo(dadosRec.composicao, supabaseClient, compliance.alergenicosMap); // Ingredientes via RLS
+    const compliance = await loadComplianceData(supabaseAdmin);
+    const dadosRec = await loadReceitaData(supabaseClient, receita_id);
+    const recursivo = await calcularNutrientesRecursivo(dadosRec.composicao, supabaseClient, compliance.alergenicosMap, compliance.aditivosMap);
 
     // 1. CALCULAR PORÇÕES PRIMEIRO (Para determinar a massa base de cálculo)
     // Se a função decidir que a porção é 40g (unidade) e não 50g (banco), ela retorna isso em 'porcao_g_ml'
@@ -537,8 +602,17 @@ serve(async (req) => {
     const p100Fmt: Record<string, string> = {};
     const pPorcFmt: Record<string, string> = {};
     for (const k in recursivo.totaisBrutos) {
-      p100Fmt[k] = formatarValor(p100[k] || 0, k, compliance.regrasMap);
-      pPorcFmt[k] = formatarValor(pPorc[k] || 0, k, compliance.regrasMap);
+      const v100 = p100[k] || 0;
+      const vPorc = pPorc[k] || 0;
+      const regra = compliance.regrasMap.get(k);
+      const limite = regra?.limite_nao_significativo ?? -1;
+
+      // Lógica de Significância Cruzada (Art. 14 RDC 429)
+      // Se for significativo em QUALQUER uma das colunas, declaramos em AMBAS.
+      const isSignificativo = (limite === -1) || (v100 > limite) || (vPorc > limite);
+
+      p100Fmt[k] = formatarValor(v100, k, compliance.regrasMap, isSignificativo);
+      pPorcFmt[k] = formatarValor(vPorc, k, compliance.regrasMap, isSignificativo);
     }
 
     const vd = calculateVD(pPorc, vdrMapFiltrado);
