@@ -12,11 +12,12 @@ import {
 import Grid from '@mui/material/Grid';
 import {
     Save, ArrowLeft, Leaf, Activity, FileText, FlaskConical,
-    AlertTriangle, ChevronDown
+    AlertTriangle, ChevronDown, Barcode
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import { Ingrediente, TipoIngrediente } from '@/lib/types';
+import ScannerBarcodeDialog from '@/components/ScannerBarcodeDialog';
 
 // ============================================================================
 // TIPOS LOCAIS
@@ -66,6 +67,7 @@ export default function EditarIngredientePage() {
     const { activeClientId, unidadeSelecionada } = useClient();
     const [loading, setLoading] = useState(false);
     const [tabIndex, setTabIndex] = useState(0);
+    const [openScanner, setOpenScanner] = useState(false);
 
     // Estados de Dados Mestres
     const [listaMestraAlergenicos, setListaMestraAlergenicos] = useState<AnvisaAlergenico[]>([]);
@@ -314,6 +316,41 @@ export default function EditarIngredientePage() {
         }
     };
 
+    const handleConfirmScan = (mappedData: Partial<Ingrediente>, raw: any) => {
+        setFormData(prev => ({
+            ...prev,
+            ...mappedData,
+            tipo_ingrediente: 'COMPOSTO'
+        }));
+
+        // Tentar mapear alérgenos automaticamente
+        const offAllergens = raw.product?.allergens_tags || [];
+        const novosAlergenos: AlergenicoTag[] = [];
+        const commonMappings: Record<string, string> = {
+            'en:milk': 'leite', 'en:soybeans': 'soja', 'en:eggs': 'ovo',
+            'en:peanuts': 'amendoim', 'en:wheat': 'trigo', 'en:nuts': 'nozes',
+            'en:fish': 'peixe', 'en:crustaceans': 'crustáceos'
+        };
+
+        offAllergens.forEach((tag: string) => {
+            const searchName = commonMappings[tag.toLowerCase()];
+            if (searchName) {
+                const match = listaMestraAlergenicos.find(a => a.nome.toLowerCase().includes(searchName));
+                if (match && !alergenosSelecionados.find(s => s.alergenico_id === match.id)) {
+                    novosAlergenos.push({ alergenico_id: match.id, nome: match.nome, contem: true, contem_derivado: false });
+                }
+            }
+        });
+
+        if (novosAlergenos.length > 0) setAlergenosSelecionados(prev => [...prev, ...novosAlergenos]);
+
+        if (raw.product?.allergens_tags?.some((t: string) => t.includes('wheat') || t.includes('gluten') || t.includes('rye') || t.includes('barley'))) {
+            setFormData(prev => ({ ...prev, contem_gluten: true }));
+        }
+
+        setTabIndex(1);
+    };
+
     if (!activeClientId && !loading) {
         return (
             <Box p={4}>
@@ -361,7 +398,18 @@ export default function EditarIngredientePage() {
                                 </Grid>
                             ) : (
                                 <Grid item xs={12} md={8}>
-                                    <TextField label="Nome do Ingrediente *" fullWidth value={formData.nome || ''} onChange={e => handleChange('nome', e.target.value)} placeholder="Ex: Farinha de Trigo Especial" />
+                                    <Box sx={{ display: 'flex', gap: 1 }}>
+                                        <TextField label="Nome do Ingrediente *" fullWidth value={formData.nome || ''} onChange={e => handleChange('nome', e.target.value)} placeholder="Ex: Farinha de Trigo Especial" />
+                                        <Button
+                                            variant="outlined"
+                                            color="primary"
+                                            onClick={() => setOpenScanner(true)}
+                                            sx={{ minWidth: 'fit-content', px: 2 }}
+                                            startIcon={<Barcode size={20} />}
+                                        >
+                                            Escanear
+                                        </Button>
+                                    </Box>
                                 </Grid>
                             )}
 
@@ -647,6 +695,12 @@ export default function EditarIngredientePage() {
                     </Button>
                 </Box>
             </Paper>
+
+            <ScannerBarcodeDialog
+                open={openScanner}
+                onClose={() => setOpenScanner(false)}
+                onConfirm={handleConfirmScan}
+            />
         </Box>
     );
 }
