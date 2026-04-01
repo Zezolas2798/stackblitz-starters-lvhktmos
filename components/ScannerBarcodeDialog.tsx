@@ -156,15 +156,20 @@ export default function ScannerBarcodeDialog({ open, onClose, onConfirm }: Scann
     setProductPreview(null);
 
     try {
-      const data = await fetchProductServer(code);
-      if (data.status === 1) {
-        setProductPreview(data);
-      } else {
+      const result = await fetchProductServer(code);
+      if (result.success && result.data && result.data.status === 1) {
+        setProductPreview(result.data);
+      } else if (result.success && result.data && result.data.status === 0) {
         setError(`Produto não encontrado (Código: ${code}). Verifique se o código está correto ou cadastre manualmente.`);
+      } else {
+        // Erro detalhado retornado pelo servidor
+        const techError = `${result.error || 'Erro desconhecido'} (${result.status || 'sem status'}).`;
+        const techDetails = result.details || 'Tente novamente em instantes.';
+        setError(`ERRO: ${techError} - ${techDetails}`);
       }
     } catch (err: any) {
       console.error("Erro na busca de produto:", err);
-      setError("Dificuldade de conexão com o banco de dados de produtos. Tente novamente ou use o código manual.");
+      setError("Erro inesperado ao falar com o servidor. Verifique sua conexão.");
     } finally {
       setLoading(false);
     }
