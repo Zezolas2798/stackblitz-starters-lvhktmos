@@ -28,7 +28,8 @@ import {
   HelpCircle,
   AlertCircle
 } from 'lucide-react';
-import { fetchProductByBarcode, mapOFFToIngrediente } from '@/lib/offApi';
+import { mapOFFToIngrediente, OFFProductResponse } from '@/lib/offApi';
+import { fetchProductServer } from '@/lib/offActions';
 import { Ingrediente } from '@/lib/types';
 
 interface ScannerBarcodeDialogProps {
@@ -155,14 +156,15 @@ export default function ScannerBarcodeDialog({ open, onClose, onConfirm }: Scann
     setProductPreview(null);
 
     try {
-      const data = await fetchProductByBarcode(code);
+      const data = await fetchProductServer(code);
       if (data.status === 1) {
         setProductPreview(data);
       } else {
         setError(`Produto não encontrado (Código: ${code}). Verifique se o código está correto ou cadastre manualmente.`);
       }
     } catch (err: any) {
-      setError("Erro ao buscar dados do produto. Tente novamente ou insira o código manual.");
+      console.error("Erro na busca de produto:", err);
+      setError("Dificuldade de conexão com o banco de dados de produtos. Tente novamente ou use o código manual.");
     } finally {
       setLoading(false);
     }
