@@ -233,56 +233,52 @@ export default function NovoIngredientePage() {
     }
   };
 
-  const handleConfirmScan = (mappedData: Partial<Ingrediente>, raw: any) => {
+  const handleConfirmScan = (mappedData: any, raw: any) => {
+    const { _alergenos_detectados, ...cleanMappedData } = mappedData;
+
     setFormData(prev => ({
       ...prev,
-      ...mappedData,
-      tipo_ingrediente: 'COMPOSTO' // Produtos com código de barras geralmente são industrializados/compostos
+      ...cleanMappedData,
+      tipo_ingrediente: 'COMPOSTO'
     }));
 
-    // Tentar mapear alérgenos automaticamente por nome
-    const offAllergens = raw.product?.allergens_tags || [];
-    const novosAlergenos: AlergenicoTag[] = [];
-
-    // Mapeamento simples de tags comuns
-    const commonMappings: Record<string, string> = {
-      'en:milk': 'leite',
-      'en:soybeans': 'soja',
-      'en:eggs': 'ovo',
-      'en:peanuts': 'amendoim',
-      'en:wheat': 'trigo',
-      'en:nuts': 'nozes',
-      'en:fish': 'peixe',
-      'en:crustaceans': 'crustáceos'
-    };
-
-    offAllergens.forEach((tag: string) => {
-      const searchName = commonMappings[tag.toLowerCase()];
-      if (searchName) {
+    // Mapear alérgenos inteligentes do mappedData
+    if (_alergenos_detectados && _alergenos_detectados.length > 0) {
+      const novosAlergenos: AlergenicoTag[] = [];
+      
+      _alergenos_detectados.forEach((detected: any) => {
         const match = listaMestraAlergenicos.find(a => 
-          a.nome.toLowerCase().includes(searchName)
+          a.nome.toLowerCase().includes(detected.searchName.toLowerCase())
         );
+        
         if (match && !alergenosSelecionados.find(s => s.alergenico_id === match.id)) {
           novosAlergenos.push({
             alergenico_id: match.id,
             nome: match.nome,
-            contem: true,
-            contem_derivado: false
+            contem: !!detected.contem,
+            contem_derivado: !!detected.derivado
           });
+        } else if (match) {
+          // Atualiza se já existir (mesclando os flags)
+          setAlergenosSelecionados(prev => prev.map(a => 
+            a.alergenico_id === match.id 
+              ? { ...a, contem: a.contem || detected.contem, contem_derivado: a.contem_derivado || detected.derivado }
+              : a
+          ));
         }
-      }
-    });
+      });
 
-    if (novosAlergenos.length > 0) {
-      setAlergenosSelecionados(prev => [...prev, ...novosAlergenos]);
+      if (novosAlergenos.length > 0) {
+        setAlergenosSelecionados(prev => [...prev, ...novosAlergenos]);
+      }
     }
 
-    // Verificar Glúten
+    // Verificar Glúten (OFF API)
     if (raw.product?.allergens_tags?.some((t: string) => t.includes('wheat') || t.includes('gluten') || t.includes('rye') || t.includes('barley'))) {
        setFormData(prev => ({ ...prev, contem_gluten: true }));
     }
 
-    setTabIndex(1); // Muda para a aba nutricional para o usuário conferir os dados
+    setTabIndex(1);
   };
 
   if (!activeClientId && !loading) {
