@@ -319,6 +319,8 @@ export default function EditarIngredientePage() {
     const handleConfirmScan = (mappedData: any, raw: any) => {
         const { _alergenos_detectados, ...cleanMappedData } = mappedData;
 
+        console.log('Edição - Dados mapeados:', cleanMappedData);
+
         setFormData(prev => ({
             ...prev,
             ...cleanMappedData,
@@ -327,33 +329,34 @@ export default function EditarIngredientePage() {
 
         // Mapear alérgenos inteligentes do mappedData
         if (_alergenos_detectados && _alergenos_detectados.length > 0) {
-            const novosAlergenos: AlergenicoTag[] = [];
-            
-            _alergenos_detectados.forEach((detected: any) => {
-                const match = listaMestraAlergenicos.find(a => 
-                    a.nome.toLowerCase().includes(detected.searchName.toLowerCase())
-                );
+            setAlergenosSelecionados(prev => {
+                const current = [...prev];
                 
-                if (match && !alergenosSelecionados.find(s => s.alergenico_id === match.id)) {
-                    novosAlergenos.push({
-                        alergenico_id: match.id,
-                        nome: match.nome,
-                        contem: !!detected.contem,
-                        contem_derivado: !!detected.derivado
-                    });
-                } else if (match) {
-                    // Atualiza se já existir (mesclando os flags)
-                    setAlergenosSelecionados(prev => prev.map(a => 
-                        a.alergenico_id === match.id 
-                            ? { ...a, contem: a.contem || detected.contem, contem_derivado: a.contem_derivado || detected.derivado }
-                            : a
-                    ));
-                }
+                _alergenos_detectados.forEach((detected: any) => {
+                    const match = listaMestraAlergenicos.find(a => 
+                        a.nome.toLowerCase().includes(detected.searchName.toLowerCase())
+                    );
+                    
+                    if (match) {
+                        const existingIdx = current.findIndex(s => s.alergenico_id === match.id);
+                        if (existingIdx >= 0) {
+                            current[existingIdx] = { 
+                                ...current[existingIdx], 
+                                contem: current[existingIdx].contem || detected.contem, 
+                                contem_derivado: current[existingIdx].contem_derivado || detected.derivado 
+                            };
+                        } else {
+                            current.push({
+                                alergenico_id: match.id,
+                                nome: match.nome,
+                                contem: !!detected.contem,
+                                contem_derivado: !!detected.derivado
+                            });
+                        }
+                    }
+                });
+                return current;
             });
-
-            if (novosAlergenos.length > 0) {
-                setAlergenosSelecionados(prev => [...prev, ...novosAlergenos]);
-            }
         }
 
         // Verificar Glúten (OFF API)
@@ -361,7 +364,7 @@ export default function EditarIngredientePage() {
             setFormData(prev => ({ ...prev, contem_gluten: true }));
         }
 
-        setTabIndex(1);
+        setTabIndex(0); // Volta para aba geral para conferência
     };
 
     if (!activeClientId && !loading) {

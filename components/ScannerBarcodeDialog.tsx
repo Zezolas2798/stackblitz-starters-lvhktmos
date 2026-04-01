@@ -17,7 +17,9 @@ import {
   Alert,
   Stack,
   Divider,
-  Paper
+  Paper,
+  Chip,
+  Grid
 } from '@mui/material';
 import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
 import { 
@@ -44,6 +46,7 @@ export default function ScannerBarcodeDialog({ open, onClose, onConfirm }: Scann
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [productPreview, setProductPreview] = useState<any | null>(null);
+  const [mappedResult, setMappedResult] = useState<any | null>(null);
   const [cameras, setCameras] = useState<{id: string, label: string}[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   
@@ -159,6 +162,7 @@ export default function ScannerBarcodeDialog({ open, onClose, onConfirm }: Scann
       const result = await fetchProductServer(code);
       if (result.success && result.data && result.data.status === 1) {
         setProductPreview(result.data);
+        setMappedResult(mapOFFToIngrediente(result.data));
       } else if (result.success && result.data && result.data.status === 0) {
         setError(`Produto não encontrado (Código: ${code}). Verifique se o código está correto ou cadastre manualmente.`);
       } else {
@@ -176,9 +180,8 @@ export default function ScannerBarcodeDialog({ open, onClose, onConfirm }: Scann
   };
 
   const handleConfirm = () => {
-    if (productPreview) {
-      const mapped = mapOFFToIngrediente(productPreview);
-      onConfirm(mapped, productPreview);
+    if (mappedResult && productPreview) {
+      onConfirm(mappedResult, productPreview);
       handleClose();
     }
   };
@@ -315,19 +318,83 @@ export default function ScannerBarcodeDialog({ open, onClose, onConfirm }: Scann
             </Stack>
           )}
 
-          {productPreview && (
-            <Paper variant="outlined" sx={{ p: 2, bgcolor: '#e3f2fd', borderColor: '#90caf9' }}>
-               <Typography variant="overline" color="primary" fontWeight="bold">Produto Localizado</Typography>
-               <Typography variant="h6" color="primary.dark" sx={{ mt: 0.5 }}>{productPreview.product.product_name_pt || productPreview.product.product_name}</Typography>
-               <Typography variant="body2" color="text.secondary">Marca: {productPreview.product.brands || '-'}</Typography>
-               
-               <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  {productPreview.product.nutriments?.['energy-kcal_100g'] !== undefined && (
-                    <Typography variant="caption" sx={{ bgcolor: 'white', px: 1, py: 0.5, borderRadius: 1, border: '1px solid #90caf9' }}>
-                         {productPreview.product.nutriments['energy-kcal_100g']} kcal/100g
+          {productPreview && mappedResult && (
+            <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f8f9fa', borderColor: '#dee2e6', borderRadius: 2 }}>
+               <Stack spacing={2}>
+                 <Box>
+                    <Typography variant="overline" color="primary" fontWeight="bold">PRODUTO LOCALIZADO</Typography>
+                    <Typography variant="h6" color="text.primary" sx={{ lineHeight: 1.2, mt: 0.5 }}>
+                      {productPreview.product.product_name_pt || productPreview.product.product_name}
                     </Typography>
-                  )}
-               </Box>
+                    <Typography variant="body2" color="text.secondary">Marca: {productPreview.product.brands || '-'}</Typography>
+                 </Box>
+
+                 <Divider />
+
+                 <Box>
+                    <Typography variant="caption" fontWeight="bold" color="text.secondary" display="block" gutterBottom>
+                      LISTA DE INGREDIENTES (RÓTULO)
+                    </Typography>
+                    <Typography variant="body2" sx={{ 
+                      maxHeight: 100, 
+                      overflowY: 'auto', 
+                      p: 1, 
+                      bgcolor: 'white', 
+                      borderRadius: 1, 
+                      border: '1px solid #eee',
+                      fontSize: '0.75rem',
+                      fontStyle: mappedResult.declaracao_ingredientes_fornecedor ? 'normal' : 'italic',
+                      color: mappedResult.declaracao_ingredientes_fornecedor ? 'text.primary' : 'text.disabled'
+                    }}>
+                      {mappedResult.declaracao_ingredientes_fornecedor || 'Lista de ingredientes não disponível neste produto.'}
+                    </Typography>
+                 </Box>
+
+                 <Box>
+                    <Typography variant="caption" fontWeight="bold" color="text.secondary" display="block" gutterBottom>
+                      ALÉRGENOS DETECTADOS
+                    </Typography>
+                    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                      {mappedResult._alergenos_detectados && mappedResult._alergenos_detectados.length > 0 ? (
+                        mappedResult._alergenos_detectados.map((det: any, i: number) => (
+                          <React.Fragment key={i}>
+                            {det.contem && <Chip label={`Contém ${det.searchName}`} size="small" color="error" variant="outlined" sx={{ fontSize: '0.65rem', height: 20 }} />}
+                            {det.derivado && <Chip label={`Derivado de ${det.searchName}`} size="small" color="warning" variant="outlined" sx={{ fontSize: '0.65rem', height: 20 }} />}
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        <Typography variant="caption" color="text.disabled">Nenhum alérgeno específico detectado automaticamente.</Typography>
+                      )}
+                      {mappedResult.contem_gluten && <Chip label="Contém Glúten" size="small" color="error" variant="filled" sx={{ fontSize: '0.65rem', height: 20 }} />}
+                    </Stack>
+                 </Box>
+
+                 <Box>
+                    <Typography variant="caption" fontWeight="bold" color="text.secondary" display="block" gutterBottom>
+                      NUTRIÇÃO (PARA 100G / 100ML)
+                    </Typography>
+                    <Grid container spacing={1}>
+                      <Grid item xs={4}>
+                        <Box sx={{ bgcolor: 'white', p: 0.5, borderRadius: 1, textAlign: 'center', border: '1px solid #eee' }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.6rem' }}>Energia</Typography>
+                          <Typography variant="body2" fontWeight="bold">{mappedResult.energia_kcal?.toFixed(0) || '0'} <small>kcal</small></Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Box sx={{ bgcolor: 'white', p: 0.5, borderRadius: 1, textAlign: 'center', border: '1px solid #eee' }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.6rem' }}>Carbos</Typography>
+                          <Typography variant="body2" fontWeight="bold">{mappedResult.carboidrato_g?.toFixed(1) || '0'} <small>g</small></Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Box sx={{ bgcolor: 'white', p: 0.5, borderRadius: 1, textAlign: 'center', border: '1px solid #eee' }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.6rem' }}>Proteínas</Typography>
+                          <Typography variant="body2" fontWeight="bold">{mappedResult.proteina_g?.toFixed(1) || '0'} <small>g</small></Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                 </Box>
+               </Stack>
             </Paper>
           )}
         </Stack>
