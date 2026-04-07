@@ -12,11 +12,12 @@ import {
 import Grid from '@mui/material/Grid';
 import { 
   Save, ArrowLeft, Leaf, Activity, FileText, FlaskConical, 
-  AlertTriangle, ChevronDown 
+  AlertTriangle, ChevronDown, Barcode 
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import { Ingrediente } from '@/lib/types';
+import ScannerBarcodeDialog from '@/components/ScannerBarcodeDialog';
 
 // ============================================================================
 // TIPOS LOCAIS
@@ -64,6 +65,7 @@ export default function NovoIngredientePage() {
   const { activeClientId, unidadeSelecionada } = useClient(); 
   const [loading, setLoading] = useState(false);
   const [tabIndex, setTabIndex] = useState(0);
+  const [openScanner, setOpenScanner] = useState(false);
 
   // Estados de Dados Mestres
   const [listaMestraAlergenicos, setListaMestraAlergenicos] = useState<AnvisaAlergenico[]>([]);
@@ -231,6 +233,61 @@ export default function NovoIngredientePage() {
     }
   };
 
+  const handleConfirmScan = (mappedData: any, raw: any) => {
+    const { _alergenos_detectados, ...cleanMappedData } = mappedData;
+
+    console.log('Dados mapeados recebidos:', cleanMappedData);
+    console.log('Alérgenos detectados:', _alergenos_detectados);
+
+    setFormData(prev => ({
+      ...prev,
+      ...cleanMappedData,
+      tipo_ingrediente: 'COMPOSTO'
+    }));
+
+    // Mapear alérgenos inteligentes do mappedData
+    if (_alergenos_detectados && _alergenos_detectados.length > 0) {
+      setAlergenosSelecionados(prev => {
+        const current = [...prev];
+        
+        _alergenos_detectados.forEach((detected: any) => {
+          const match = listaMestraAlergenicos.find(a => 
+            a.nome.toLowerCase().includes(detected.searchName.toLowerCase())
+          );
+          
+          if (match) {
+            const existingIdx = current.findIndex(s => s.alergenico_id === match.id);
+            if (existingIdx >= 0) {
+              // Atualiza se já existir (mesclando os flags)
+              current[existingIdx] = { 
+                ...current[existingIdx], 
+                contem: current[existingIdx].contem || detected.contem, 
+                contem_derivado: current[existingIdx].contem_derivado || detected.derivado 
+              };
+            } else {
+              // Adiciona novo
+              current.push({
+                alergenico_id: match.id,
+                nome: match.nome,
+                contem: !!detected.contem,
+                contem_derivado: !!detected.derivado
+              });
+            }
+          }
+        });
+        return current;
+      });
+    }
+
+    // Verificar Glúten (OFF API)
+    if (raw.product?.allergens_tags?.some((t: string) => t.includes('wheat') || t.includes('gluten') || t.includes('rye') || t.includes('barley'))) {
+       setFormData(prev => ({ ...prev, contem_gluten: true }));
+    }
+
+    // Feedback visual do preenchimento
+    setTabIndex(0); // Volta para a primeira aba para o usuário ver os ingredientes e alérgenos preenchidos
+  };
+
   if (!activeClientId && !loading) {
     return (
         <Box p={4}>
@@ -278,7 +335,18 @@ export default function NovoIngredientePage() {
                  </Grid>
               ) : (
                  <Grid item xs={12} md={8}>
-                    <TextField label="Nome do Ingrediente *" fullWidth value={formData.nome} onChange={e => handleChange('nome', e.target.value)} placeholder="Ex: Farinha de Trigo Especial" />
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <TextField label="Nome do Ingrediente *" fullWidth value={formData.nome || ''} onChange={e => handleChange('nome', e.target.value)} placeholder="Ex: Farinha de Trigo Especial" />
+                        <Button 
+                            variant="outlined" 
+                            color="primary" 
+                            onClick={() => setOpenScanner(true)}
+                            sx={{ minWidth: 'fit-content', px: 2 }}
+                            startIcon={<Barcode size={20} />}
+                        >
+                            Escanear
+                        </Button>
+                    </Box>
                  </Grid>
               )}
 
@@ -564,6 +632,12 @@ export default function NovoIngredientePage() {
           </Button>
         </Box>
       </Paper>
+
+      <ScannerBarcodeDialog 
+        open={openScanner}
+        onClose={() => setOpenScanner(false)}
+        onConfirm={handleConfirmScan}
+      />
     </Box>
   );
 }

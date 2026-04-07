@@ -279,7 +279,7 @@ export default function PreCadastroFornecedorDialog({
                   renderInput={(params) => <TextField {...params} variant="outlined" placeholder="Selecione as categorias..." />}
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => (
-                      <Chip label={option} {...getTagProps({ index })} size="small" />
+                      <Chip label={option} {...getTagProps({ index })} key={option} size="small" />
                     ))
                   }
                 />

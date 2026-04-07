@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -619,38 +619,53 @@ export type Database = {
         Row: {
           cliente_id: string
           comensais_estimados_dia: number | null
+          comensais_modelo: Json | null
+          config_excecoes_dias: Json | null
           created_at: string | null
           data_fim: string
           data_inicio: string
           dias_funcionamento: Json | null
+          horario_refeicoes: Json | null
           id: string
+          margem_erro_compras_global: number | null
           nome_ciclo: string
           refeicoes_oferecidas: Json | null
           status: string | null
+          unidade_id: string | null
         }
         Insert: {
           cliente_id: string
           comensais_estimados_dia?: number | null
+          comensais_modelo?: Json | null
+          config_excecoes_dias?: Json | null
           created_at?: string | null
           data_fim: string
           data_inicio: string
           dias_funcionamento?: Json | null
+          horario_refeicoes?: Json | null
           id?: string
+          margem_erro_compras_global?: number | null
           nome_ciclo: string
           refeicoes_oferecidas?: Json | null
           status?: string | null
+          unidade_id?: string | null
         }
         Update: {
           cliente_id?: string
           comensais_estimados_dia?: number | null
+          comensais_modelo?: Json | null
+          config_excecoes_dias?: Json | null
           created_at?: string | null
           data_fim?: string
           data_inicio?: string
           dias_funcionamento?: Json | null
+          horario_refeicoes?: Json | null
           id?: string
+          margem_erro_compras_global?: number | null
           nome_ciclo?: string
           refeicoes_oferecidas?: Json | null
           status?: string | null
+          unidade_id?: string | null
         }
         Relationships: [
           {
@@ -1137,6 +1152,13 @@ export type Database = {
             foreignKeyName: "cliente_controle_temperatura_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
+          },
+          {
+            foreignKeyName: "cliente_controle_temperatura_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
             referencedRelation: "ingredientes"
             referencedColumns: ["id"]
           },
@@ -1444,6 +1466,7 @@ export type Database = {
           ingrediente_id: string
           peso_bruto_g: number
           peso_liquido_g: number
+          referencia_id: string | null
         }
         Insert: {
           fator_correcao?: number
@@ -1453,6 +1476,7 @@ export type Database = {
           ingrediente_id: string
           peso_bruto_g: number
           peso_liquido_g: number
+          referencia_id?: string | null
         }
         Update: {
           fator_correcao?: number
@@ -1462,6 +1486,7 @@ export type Database = {
           ingrediente_id?: string
           peso_bruto_g?: number
           peso_liquido_g?: number
+          referencia_id?: string | null
         }
         Relationships: [
           {
@@ -1475,7 +1500,21 @@ export type Database = {
             foreignKeyName: "composicao_fichas_uan_ingrediente_id_fkey"
             columns: ["ingrediente_id"]
             isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
+          },
+          {
+            foreignKeyName: "composicao_fichas_uan_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
             referencedRelation: "ingredientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "composicao_fichas_uan_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "referencias_nutricionais"
             referencedColumns: ["id"]
           },
         ]
@@ -1483,7 +1522,9 @@ export type Database = {
       composicao_receitas: {
         Row: {
           created_at: string
+          fator_correcao: number
           id: string
+          indice_coccao: number
           item_id: string
           item_type: string | null
           medida_caseira: string | null
@@ -1494,7 +1535,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          fator_correcao?: number
           id?: string
+          indice_coccao?: number
           item_id: string
           item_type?: string | null
           medida_caseira?: string | null
@@ -1505,7 +1548,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          fator_correcao?: number
           id?: string
+          indice_coccao?: number
           item_id?: string
           item_type?: string | null
           medida_caseira?: string | null
@@ -1520,6 +1565,87 @@ export type Database = {
             columns: ["receita_id"]
             isOneToOne: false
             referencedRelation: "receitas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      compras_orcamentos: {
+        Row: {
+          cliente_id: string
+          created_at: string | null
+          data_orcamento: string
+          fornecedor_id: string
+          id: string
+          ingrediente_id: string
+          is_embalagem: boolean | null
+          peso_volume_por_unidade: number | null
+          preco_embalagem: number | null
+          preco_por_kg_l: number
+          unidade_id: string
+          unidades_por_embalagem: number | null
+        }
+        Insert: {
+          cliente_id: string
+          created_at?: string | null
+          data_orcamento?: string
+          fornecedor_id: string
+          id?: string
+          ingrediente_id: string
+          is_embalagem?: boolean | null
+          peso_volume_por_unidade?: number | null
+          preco_embalagem?: number | null
+          preco_por_kg_l: number
+          unidade_id: string
+          unidades_por_embalagem?: number | null
+        }
+        Update: {
+          cliente_id?: string
+          created_at?: string | null
+          data_orcamento?: string
+          fornecedor_id?: string
+          id?: string
+          ingrediente_id?: string
+          is_embalagem?: boolean | null
+          peso_volume_por_unidade?: number | null
+          preco_embalagem?: number | null
+          preco_por_kg_l?: number
+          unidade_id?: string
+          unidades_por_embalagem?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compras_orcamentos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compras_orcamentos_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compras_orcamentos_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
+          },
+          {
+            foreignKeyName: "compras_orcamentos_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
+            referencedRelation: "ingredientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compras_orcamentos_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "cliente_unidades"
             referencedColumns: ["id"]
           },
         ]
@@ -1812,6 +1938,13 @@ export type Database = {
             foreignKeyName: "estoque_inspecoes_recebimento_ingrediente_id_fkey"
             columns: ["ingrediente_id"]
             isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
+          },
+          {
+            foreignKeyName: "estoque_inspecoes_recebimento_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
             referencedRelation: "ingredientes"
             referencedColumns: ["id"]
           },
@@ -2024,6 +2157,7 @@ export type Database = {
           modo_preparo: string | null
           nome: string
           peso_porcao_g: number
+          refeicoes: string[] | null
           rendimento_porcoes: number
           tempo_preparo_min: number | null
           updated_at: string | null
@@ -2036,6 +2170,7 @@ export type Database = {
           modo_preparo?: string | null
           nome: string
           peso_porcao_g: number
+          refeicoes?: string[] | null
           rendimento_porcoes?: number
           tempo_preparo_min?: number | null
           updated_at?: string | null
@@ -2048,6 +2183,7 @@ export type Database = {
           modo_preparo?: string | null
           nome?: string
           peso_porcao_g?: number
+          refeicoes?: string[] | null
           rendimento_porcoes?: number
           tempo_preparo_min?: number | null
           updated_at?: string | null
@@ -2485,15 +2621,20 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
+          dia_semana_entrega: number[] | null
           email: string | null
           endereco_completo: string | null
           frequencia_entrega: string | null
+          grupos_fornecidos: string[] | null
           id: string
+          itens_fornecidos: string[] | null
           lead_time_dias: number | null
           licenca_sanitaria_numero: string | null
           licenca_sanitaria_validade: string | null
+          lote_minimo_pedido: number | null
           nome_fantasia: string | null
           pasta_documentos_id: string | null
+          prazo_pagamento_dias: number | null
           razao_social: string
           situacao_cadastral: string | null
           status_homologacao: string | null
@@ -2513,15 +2654,20 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
+          dia_semana_entrega?: number[] | null
           email?: string | null
           endereco_completo?: string | null
           frequencia_entrega?: string | null
+          grupos_fornecidos?: string[] | null
           id?: string
+          itens_fornecidos?: string[] | null
           lead_time_dias?: number | null
           licenca_sanitaria_numero?: string | null
           licenca_sanitaria_validade?: string | null
+          lote_minimo_pedido?: number | null
           nome_fantasia?: string | null
           pasta_documentos_id?: string | null
+          prazo_pagamento_dias?: number | null
           razao_social: string
           situacao_cadastral?: string | null
           status_homologacao?: string | null
@@ -2541,15 +2687,20 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
+          dia_semana_entrega?: number[] | null
           email?: string | null
           endereco_completo?: string | null
           frequencia_entrega?: string | null
+          grupos_fornecidos?: string[] | null
           id?: string
+          itens_fornecidos?: string[] | null
           lead_time_dias?: number | null
           licenca_sanitaria_numero?: string | null
           licenca_sanitaria_validade?: string | null
+          lote_minimo_pedido?: number | null
           nome_fantasia?: string | null
           pasta_documentos_id?: string | null
+          prazo_pagamento_dias?: number | null
           razao_social?: string
           situacao_cadastral?: string | null
           status_homologacao?: string | null
@@ -2609,6 +2760,13 @@ export type Database = {
             foreignKeyName: "ingrediente_alergenicos_ingrediente_id_fkey"
             columns: ["ingrediente_id"]
             isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
+          },
+          {
+            foreignKeyName: "ingrediente_alergenicos_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
             referencedRelation: "ingredientes"
             referencedColumns: ["id"]
           },
@@ -2639,6 +2797,7 @@ export type Database = {
           eritritol_g: number | null
           especie_transgenica: string | null
           estoque_minimo_kg: number | null
+          estoque_seguranca_perc: number | null
           ferro_mg: number | null
           fibra_alimentar_g: number | null
           fluor_mg: number | null
@@ -2670,6 +2829,8 @@ export type Database = {
           potassio_mg: number | null
           preco_ultima_compra: number | null
           proteina_g: number | null
+          referencia_id: string | null
+          referencia_nutricional_id: string | null
           selenio_mcg: number | null
           sodio_mg: number | null
           sorbitol_g: number | null
@@ -2677,6 +2838,7 @@ export type Database = {
           tipo_ingrediente: string | null
           updated_at: string | null
           updated_by: string | null
+          uso_medio_diario: number | null
           vitamina_a_mcg: number | null
           vitamina_b1_mg: number | null
           vitamina_b12_mcg: number | null
@@ -2717,6 +2879,7 @@ export type Database = {
           eritritol_g?: number | null
           especie_transgenica?: string | null
           estoque_minimo_kg?: number | null
+          estoque_seguranca_perc?: number | null
           ferro_mg?: number | null
           fibra_alimentar_g?: number | null
           fluor_mg?: number | null
@@ -2748,6 +2911,8 @@ export type Database = {
           potassio_mg?: number | null
           preco_ultima_compra?: number | null
           proteina_g?: number | null
+          referencia_id?: string | null
+          referencia_nutricional_id?: string | null
           selenio_mcg?: number | null
           sodio_mg?: number | null
           sorbitol_g?: number | null
@@ -2755,6 +2920,7 @@ export type Database = {
           tipo_ingrediente?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          uso_medio_diario?: number | null
           vitamina_a_mcg?: number | null
           vitamina_b1_mg?: number | null
           vitamina_b12_mcg?: number | null
@@ -2795,6 +2961,7 @@ export type Database = {
           eritritol_g?: number | null
           especie_transgenica?: string | null
           estoque_minimo_kg?: number | null
+          estoque_seguranca_perc?: number | null
           ferro_mg?: number | null
           fibra_alimentar_g?: number | null
           fluor_mg?: number | null
@@ -2826,6 +2993,8 @@ export type Database = {
           potassio_mg?: number | null
           preco_ultima_compra?: number | null
           proteina_g?: number | null
+          referencia_id?: string | null
+          referencia_nutricional_id?: string | null
           selenio_mcg?: number | null
           sodio_mg?: number | null
           sorbitol_g?: number | null
@@ -2833,6 +3002,7 @@ export type Database = {
           tipo_ingrediente?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          uso_medio_diario?: number | null
           vitamina_a_mcg?: number | null
           vitamina_b1_mg?: number | null
           vitamina_b12_mcg?: number | null
@@ -2869,6 +3039,20 @@ export type Database = {
             columns: ["grupo_estoque_id"]
             isOneToOne: false
             referencedRelation: "ingredientes_grupos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredientes_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "referencias_nutricionais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ingredientes_referencia_nutricional_id_fkey"
+            columns: ["referencia_nutricional_id"]
+            isOneToOne: false
+            referencedRelation: "referencias_nutricionais"
             referencedColumns: ["id"]
           },
         ]
@@ -3141,6 +3325,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "fornecedores"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lotes_estoque_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
           },
           {
             foreignKeyName: "lotes_estoque_ingrediente_id_fkey"
@@ -3664,6 +3855,7 @@ export type Database = {
           created_by: string | null
           data_prevista: string | null
           id: string
+          margem_erro_compras: number | null
           status: string
           titulo: string | null
           unidade_id: string
@@ -3675,6 +3867,7 @@ export type Database = {
           created_by?: string | null
           data_prevista?: string | null
           id?: string
+          margem_erro_compras?: number | null
           status?: string
           titulo?: string | null
           unidade_id: string
@@ -3686,6 +3879,7 @@ export type Database = {
           created_by?: string | null
           data_prevista?: string | null
           id?: string
+          margem_erro_compras?: number | null
           status?: string
           titulo?: string | null
           unidade_id?: string
@@ -3817,6 +4011,13 @@ export type Database = {
             foreignKeyName: "producao_perdas_ingrediente_id_fkey"
             columns: ["ingrediente_id"]
             isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
+          },
+          {
+            foreignKeyName: "producao_perdas_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
             referencedRelation: "ingredientes"
             referencedColumns: ["id"]
           },
@@ -3852,6 +4053,7 @@ export type Database = {
       }
       producao_requisicoes: {
         Row: {
+          comprado_em: string | null
           created_at: string | null
           grupo_estoque_id: string | null
           id: string
@@ -3860,8 +4062,10 @@ export type Database = {
           qtd_necessaria_g: number
           qtd_separada_g: number | null
           status: string
+          status_compras: string | null
         }
         Insert: {
+          comprado_em?: string | null
           created_at?: string | null
           grupo_estoque_id?: string | null
           id?: string
@@ -3870,8 +4074,10 @@ export type Database = {
           qtd_necessaria_g: number
           qtd_separada_g?: number | null
           status?: string
+          status_compras?: string | null
         }
         Update: {
+          comprado_em?: string | null
           created_at?: string | null
           grupo_estoque_id?: string | null
           id?: string
@@ -3880,6 +4086,7 @@ export type Database = {
           qtd_necessaria_g?: number
           qtd_separada_g?: number | null
           status?: string
+          status_compras?: string | null
         }
         Relationships: [
           {
@@ -3888,6 +4095,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "ingredientes_grupos"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "producao_requisicoes_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
           },
           {
             foreignKeyName: "producao_requisicoes_ingrediente_id_fkey"
@@ -4196,6 +4410,84 @@ export type Database = {
           },
         ]
       }
+      referencias_nutricionais: {
+        Row: {
+          calcio_mg: number | null
+          carboidrato_disponivel_g: number | null
+          carboidrato_g: number | null
+          categoria: string | null
+          codigo_externo: string | null
+          colesterol_mg: number | null
+          created_at: string | null
+          energia_kcal: number | null
+          ferro_mg: number | null
+          fibra_alimentar_g: number | null
+          fonte: string
+          gordura_monoinsaturada_g: number | null
+          gordura_poliinsaturada_g: number | null
+          gordura_saturada_g: number | null
+          id: string
+          lipideos_g: number | null
+          magnesio_mg: number | null
+          nome: string
+          potassio_mg: number | null
+          proteina_g: number | null
+          sodio_mg: number | null
+          vitamina_c_mg: number | null
+          zinco_mg: number | null
+        }
+        Insert: {
+          calcio_mg?: number | null
+          carboidrato_disponivel_g?: number | null
+          carboidrato_g?: number | null
+          categoria?: string | null
+          codigo_externo?: string | null
+          colesterol_mg?: number | null
+          created_at?: string | null
+          energia_kcal?: number | null
+          ferro_mg?: number | null
+          fibra_alimentar_g?: number | null
+          fonte: string
+          gordura_monoinsaturada_g?: number | null
+          gordura_poliinsaturada_g?: number | null
+          gordura_saturada_g?: number | null
+          id?: string
+          lipideos_g?: number | null
+          magnesio_mg?: number | null
+          nome: string
+          potassio_mg?: number | null
+          proteina_g?: number | null
+          sodio_mg?: number | null
+          vitamina_c_mg?: number | null
+          zinco_mg?: number | null
+        }
+        Update: {
+          calcio_mg?: number | null
+          carboidrato_disponivel_g?: number | null
+          carboidrato_g?: number | null
+          categoria?: string | null
+          codigo_externo?: string | null
+          colesterol_mg?: number | null
+          created_at?: string | null
+          energia_kcal?: number | null
+          ferro_mg?: number | null
+          fibra_alimentar_g?: number | null
+          fonte?: string
+          gordura_monoinsaturada_g?: number | null
+          gordura_poliinsaturada_g?: number | null
+          gordura_saturada_g?: number | null
+          id?: string
+          lipideos_g?: number | null
+          magnesio_mg?: number | null
+          nome?: string
+          potassio_mg?: number | null
+          proteina_g?: number | null
+          sodio_mg?: number | null
+          vitamina_c_mg?: number | null
+          zinco_mg?: number | null
+        }
+        Relationships: []
+      }
       regras_validade_sanitaria: {
         Row: {
           ambito: string | null
@@ -4265,6 +4557,107 @@ export type Database = {
         }
         Relationships: []
       }
+      uan_cardapio_insumos_config: {
+        Row: {
+          cardapio_id: string | null
+          created_at: string | null
+          id: string
+          ingrediente_id: string | null
+          margem_erro: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          cardapio_id?: string | null
+          created_at?: string | null
+          id?: string
+          ingrediente_id?: string | null
+          margem_erro?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          cardapio_id?: string | null
+          created_at?: string | null
+          id?: string
+          ingrediente_id?: string | null
+          margem_erro?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uan_cardapio_insumos_config_cardapio_id_fkey"
+            columns: ["cardapio_id"]
+            isOneToOne: false
+            referencedRelation: "cardapios_uan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uan_cardapio_insumos_config_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
+          },
+          {
+            foreignKeyName: "uan_cardapio_insumos_config_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
+            referencedRelation: "ingredientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      uan_compras_monitoramento: {
+        Row: {
+          cardapio_id: string
+          created_at: string | null
+          id: string
+          ingrediente_id: string
+          quantidade_comprada: number
+          status_compras: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          cardapio_id: string
+          created_at?: string | null
+          id?: string
+          ingrediente_id: string
+          quantidade_comprada: number
+          status_compras?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          cardapio_id?: string
+          created_at?: string | null
+          id?: string
+          ingrediente_id?: string
+          quantidade_comprada?: number
+          status_compras?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uan_compras_monitoramento_cardapio_id_fkey"
+            columns: ["cardapio_id"]
+            isOneToOne: false
+            referencedRelation: "cardapios_uan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uan_compras_monitoramento_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
+            referencedRelation: "gerencial_compras_kraljic_base"
+            referencedColumns: ["ingrediente_id"]
+          },
+          {
+            foreignKeyName: "uan_compras_monitoramento_ingrediente_id_fkey"
+            columns: ["ingrediente_id"]
+            isOneToOne: false
+            referencedRelation: "ingredientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       units: {
         Row: {
           address: string | null
@@ -4329,7 +4722,29 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      gerencial_compras_kraljic_base: {
+        Row: {
+          categoria_produto_id: string | null
+          custo_referencia: number | null
+          demanda_programada_kg: number | null
+          estoque_atual: number | null
+          estoque_seguranca_perc: number | null
+          fornecedores_ativos: number | null
+          ingrediente_id: string | null
+          ingrediente_nome: string | null
+          lead_time_considerado: number | null
+          uso_medio_diario: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ingredientes_categoria_produto_id_fkey"
+            columns: ["categoria_produto_id"]
+            isOneToOne: false
+            referencedRelation: "cliente_categorias_produto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_audit_columns: { Args: { tbl: string }; Returns: undefined }

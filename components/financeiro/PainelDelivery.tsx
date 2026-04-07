@@ -159,7 +159,7 @@ export default function PainelDelivery({ competencia }: PainelDeliveryProps) {
           Nenhuma plataforma de delivery configurada.
         </Typography>
         <Typography variant="caption" color="text.disabled">
-          Clique em "Configurar Plataformas" no header para adicionar iFood, Rappi, Uber Eats, etc.
+          Clique em &quot;Configurar Plataformas&quot; no header para adicionar iFood, Rappi, Uber Eats, etc.
         </Typography>
       </Paper>
     );
