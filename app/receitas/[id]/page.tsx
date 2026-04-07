@@ -46,6 +46,8 @@ type ComposicaoDisplayItem = {
   id: string; 
   nome: string; 
   peso_liquido_g: number; 
+  fator_correcao: number;
+  indice_coccao: number;
   tipo: 'ingrediente' | 'receita' | 'material'; 
   peso_unitario_g?: number | null;
   tipo_ingrediente?: string; 
@@ -226,6 +228,8 @@ export default function DetalhesReceitaPage() {
         id: item.id || item.item_id, 
         nome: nomeItem,
         peso_liquido_g: item.peso_liquido_g || item.quantidade,
+        fator_correcao: Number(item.fator_correcao || 1),
+        indice_coccao: Number(item.indice_coccao || 1),
         tipo: item.item_type || 'ingrediente',
         peso_unitario_g: info.peso_unitario_g,
         tipo_ingrediente: info.tipo_ingrediente,
@@ -517,23 +521,28 @@ export default function DetalhesReceitaPage() {
                                 ) : null
                             }
                         />
-                        <Box sx={{ textAlign: 'right' }}>
-                            <Typography variant="body2" fontWeight={600} color="primary" sx={{ whiteSpace: 'nowrap' }}>
-                                {item.peso_liquido_g}{item.tipo === 'material' ? item.unidade_medida : 'g'}
-                            </Typography>
-                            {/* Custo Insumo */}
-                            {item.tipo === 'ingrediente' && item.preco_ultima_compra && item.peso_unitario_g ? (
-                                <Typography variant="caption" color="text.secondary">
-                                    {formatoMoeda.format((item.peso_liquido_g / item.peso_unitario_g) * item.preco_ultima_compra)}
+                            <Box sx={{ textAlign: 'right' }}>
+                                <Typography variant="body2" fontWeight={600} color="primary" sx={{ whiteSpace: 'nowrap' }}>
+                                    {item.peso_liquido_g}{item.tipo === 'material' ? item.unidade_medida : 'g'}
                                 </Typography>
-                            ) : null}
-                            {/* Custo Material */}
-                            {item.tipo === 'material' && item.preco_ultima_compra ? (
-                                <Typography variant="caption" color="text.secondary">
-                                    {formatoMoeda.format(item.peso_liquido_g * item.preco_ultima_compra)}
-                                </Typography>
-                            ) : null}
-                        </Box>
+                                {item.tipo !== 'material' && (
+                                    <Typography variant="caption" color="text.secondary" display="block">
+                                        FC: {item.fator_correcao.toFixed(2)} | IC: {item.indice_coccao.toFixed(2)}
+                                    </Typography>
+                                )}
+                                {/* Custo Insumo */}
+                                {item.tipo === 'ingrediente' && item.preco_ultima_compra && item.peso_unitario_g ? (
+                                    <Typography variant="caption" color="text.secondary">
+                                        {formatoMoeda.format((item.peso_liquido_g / item.peso_unitario_g) * item.preco_ultima_compra)}
+                                    </Typography>
+                                ) : null}
+                                {/* Custo Material */}
+                                {item.tipo === 'material' && item.preco_ultima_compra ? (
+                                    <Typography variant="caption" color="text.secondary">
+                                        {formatoMoeda.format(item.peso_liquido_g * item.preco_ultima_compra)}
+                                    </Typography>
+                                ) : null}
+                            </Box>
                     </ListItem>
                 ))}
             </List>

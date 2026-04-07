@@ -44,6 +44,7 @@ export default function UnidadesPage() {
   }, [activeClientId]);
 
   async function loadUnidades() {
+    if (!activeClientId) return;
     setLoading(true);
     const { data, error } = await (supabase as any)
       .from('cliente_unidades')
@@ -92,8 +93,8 @@ export default function UnidadesPage() {
   };
 
   const handleSave = async () => {
-    if (!formData.nome_unidade) {
-      alert('Nome da unidade é obrigatório.');
+    if (!formData.nome_unidade || !activeClientId) {
+      alert('Dados obrigatórios faltando.');
       return;
     }
 
@@ -360,7 +361,7 @@ export default function UnidadesPage() {
             </Grid>
             
             <Grid item xs={12}>
-              <Alert severity="info" size="small" icon={<Info size={16}/>}>
+              <Alert severity="info" icon={<Info size={16}/>}>
                 <Typography variant="caption">
                   Estes dados serão utilizados no cabeçalho das etiquetas e relatórios de auditoria.
                 </Typography>

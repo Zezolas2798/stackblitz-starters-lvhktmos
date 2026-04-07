@@ -1,0 +1,135 @@
+/* iPhone 15 Inspired Device Frame */
+.device-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; /* Alinhado ao topo */
+  min-height: 100vh;
+  background: radial-gradient(circle at top right, #1e1e1e, #0a0a0a);
+  padding: 20px; /* Reduzido para ganhar espaço */
+  overflow-y: auto; /* Permitir rolagem se necessário */
+}
+
+.iphone-frame-wrapper {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-shrink: 0;
+  transform-origin: top center; /* Escala relativa ao topo */
+  margin-top: 20px;
+}
+
+.iphone-frame {
+  position: relative;
+  width: 390px;
+  height: 844px;
+  background: #000;
+  border-radius: 54px;
+  box-shadow: 
+    0 0 0 11px #1f1f1f,
+    0 0 0 13px #191919,
+    0 20px 40px rgba(0,0,0,0.8);
+  border: 1px solid #333;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Dynamic Island */
+.iphone-island {
+  position: absolute;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 35px;
+  background: #000;
+  border-radius: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+}
+
+.iphone-island::after {
+  content: '';
+  width: 40px;
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+}
+
+/* Screen Content */
+.iphone-screen {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 40px;
+  background: #fff;
+  border: none;
+  overflow: hidden;
+}
+
+/* Home Indicator */
+.iphone-home-indicator {
+  position: absolute;
+  bottom: 0px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 140px;
+  height: 5px;
+  background: #000;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  z-index: 100;
+  opacity: 0.8;
+}
+
+.preview-controls {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 200;
+  width: 280px;
+  color: white;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+}
+
+.preview-controls h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.preview-controls p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.6);
+}
+
+.btn-back {
+  background: #fff;
+  color: #000;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  transition: transform 0.2s;
+}
+
+.btn-back:hover {
+  transform: translateY(-2px);
+}

@@ -13,13 +13,14 @@ declare global {
 }
 
 interface EtiquetaPrinterProps {
-  dados: DadosEtiqueta;
+  dados: DadosEtiqueta | DadosEtiqueta[];
   disabled?: boolean;
   quantidadeCopias?: number;
   onPrintSuccess?: () => void;
+  label?: string;
 }
 
-export default function EtiquetaPrinter({ dados, disabled, quantidadeCopias = 1, onPrintSuccess }: EtiquetaPrinterProps) {
+export default function EtiquetaPrinter({ dados, disabled, quantidadeCopias = 1, onPrintSuccess, label }: EtiquetaPrinterProps) {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{tipo: 'success'|'error', text: string} | null>(null);
 
@@ -32,37 +33,33 @@ export default function EtiquetaPrinter({ dados, disabled, quantidadeCopias = 1,
         throw new Error('Navegador incompatível com impressão USB direta (Use Chrome/Edge).');
       }
 
-      // 1. Conexão com Hardware (Filtro para Zebra ou Genérico)
-      // O usuário terá que selecionar a impressora no popup do navegador na primeira vez
       const device = await navigator.usb.requestDevice({ filters: [] });
-      
       await device.open();
-      // Geralmente configuração 1 e interface 0 são padrão para impressoras térmicas
       await device.selectConfiguration(1);
       await device.claimInterface(0);
 
-      // 2. Geração do Payload ZPL
-      const zplCode = gerarZPL(dados, quantidadeCopias);
       const encoder = new TextEncoder();
-      const dataBuffer = encoder.encode(zplCode);
+      const labelsArray = Array.isArray(dados) ? dados : [dados];
 
-      // 3. Envio (TransferOut)
-      // Endpoint varia. Tentamos 1, 2 ou 3 (comuns em Zebra/Elgin)
-      let impresso = false;
-      for (const endpoint of [1, 2, 3]) {
-        try {
+      for (const item of labelsArray) {
+        const zplCode = gerarZPL(item, quantidadeCopias);
+        const dataBuffer = encoder.encode(zplCode);
+
+        let impresso = false;
+        for (const endpoint of [1, 2, 3]) {
+          try {
             await device.transferOut(endpoint, dataBuffer);
             impresso = true;
-            break; // Sucesso
-        } catch (e) {
+            break; 
+          } catch (e) {
             console.log(`Endpoint ${endpoint} falhou, tentando próximo...`);
+          }
         }
+        if (!impresso) throw new Error('Falha ao comunicar com os endpoints da impressora.');
       }
 
-      if (!impresso) throw new Error('Falha ao comunicar com endpoints da impressora.');
-
       await device.close();
-      setMsg({ tipo: 'success', text: 'Etiqueta(s) enviada(s) para impressão!' });
+      setMsg({ tipo: 'success', text: `${labelsArray.length} etiqueta(s) enviada(s) com sucesso!` });
       if (onPrintSuccess) onPrintSuccess();
 
     } catch (err: any) {

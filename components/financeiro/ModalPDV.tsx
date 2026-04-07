@@ -35,6 +35,7 @@ export default function ModalPDV({ open, onClose }: ModalPDVProps) {
   }, [open, activeClientId]);
 
   async function loadIntegracoes() {
+    if (!activeClientId) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('fin_integracoes_pdv')
@@ -64,11 +65,11 @@ export default function ModalPDV({ open, onClose }: ModalPDVProps) {
   }
 
   async function handleSave() {
-    if (!nome.trim()) return;
+    if (!nome.trim() || !activeClientId) return;
     setSaving(true);
 
     try {
-      const payload = {
+      const payload: any = {
         cliente_id: activeClientId,
         unidade_id: unidadeId || null,
         nome: nome.trim(),

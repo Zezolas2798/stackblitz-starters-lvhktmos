@@ -13,10 +13,9 @@ import {
 } from '@mui/material';
 import { Save, ArrowLeft, Trash2, PlusCircle, Calculator, ActivitySquare } from 'lucide-react';
 
-const CATEGORIAS_UAN: CategoriaUAN[] = [
-  'Prato Principal', 'Guarnição', 'Salada', 'Proteína',
-  'Sobremesa', 'Sopa', 'Desjejum', 'Lanche', 'Bebida'
-];
+import { MEAL_CATEGORY_GROUPS, REFEICAO_TO_GROUP, ALL_UAN_CATEGORIES } from '@/lib/uan-constants';
+
+const OPCOES_REFEICOES = ['Desjejum', 'Colação', 'Almoço', 'Lanche da Tarde', 'Jantar', 'Ceia'];
 
 // Componentes Auxiliares para Tabela
 const TableInput = ({ value, onChange, step = 1 }: { value: any, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, step?: number }) => (
@@ -57,7 +56,8 @@ export default function NovaFichaUANPage() {
     rendimento_porcoes: 10,
     peso_porcao_g: 150,
     modo_preparo: '',
-    tempo_preparo_min: 30
+    tempo_preparo_min: 30,
+    refeicoes: []
   });
 
   // Linhas da Composição
@@ -145,6 +145,7 @@ export default function NovaFichaUANPage() {
         peso_porcao_g: Number(ficha.peso_porcao_g || 0),
         modo_preparo: ficha.modo_preparo || '',
         tempo_preparo_min: Number(ficha.tempo_preparo_min || 0),
+        refeicoes: ficha.refeicoes || [],
         cliente_id: activeClientId
       };
 
@@ -208,7 +209,29 @@ export default function NovaFichaUANPage() {
           </Grid>
           <Grid item xs={12} md={3}>
             <TextField select fullWidth label="Categoria" value={ficha.categoria_uan} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, categoria_uan: e.target.value as CategoriaUAN })}>
-              {CATEGORIAS_UAN.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              {(() => {
+                let availableCategories: string[] = [];
+                if (!ficha.refeicoes || ficha.refeicoes.length === 0) {
+                  availableCategories = ALL_UAN_CATEGORIES;
+                } else {
+                  const groups = new Set(ficha.refeicoes.map(r => REFEICAO_TO_GROUP[r]));
+                  const combined = new Set<string>();
+                  groups.forEach(g => {
+                    if (g && MEAL_CATEGORY_GROUPS[g]) {
+                      MEAL_CATEGORY_GROUPS[g].forEach(c => combined.add(c));
+                    }
+                  });
+                  availableCategories = Array.from(combined).sort();
+                }
+
+                // Garante que o valor atual apareça mesmo que não esteja no filtro (legado ou pré-selecionado)
+                const finalOptions = [...availableCategories];
+                if (ficha.categoria_uan && !finalOptions.includes(ficha.categoria_uan)) {
+                  finalOptions.push(ficha.categoria_uan);
+                }
+
+                return finalOptions.map(c => <MenuItem key={c} value={c}>{c}</MenuItem>);
+              })()}
             </TextField>
           </Grid>
           <Grid item xs={12} md={3}>
@@ -224,6 +247,25 @@ export default function NovaFichaUANPage() {
                 <TextField fullWidth type="number" label="Peso da Porção (g)" value={ficha.peso_porcao_g} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, peso_porcao_g: Number(e.target.value) })} />
               </Grid>
             </Grid>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Autocomplete
+              multiple
+              options={OPCOES_REFEICOES}
+              value={ficha.refeicoes || []}
+              onChange={(_, val) => setFicha({ ...ficha, refeicoes: val })}
+              renderInput={(params) => (
+                <TextField {...params} label="Refeições Permitidas" placeholder="Ex: Almoço, Jantar..." />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip label={option} size="small" {...getTagProps({ index })} key={option} />
+                ))
+              }
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+              Deixe vazio para permitir em todas as refeições.
+            </Typography>
           </Grid>
           <Grid item xs={12} md={6}>
             {/* Box Dinâmico de Custo */}

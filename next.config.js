@@ -7,11 +7,6 @@ const nextConfig = {
   },
   eslint: {
     ignoreDuringBuilds: true,
-  },
-  // Otimização para economizar memória e evitar SIGTERM no Vercel
-  experimental: {
-    workerThreads: false,
-    cpus: 1
   }
 }
 

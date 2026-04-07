@@ -39,6 +39,7 @@ export default function ListaModelosPage() {
     const { data, error } = await (supabase as any).from('checklist_modelos')
       .select('*')
       .eq('cliente_id', activeClientId)
+      .eq('ativo', true) // Filtro de Soft Delete
       .order('created_at', { ascending: false });
 
     if (data) {
@@ -55,9 +56,12 @@ export default function ListaModelosPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este modelo? Isso não afetará auditorias passadas, mas impedirá novas.')) return;
     
-    // Soft Delete (Recomendado para GxP) ou Delete Real se nunca usado
-    // Aqui faremos delete real para simplificar a gestão de modelos não usados
-    const { error } = await (supabase as any).from('checklist_modelos').delete().eq('id', id);
+    // Soft Delete (Recomendado para GxP)
+    // Atualizamos 'ativo' para false em vez de deletar o registro físico
+    const { error } = await (supabase as any)
+        .from('checklist_modelos')
+        .update({ ativo: false })
+        .eq('id', id);
     
     if (error) {
         alert('Erro ao excluir: ' + error.message);

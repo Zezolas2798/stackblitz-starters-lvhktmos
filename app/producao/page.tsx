@@ -77,6 +77,7 @@ export default function ProducaoDashboardPage() {
   }, [unidadeId]);
 
   async function fetchData() {
+    if (!unidadeId || !activeClientId) return;
     setLoading(true);
     setError('');
     try {

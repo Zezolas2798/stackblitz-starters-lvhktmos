@@ -48,21 +48,6 @@ interface Requisicao {
   } | null;
 }
 
-interface LoteSugestao {
-  lote_id: string;
-  codigo: string;
-  validade: string;
-  qtd_disponivel_g: number;
-  qtd_a_usar_g: number;
-  qtd_a_usar_original: number; // Editable value in original unit
-  unidade_medida: string;
-  fator: number;
-  qtd_a_usar_embalagem?: number;
-  peso_unitario?: number;
-  unidade_embalagem?: string;
-  inputMode?: 'peso' | 'embalagem';
-  qtd_embalagens?: number;
-}
 
 interface ReceitaOpt {
   id: string;

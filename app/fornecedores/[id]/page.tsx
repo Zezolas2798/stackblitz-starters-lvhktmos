@@ -8,8 +8,10 @@ import {
   Container, Typography, Box, Button, Paper, TextField,
   CircularProgress, Grid, Tabs, Tab, Alert, MenuItem, Select,
   FormControl, InputLabel, Chip, Tooltip, InputAdornment, Snackbar,
-  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  Autocomplete, Checkbox
 } from '@mui/material';
+import { useTheme, alpha } from '@mui/material/styles';
 import { ArrowLeft, Save, HelpCircle, ChevronRight, Settings, Search, Loader2, Trash2 } from 'lucide-react';
 
 const MODALIDADES_COMPRAS = [
@@ -45,6 +47,7 @@ export default function EditFornecedorPage() {
   const queryTipo = searchParams?.get('tipo') || 'FORNECEDOR';
   const isNew = id === 'novo';
   const { activeClientId } = useClient();
+  const theme = useTheme();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,6 +57,9 @@ export default function EditFornecedorPage() {
   const [folderError, setFolderError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'info' });
   const [categoriasConfig, setCategoriasConfig] = useState<any[]>([]);
+  const [gruposDisponiveis, setGruposDisponiveis] = useState<any[]>([]);
+  const [itensDisponiveis, setItensDisponiveis] = useState<any[]>([]);
+  const [carregandoPortfolio, setCarregandoPortfolio] = useState(false);
 
   const [fornecedor, setFornecedor] = useState<any>({
     razao_social: '',
@@ -69,6 +75,8 @@ export default function EditFornecedorPage() {
     cnaes_secundarios: null,
     situacao_cadastral: '',
     categorias_compras: [],
+    grupos_fornecidos: [],
+    itens_fornecidos: [],
     tipo: queryTipo
   });
   const [originalFornecedor, setOriginalFornecedor] = useState<any>(null);
@@ -122,7 +130,6 @@ export default function EditFornecedorPage() {
     
     let cats = data || [];
     if (fornecedor.tipo === 'FORNECEDOR') {
-      // Garantir que as modalidades de compras básicas sempre existam na lista de opções
       const existingNames = cats.map((c: any) => c.nome);
       MODALIDADES_COMPRAS.forEach(m => {
         if (!existingNames.includes(m)) {
@@ -133,8 +140,132 @@ export default function EditFornecedorPage() {
     setCategoriasConfig(cats);
   };
 
+  // Efeito para carregar o portfólio assim que as categorias do fornecedor estiverem disponíveis
+  useEffect(() => {
+    if (activeClientId && fornecedor.id && fornecedor.categorias_compras?.length > 0) {
+      fetchPortfolioData(fornecedor.categorias_compras);
+    } else if (fornecedor.categorias_compras?.length === 0) {
+      setGruposDisponiveis([]);
+      setItensDisponiveis([]);
+    }
+  }, [activeClientId, fornecedor.id, JSON.stringify(fornecedor.categorias_compras)]);
+
+  const fetchPortfolioData = async (categoriasToFetch?: string[]) => {
+    if (!activeClientId) return;
+    
+    const categorias = categoriasToFetch || fornecedor.categorias_compras || [];
+    if (categorias.length === 0) {
+      setGruposDisponiveis([]);
+      setItensDisponiveis([]);
+      return;
+    }
+
+    try {
+      setCarregandoPortfolio(true);
+      
+      // 1. Buscar Grupos (registros de cliente_categorias_produto com modalidades selecionadas)
+      const { data: grupos } = await (supabase as any)
+        .from('cliente_categorias_produto')
+        .select('*')
+        .eq('cliente_id', activeClientId)
+        .in('modalidade', categorias)
+        .order('modalidade')
+        .order('nome');
+
+      setGruposDisponiveis(grupos || []);
+
+      // 2. Buscar Grupos de Estoque para mapeamento
+      const { data: stockGroups } = await (supabase as any)
+        .from('ingredientes_grupos')
+        .select('id, categoria_id')
+        .eq('cliente_id', activeClientId);
+      
+      const stockGroupToCat: Record<string, string> = {};
+      (stockGroups || []).forEach((sg: any) => {
+        if (sg.categoria_id) stockGroupToCat[sg.id] = sg.categoria_id;
+      });
+
+      // 3. Buscar Subgrupos (registros de ingredientes)
+      const { data: ingredientes } = await (supabase as any)
+        .from('ingredientes')
+        .select('id, nome, grupo_estoque_id, categoria_produto_id')
+        .eq('cliente_id', activeClientId)
+        .is('deleted_at', null)
+        .order('nome');
+      
+      // Mapear modalidades
+      const catMap: Record<string, string> = {};
+      const { data: allCats } = await (supabase as any)
+        .from('cliente_categorias_produto')
+        .select('id, modalidade')
+        .eq('cliente_id', activeClientId);
+      (allCats || []).forEach((c: any) => { catMap[c.id] = c.modalidade; });
+
+      const mappedItens = (ingredientes || []).map((i: any) => {
+        // Encontrar a categoria comercial (ex: 'Leite e Derivados')
+        const catId = i.categoria_produto_id || stockGroupToCat[i.grupo_estoque_id];
+        // Encontrar a modalidade (ex: 'ALIMENTOS')
+        const mod = catId ? catMap[catId] : (i.grupo_estoque_id ? catMap[i.grupo_estoque_id] : null);
+        
+        return {
+          id: i.id,
+          nome: i.nome,
+          categoria_id: catId,
+          modalidade: mod
+        };
+      });
+
+      const filteredItens = mappedItens.filter((i: any) => i.modalidade && categorias.includes(i.modalidade));
+
+      setItensDisponiveis(filteredItens);
+    } catch (err) {
+      console.error('Erro ao carregar portfólio:', err);
+    } finally {
+      setCarregandoPortfolio(false);
+    }
+  };
+
   const handleChange = (field: string, value: any) => {
-    setFornecedor((prev: any) => ({ ...prev, [field]: value }));
+    setFornecedor((prev: any) => {
+      const next = { ...prev, [field]: value };
+      return next;
+    });
+    
+    // Se mudou categorias_compras, buscar portfólio restrito
+    if (field === 'categorias_compras') {
+      fetchPortfolioData(value);
+    }
+  };
+
+  const handleUpdateGrupos = (event: any, newValue: any[]) => {
+    const novosIds = newValue.map(v => v.id);
+    
+    setFornecedor((prev: any) => {
+      // Se removeu um grupo, remover também os subgrupos (itens) vinculados a ele
+      const gruposRemovidos = (prev.grupos_fornecidos || []).filter((id: string) => !novosIds.includes(id));
+      let subgruposRestantes = prev.itens_fornecidos || [];
+      
+      if (gruposRemovidos.length > 0) {
+        const subgruposParaRemover = itensDisponiveis
+          .filter((i: any) => gruposRemovidos.includes(i.categoria_id))
+          .map((i: any) => i.id);
+          
+        subgruposRestantes = subgruposRestantes.filter((id: string) => !subgruposParaRemover.includes(id));
+      }
+      
+      return {
+        ...prev,
+        grupos_fornecidos: novosIds,
+        itens_fornecidos: subgruposRestantes
+      };
+    });
+  };
+
+  const handleUpdateSubgrupos = (event: any, newValue: any[]) => {
+    setFornecedor((prev: any) => ({
+      ...prev,
+      itens_fornecidos: newValue.map(v => v.id)
+    }));
   };
 
   // ─── Busca CNPJ via Brasil API ───
@@ -208,6 +339,8 @@ export default function EditFornecedorPage() {
         cnaes_secundarios: fornecedor.cnaes_secundarios || null,
         situacao_cadastral: fornecedor.situacao_cadastral || null,
         categorias_compras: fornecedor.categorias_compras || [],
+        grupos_fornecidos: fornecedor.grupos_fornecidos || [],
+        itens_fornecidos: fornecedor.itens_fornecidos || [],
         tipo: fornecedor.tipo
       };
 
@@ -485,7 +618,7 @@ export default function EditFornecedorPage() {
                     })}
                     {categoriasConfig.length === 0 && (
                       <Typography variant="body2" color="text.secondary">
-                        Nenhuma categoria configurada. Vá em "Gerenciar Categorias" para definir.
+                        Nenhuma categoria configurada.
                       </Typography>
                     )}
                   </Box>
@@ -494,6 +627,117 @@ export default function EditFornecedorPage() {
                   </Typography>
                 </Paper>
               </Grid>
+
+              {/* ── Seleção Granular de Portfólio (Refatorado - Multi-categoria) ── */}
+              {fornecedor.categorias_compras?.length > 0 && (
+                <Grid item xs={12}>
+                  <Paper variant="outlined" sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="h6" fontWeight="bold" sx={{ color: 'primary.main', mb: 0.5 }}>
+                        Hierarquia de Portfólio: Grupos & Subgrupos
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Especifique o portfólio detalhado conforme as categorias selecionadas acima.
+                      </Typography>
+                    </Box>
+
+                    <Grid container spacing={3}>
+                      {/* GRUPOS DE COMPRAS */}
+                      <Grid item xs={12} md={6}>
+                        <Autocomplete
+                          multiple
+                          disableCloseOnSelect
+                          options={gruposDisponiveis}
+                          groupBy={(option) => option.modalidade || 'Outros'}
+                          getOptionLabel={(option) => option.nome}
+                          value={gruposDisponiveis.filter(g => (fornecedor.grupos_fornecidos || []).includes(g.id))}
+                          onChange={handleUpdateGrupos}
+                          loading={carregandoPortfolio}
+                          renderOption={(props, option, { selected }) => (
+                            <li {...props}>
+                              <Checkbox
+                                size="small"
+                                style={{ marginRight: 8 }}
+                                checked={selected}
+                              />
+                              {option.nome}
+                            </li>
+                          )}
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              label="Grupos Fornecidos"
+                              placeholder="Ex: Farinhas, Carnes, Caixas..."
+                              helperText="Grupos organizados por modalidade"
+                            />
+                          )}
+                          renderTags={(value, getTagProps) =>
+                            value.map((option, index) => (
+                              <Chip
+                                label={option.nome}
+                                {...getTagProps({ index })}
+                                color="primary"
+                                size="small"
+                              />
+                            ))
+                          }
+                        />
+                      </Grid>
+
+                      {/* SUBGRUPOS DE COMPRAS */}
+                      {(fornecedor.grupos_fornecidos || []).length > 0 && (
+                        <Grid item xs={12} md={6}>
+                          <Autocomplete
+                            multiple
+                            disableCloseOnSelect
+                            options={itensDisponiveis.filter(i => 
+                              // Opções: Itens que pertencem aos grupos selecionados OR itens órfãos (sem grupo)
+                              (fornecedor.grupos_fornecidos || []).includes(i.categoria_id) || !i.categoria_id
+                            )}
+                            getOptionLabel={(option) => option.nome}
+                            value={itensDisponiveis.filter(i => (fornecedor.itens_fornecidos || []).includes(i.id))}
+                            onChange={handleUpdateSubgrupos}
+                            renderOption={(props, option, { selected }) => (
+                              <li {...props}>
+                                <Checkbox
+                                  size="small"
+                                  style={{ marginRight: 8 }}
+                                  checked={selected}
+                                />
+                                {option.nome}
+                              </li>
+                            )}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Sub grupos de Compras"
+                                placeholder="Ex: Farinha de trigo..."
+                                helperText="Especifique os itens dos grupos selecionados"
+                              />
+                            )}
+                            renderTags={(value, getTagProps) =>
+                              value.map((option, index) => (
+                                <Chip
+                                  label={option.nome}
+                                  {...getTagProps({ index })}
+                                  color="secondary"
+                                  size="small"
+                                />
+                              ))
+                            }
+                          />
+                        </Grid>
+                      )}
+                    </Grid>
+
+                    {gruposDisponiveis.length === 0 && !carregandoPortfolio && (
+                      <Alert severity="info" sx={{ mt: 2 }}>
+                        Nenhum Grupo configurado no sistema para as categorias selecionadas.
+                      </Alert>
+                    )}
+                  </Paper>
+                </Grid>
+              )}
 
               {/* ── Nome Fantasia ── */}
               <Grid item xs={12} md={6}>

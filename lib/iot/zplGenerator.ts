@@ -58,7 +58,7 @@ export function gerarZPL(dados: DadosEtiqueta, quantidadeCopias: number = 1): st
 ^FO25,30^A0N,35,35^FB430,1,0,L,0^FD${dados.produto.nome.toUpperCase()}^FS
 
 // --- 2. STATUS E PESO ---
-^FO25,75^A0N,22,22^FD${dados.produto.tipoArmazenamento.toUpperCase()}^FS
+^FO25,75^A0N,22,22^FDCONSERVACAO: ${dados.produto.tipoArmazenamento.toUpperCase()}^FS
 ^FO380,75^A0N,22,22^FB80,1,0,R,0^FD${dados.produto.peso}^FS
 ^FO25,105^GB430,1,1^FS
 

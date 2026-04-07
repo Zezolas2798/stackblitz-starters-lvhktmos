@@ -27,6 +27,7 @@ import {
   Toolbar,
   Collapse
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
 
 // Ícones Material UI
 import {
@@ -58,7 +59,9 @@ import {
   ExpandMore,
   ListAlt,
   MenuBook,
-  PointOfSale
+  PointOfSale,
+  CorporateFare,
+  GppGood
 } from '@mui/icons-material';
 
 interface AppSidebarProps {
@@ -70,16 +73,53 @@ export function AppSidebar({ width }: AppSidebarProps) {
   const router = useRouter();
   const { mobileOpen, toggleMobileSidebar, closeMobileSidebar, desktopOpen } = useClient();
   const { mode } = useThemeContext();
+  const theme = useTheme();
 
   // Hook de Permissões: Traz o poder de decisão para o menu
   const { can, loading: loadingPermissions } = usePermission();
-  
+
   // Estado para menus aninhados
   const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>({});
 
   const toggleSubmenu = (menuLabel: string) => {
     setOpenMenus(prev => ({ ...prev, [menuLabel]: !prev[menuLabel] }));
   };
+
+  // Efeito Especial: Auto-expandir ao trocar de rota, mas permitir fechar manualmente
+  React.useEffect(() => {
+    const newOpenMenus = { ...openMenus };
+    let hasChanges = false;
+
+    menuGroups.forEach(group => {
+      if (group.subItems) {
+        const isActive = group.subItems.some(sub =>
+          pathname === sub.href || (sub.href && sub.href !== '/' && pathname?.startsWith(sub.href!)) ||
+          (sub.subItems && sub.subItems.some((s: any) => pathname === s.href || (s.href && s.href !== '/' && pathname?.startsWith(s.href!))))
+        );
+        if (isActive && group.label && !openMenus[group.label as string]) {
+          newOpenMenus[group.label as string] = true;
+          hasChanges = true;
+        }
+      }
+      // Checar sub-menus internos tbm
+      if (group.subItems) {
+        group.subItems.forEach((sub: any) => {
+          if (sub.subItems) {
+            const isSubActive = sub.subItems.some((s: any) => pathname === s.href || (s.href && s.href !== '/' && pathname?.startsWith(s.href!)));
+            if (isSubActive && sub.label && !openMenus[sub.label as string]) {
+              newOpenMenus[sub.label as string] = true;
+              hasChanges = true;
+            }
+          }
+        });
+      }
+    });
+
+    if (hasChanges) {
+      setOpenMenus(newOpenMenus);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const handleLogout = async () => {
     try {
@@ -91,255 +131,275 @@ export function AppSidebar({ width }: AppSidebarProps) {
     }
   };
 
-  // DEFINIÇÃO INTELIGENTE DO MENU
-  // Cada item agora pergunta: "Eu sou visível para este usuário?"
+  // DEFINIÇÃO CONSOLIDADA EM 8 DEPARTAMENTOS
   const menuGroups = [
     {
-      title: 'OPERACIONAL',
-      items: [
-        {
-          label: 'Dashboard',
-          href: '/',
-          icon: <Dashboard />,
-          visible: true // Público
-        },
-        {
-          label: 'Planejamento',
-          icon: <EventNote />,
-          visible: can('production.order.create') || can('nutrition.recipe.view'),
-          subItems: [
-            {
-              label: 'Ordens de Serviço',
-              href: '/planejamento',
-              icon: <Assignment />,
-              visible: can('production.order.create')
-            },
-            {
-              label: 'Gestão de Cardápios (UAN)',
-              href: '/uan',
-              icon: <MenuBook />,
-              visible: can('nutrition.recipe.view'),
-              isGroup: true
-            },
-            {
-              label: 'Planejamento Mensal',
-              href: '/uan/cardapios',
-              icon: <EventNote />,
-              visible: can('nutrition.recipe.view')
-            },
-            {
-              label: 'Logística e Compra',
-              href: '/uan/lista-compras',
-              icon: <LocalShipping />,
-              visible: can('nutrition.recipe.view')
-            },
-            {
-              label: 'Relatório de Custos',
-              href: '/uan/custos',
-              icon: <AttachMoney />,
-              visible: can('nutrition.recipe.view')
-            }
-          ]
-        },
-        {
-          label: 'Produção',
-          href: '/producao',
-          icon: <Restaurant />,
-          // Visível se puder ver separação (Cozinha) ou criar OP
-          visible: can('production.picking.view') || can('production.order.create')
-        },
-        {
-          label: 'Recebimento de Entrada',
-          href: '/estoque/entrada',
-          icon: <LocalShipping />,
-          visible: can('stock.balance.view') // Permissão de estoque mantida
-        },
-        {
-          label: 'Estoque e Prazos',
-          href: '/estoque',
-          icon: <Inventory />,
-          visible: can('stock.balance.view')
-        },
-        {
-          label: 'Compras',
-          href: '/compras',
-          icon: <ShoppingCart />,
-          visible: can('stock.balance.view') || can('production.order.create') || can('production.picking.view')
-        },
-        {
-          label: 'Documentos e GED',
-          href: '/documentos',
-          icon: <Description />,
-          visible: can('stock.suppliers.manage')
-        },
-        {
-          label: 'Gestão de Tarefas',
-          href: '/operacional/tarefas',
-          icon: <Assignment />,
-          visible: can('production.picking.view') || can('quality.checklist.execute')
-        },
-        {
-          label: 'Etiquetas',
-          href: '/etiquetas',
-          icon: <Tag />,
-          visible: can('production.picking.view') || can('stock.balance.view')
-        },
-      ]
+      label: 'Dashboard',
+      href: '/',
+      icon: <Dashboard />,
+      visible: true
     },
     {
-      title: 'FORNECEDORES E SERVIÇOS',
-      items: [
+      label: 'Financeiro',
+      icon: <AccountBalance />,
+      visible: can('finance.view') || can('finance.cashflow.view'),
+      subItems: [
         {
-          label: 'Fornecedores',
-          href: '/fornecedores',
-          icon: <VerifiedUser />,
-          visible: can('stock.suppliers.manage')
-        },
-        {
-          label: 'Serviços',
-          href: '/servicos',
-          icon: <Engineering />,
-          visible: can('stock.suppliers.manage')
-        },
-      ]
-    },
-    {
-      title: 'GESTÃO FINANCEIRA',
-      items: [
-        {
-          label: 'Dashboard Executivo',
+          label: 'Dashboard Financeiro',
           href: '/financeiro/dashboard',
           icon: <Assessment />,
-          visible: can('quality.audit.perform') || can('sys.roles.manage')
+          visible: can('finance.view')
         },
         {
-          label: 'Vendas e Matriz BCG',
+          label: 'Vendas & Faturamento',
           href: '/financeiro/vendas',
-          icon: <AccountBalance />,
-          visible: can('quality.audit.perform') || can('sys.roles.manage')
-        },
-        {
-          label: 'Conciliação e Taxas',
-          href: '/financeiro/conciliacao',
-          icon: <AttachMoney />,
-          visible: can('quality.audit.perform') || can('sys.roles.manage')
+          icon: <PointOfSale />,
+          visible: can('finance.view')
         },
         {
           label: 'Lançamento de Despesas',
           href: '/financeiro/despesas',
           icon: <Payments />,
-          visible: can('quality.audit.perform') || can('sys.roles.manage')
+          visible: can('finance.view')
         },
         {
-          label: 'Contas a pagar e Vencimentos',
+          label: 'Contas a Pagar',
           href: '/financeiro/contas-pagar',
-          icon: <EventNote />,
-          visible: can('quality.audit.perform') || can('sys.roles.manage')
+          icon: <AttachMoney />,
+          visible: can('finance.view')
         },
         {
-          label: 'Análise Financeira Estoque',
-          href: '/financeiro/estoque',
-          icon: <Inventory />,
-          visible: can('quality.audit.perform') || can('sys.roles.manage')
+          label: 'Conciliação Bancária',
+          href: '/financeiro/conciliacao',
+          icon: <AccountBalance />,
+          visible: can('finance.view')
         },
+        {
+          label: 'Valor em Estoque',
+          href: '/financeiro/estoque',
+          icon: <TrendingUp />,
+          visible: can('finance.view')
+        }
       ]
     },
     {
-      title: 'TÉCNICO & P&D',
-      items: [
+      label: 'Compras',
+      icon: <ShoppingCart />,
+      visible: can('stock.orders.manage'),
+      subItems: [
         {
-          label: 'Receitas & Fichas',
-          icon: <RestaurantMenu />,
+          label: 'Inteligência de Suprimentos',
+          href: '/compras/inteligencia',
+          icon: <Assessment />,
+          visible: can('stock.orders.manage')
+        },
+        {
+          label: 'Planejamento de Compras',
+          href: '/compras',
+          icon: <Assignment />,
+          visible: can('stock.orders.manage')
+        },
+        {
+          label: 'Orçamentos de Fornecedores',
+          href: '/compras/orcamentos',
+          icon: <AttachMoney />,
+          visible: can('stock.orders.manage')
+        },
+        {
+          label: 'Lançamento de Notas',
+          href: '/compras/lancamentos',
+          icon: <Description />,
+          visible: can('stock.orders.manage')
+        }
+      ]
+    },
+    {
+      label: 'Estoque',
+      icon: <Inventory />,
+      visible: can('stock.balance.view'),
+      subItems: [
+        {
+          label: 'Estoque',
+          href: '/estoque',
+          icon: <Category />,
+          visible: can('stock.balance.view')
+        },
+        {
+          label: 'Recebimento (Entrada)',
+          href: '/estoque/entrada',
+          icon: <LocalShipping />,
+          visible: can('stock.balance.view')
+        },
+        {
+          label: 'Etiquetas',
+          href: '/etiquetas',
+          icon: <Tag />,
+          visible: can('stock.balance.view')
+        }
+      ]
+    },
+    {
+      label: 'Qualidade',
+      icon: <VerifiedUser />,
+      visible: can('nutrition.recipe.view') || can('quality.audit.perform'),
+      subItems: [
+        {
+          label: 'Central de Consultoria',
+          href: '/consultoria',
+          icon: <GppGood />,
+          visible: true
+        },
+        {
+          label: 'Insumos e Materiais',
+          icon: <Inventory2 />,
           visible: can('nutrition.recipe.view'),
           subItems: [
-            {
-              label: 'Cardápio Ordens de Produção (Indústria)',
-              href: '/receitas',
-              icon: <ListAlt />,
-              visible: can('nutrition.recipe.view')
-            },
-            {
-              label: 'Cardápios UAN (Fichas Técnicas)',
-              href: '/uan/fichas',
-              icon: <MenuBook />,
-              visible: can('nutrition.recipe.view')
-            }
+            { label: 'Ingredientes', href: '/ingredientes', visible: true },
+            { label: 'Materiais e Embalagens', href: '/materiais', visible: true }
           ]
         },
         {
-          label: 'Ingredientes',
-          href: '/ingredientes',
-          icon: <Description />,
-          visible: can('nutrition.ingredient.view')
+          label: 'Fichas Técnicas',
+          icon: <RestaurantMenu />,
+          visible: can('nutrition.recipe.view'),
+          subItems: [
+            { label: 'Módulo Industrial', href: '/receitas', visible: true },
+            { label: 'Módulo UAN', href: '/uan/fichas', visible: true }
+          ]
         },
         {
-          label: 'Materiais (Embalagem)',
-          href: '/materiais',
-          icon: <Inventory2 />,
-          visible: can('stock.balance.view') // Aproveitando visão de estoque
-        },
+          label: 'Auditorias & Checklists',
+          icon: <Assignment />,
+          visible: can('quality.audit.perform'),
+          subItems: [
+            { label: 'Realizar Inspeção', href: '/qualidade', visible: true },
+            { label: 'Controle de Produção', href: '/qualidade/controle-producao', visible: true },
+            { label: 'Modelos de Checklist', href: '/qualidade/modelos', visible: true }
+          ]
+        }
       ]
     },
     {
-      title: 'QUALIDADE (GxP)',
-      items: [
+      label: 'Documentos',
+      icon: <Description />,
+      visible: true,
+      subItems: [
         {
-          label: 'Certificações (SIVISA)',
+          label: 'Central de Documentos',
+          href: '/documentos',
+          icon: <Description />,
+          visible: true
+        },
+        {
+          label: 'Relatórios & BI',
+          icon: <Assessment />,
+          visible: true,
+          subItems: [
+            { label: 'Painel Geral', href: '/relatorios', visible: true },
+            { label: 'Desempenho da Equipe', href: '/relatorios/desempenho', visible: true },
+            { label: 'Fichas e Impressos', href: '/relatorios/receitas', visible: true }
+          ]
+        },
+        {
+          label: 'Certificações SIVISA',
           href: '/certificacoes',
           icon: <VerifiedUser />,
-          visible: can('quality.audit.perform') || can('quality.action_plan.manage')
-        },
-        {
-          label: 'Controle Produção',
-          href: '/qualidade/controle-producao',
-          icon: <Assignment />,
-          visible: can('quality.checklist.execute') || can('quality.audit.perform')
-        },
-        {
-          label: 'Auditorias',
-          href: '/qualidade',
-          icon: <Assignment />,
-          // Visível se puder auditar (Nutri) OU preencher checklist (Chef)
-          visible: can('quality.audit.perform') || can('quality.checklist.execute')
-        },
-        {
-          label: 'Modelos',
-          href: '/qualidade/modelos',
-          icon: <VerifiedUser />,
-          visible: can('quality.action_plan.manage') // Geralmente Nutri/Gestor
-        },
-        {
-          label: 'Relatórios',
-          href: '/relatorios',
-          icon: <Description />,
-          visible: can('quality.audit.perform')
-        },
+          visible: true
+        }
       ]
     },
     {
-      title: 'SISTEMA',
-      items: [
+      label: 'Planejamento',
+      icon: <EventNote />,
+      visible: can('production.order.create') || can('nutrition.menu.manage'),
+      subItems: [
         {
-          label: 'Configurações',
-          href: '/config',
-          icon: <Settings />,
-          visible: true // Configs básicas (perfil) liberadas
+          label: '🤝 Comercial',
+          icon: <BusinessCenter />,
+          visible: can('production.order.create'),
+          subItems: [
+            { label: 'Ordens de Serviço (OP)', href: '/planejamento', visible: true }
+          ]
         },
         {
-          label: 'Cargos & Acessos',
+          label: '🥗 UAN',
+          icon: <Restaurant />,
+          visible: can('nutrition.menu.manage'),
+          subItems: [
+            { label: 'Cardápio Mensal', href: '/uan/cardapios', visible: true },
+            { label: 'Previsão de Custos', href: '/uan/lista-compras', visible: true }
+          ]
+        }
+      ]
+    },
+    {
+      label: 'Operação',
+      icon: <Engineering />,
+      visible: can('production.order.execute') || can('sys.tasks.manage'),
+      subItems: [
+        {
+          label: 'Módulo de Produção',
+          href: '/producao',
+          icon: <Restaurant />,
+          visible: can('production.order.execute')
+        },
+        {
+          label: 'Gestão de Tarefas',
+          href: '/operacional/tarefas',
+          icon: <Assignment />,
+          visible: can('sys.tasks.manage')
+        }
+      ]
+    },
+    {
+      label: 'Sistema',
+      icon: <Settings />,
+      visible: true,
+      subItems: [
+        {
+          label: 'Unidades & Filiais',
+          href: '/config/unidades',
+          icon: <CorporateFare />,
+          visible: true
+        },
+        {
+          label: 'Categorias do Sistema',
+          href: '/config/categorias',
+          icon: <Category />,
+          visible: true
+        },
+        {
+          label: 'Parâmetros de Estoque',
+          href: '/config/estoque',
+          icon: <Inventory2 />,
+          visible: true
+        },
+        {
+          label: 'Cadastro de Fornecedores',
+          href: '/fornecedores',
+          icon: <VerifiedUser />,
+          visible: can('stock.suppliers.manage')
+        },
+        {
+          label: 'Cadastro de Serviços',
+          href: '/servicos',
+          icon: <Engineering />,
+          visible: true
+        },
+        {
+          label: 'Cargos & Permissões',
           href: '/config/cargos',
           icon: <AdminPanelSettings />,
-          // A PROVA DE FOGO: Só Gestor vê isso agora!
           visible: can('sys.roles.manage')
         },
         {
-          label: 'Modelos de Tarefa',
-          href: '/config/tarefas/modelos',
-          icon: <Settings />,
-          visible: can('sys.roles.manage')
-        },
+          label: 'Visualização Mobile',
+          href: '/preview',
+          icon: <Tag />, // Usando um ícone temporário, talvez 'Phonelink' fosse melhor se disponível
+          visible: true
+        }
       ]
-    }
+    },
   ];
 
   const drawerContent = (
@@ -360,9 +420,8 @@ export function AppSidebar({ width }: AppSidebarProps) {
       <Divider />
 
       {/* Menu Principal com Skeleton Loading */}
-      <List sx={{ flexGrow: 1, overflowY: 'auto', px: 1 }}>
+      <List sx={{ flexGrow: 1, overflowY: 'auto', px: 1, mt: 2 }}>
         {loadingPermissions ? (
-          // Efeito visual enquanto carrega as permissões (evita "pulo" na tela)
           <Box sx={{ p: 2 }}>
             <Skeleton variant="text" width="40%" sx={{ mb: 1 }} />
             <Skeleton variant="rounded" height={40} sx={{ mb: 2 }} />
@@ -371,114 +430,149 @@ export function AppSidebar({ width }: AppSidebarProps) {
             <Skeleton variant="rounded" height={40} />
           </Box>
         ) : (
-          menuGroups.map((group, idx) => {
-            // Filtra os itens visíveis
-            const visibleItems = group.items.filter(item => item.visible);
+          menuGroups.map((group) => {
+            if (!group.visible) return null;
 
-            // Se o grupo ficar vazio (ex: Estoquista não vê nada de 'TÉCNICO'), esconde o título também
-            if (visibleItems.length === 0) return null;
+            const isMenuActive = group.href ? (pathname === group.href || (group.href !== '/' && pathname?.startsWith(group.href))) : false;
+
+            if (group.subItems) {
+              const visibleSubItems = group.subItems.filter((sub: any) => sub.visible);
+              if (visibleSubItems.length === 0) return null;
+
+              const isAnySubActive = visibleSubItems.some((sub: any) =>
+                pathname === sub.href ||
+                (sub.href && sub.href !== '/' && pathname?.startsWith(sub.href!)) ||
+                (sub.subItems && sub.subItems.some((s: any) => pathname === s.href || (s.href && s.href !== '/' && pathname?.startsWith(s.href!))))
+              );
+
+              const isOpen = openMenus[group.label];
+
+              return (
+                <React.Fragment key={group.label}>
+                  <ListItem disablePadding sx={{ mb: 0.5 }}>
+                    <ListItemButton
+                      onClick={() => toggleSubmenu(group.label)}
+                      selected={isAnySubActive}
+                      sx={{
+                        borderRadius: 1,
+                        '&.Mui-selected': {
+                          bgcolor: alpha(theme.palette.primary.main, 0.08),
+                          color: 'primary.main',
+                          '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) }
+                        }
+                      }}
+                    >
+                      <ListItemIcon sx={{ color: isAnySubActive ? 'primary.main' : 'inherit', minWidth: 40 }}>
+                        {group.icon}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={group.label}
+                        primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: isAnySubActive ? 700 : 500 }}
+                      />
+                      {isOpen ? <ExpandLess /> : <ExpandMore />}
+                    </ListItemButton>
+                  </ListItem>
+                  <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                    <List component="div" disablePadding sx={{ pl: 2 }}>
+                      {visibleSubItems.map((sub: any) => {
+                        if (sub.subItems) {
+                          // RECURSÃO PARA LEVEL 3
+                          const visibleDeepItems = sub.subItems.filter((s: any) => s.visible);
+                          const isDeepActive = visibleDeepItems.some((s: any) => pathname === s.href || (s.href && s.href !== '/' && pathname?.startsWith(s.href!)));
+                          const isDeepOpen = openMenus[sub.label];
+
+                          return (
+                            <React.Fragment key={sub.label}>
+                              <ListItem disablePadding sx={{ mb: 0.5 }}>
+                                <ListItemButton onClick={() => toggleSubmenu(sub.label)} sx={{ borderRadius: 1 }}>
+                                  <ListItemIcon sx={{ color: isDeepActive ? 'primary.main' : 'inherit', minWidth: 32 }}>
+                                    {sub.icon}
+                                  </ListItemIcon>
+                                  <ListItemText primary={sub.label} primaryTypographyProps={{ fontSize: '0.85rem', fontWeight: isDeepActive ? 600 : 400 }} />
+                                  {isDeepOpen ? <ExpandLess /> : <ExpandMore />}
+                                </ListItemButton>
+                              </ListItem>
+                              <Collapse in={isDeepOpen} timeout="auto" unmountOnExit>
+                                <List disablePadding sx={{ pl: 3 }}>
+                                  {visibleDeepItems.map((deep: any) => {
+                                    const isA = pathname === deep.href || (deep.href !== '/' && pathname?.startsWith(deep.href));
+                                    return (
+                                      <ListItem key={deep.href} disablePadding sx={{ mb: 0.5 }}>
+                                        <Link href={deep.href!} passHref style={{ width: '100%', textDecoration: 'none' }} onClick={closeMobileSidebar}>
+                                          <ListItemButton selected={isA} sx={{ borderRadius: 1 }}>
+                                            <ListItemText primary={deep.label} primaryTypographyProps={{ fontSize: '0.8rem', color: isA ? 'primary.main' : 'text.secondary' }} />
+                                          </ListItemButton>
+                                        </Link>
+                                      </ListItem>
+                                    );
+                                  })}
+                                </List>
+                              </Collapse>
+                            </React.Fragment>
+                          );
+                        }
+
+                        const isActive = pathname === sub.href || (sub.href && sub.href !== '/' && pathname?.startsWith(sub.href!));
+                        return (
+                          <ListItem key={sub.href || sub.label} disablePadding sx={{ mb: 0.5 }}>
+                            <Link href={sub.href!} passHref style={{ width: '100%', textDecoration: 'none' }} onClick={closeMobileSidebar}>
+                              <ListItemButton
+                                selected={isActive}
+                                sx={{
+                                  borderRadius: 1,
+                                  '&.Mui-selected': {
+                                    bgcolor: 'transparent',
+                                    color: 'primary.main',
+                                  }
+                                }}
+                              >
+                                {sub.icon && (
+                                  <ListItemIcon sx={{ color: isActive ? 'primary.main' : 'inherit', minWidth: 32 }}>
+                                    {sub.icon}
+                                  </ListItemIcon>
+                                )}
+                                <ListItemText
+                                  primary={sub.label}
+                                  primaryTypographyProps={{
+                                    fontSize: '0.85rem',
+                                    fontWeight: isActive ? 600 : 400
+                                  }}
+                                />
+                              </ListItemButton>
+                            </Link>
+                          </ListItem>
+                        );
+                      })}
+                    </List>
+                  </Collapse>
+                </React.Fragment>
+              );
+            }
 
             return (
-              <Box key={idx} sx={{ mb: 2 }}>
-                <Typography variant="caption" sx={{ px: 2, py: 1, color: 'text.secondary', fontWeight: 'bold', display: 'block', letterSpacing: 1 }}>
-                  {group.title}
-                </Typography>
-                {visibleItems.map((item) => {
-                  const isMenuActive = item.href ? (pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href))) : false;
-                  
-                  if (item.subItems) {
-                    const visibleSubItems = item.subItems.filter((sub: any) => sub.visible);
-                    if (visibleSubItems.length === 0) return null;
-                    const isSubMenuActive = visibleSubItems.some((sub: any) => pathname === sub.href || (sub.href !== '/' && pathname?.startsWith(sub.href)));
-                    const isOpen = openMenus[item.label] || isSubMenuActive;
-
-                    return (
-                      <React.Fragment key={item.label}>
-                        <ListItem disablePadding sx={{ mb: 0.5 }}>
-                          <ListItemButton
-                            onClick={() => toggleSubmenu(item.label)}
-                            sx={{ borderRadius: 1 }}
-                          >
-                            <ListItemIcon sx={{ color: isSubMenuActive ? 'primary.main' : 'inherit', minWidth: 40 }}>
-                              {item.icon}
-                            </ListItemIcon>
-                            <ListItemText
-                              primary={item.label}
-                              primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isSubMenuActive ? 600 : 400 }}
-                            />
-                            {isOpen ? <ExpandLess /> : <ExpandMore />}
-                          </ListItemButton>
-                        </ListItem>
-                        <Collapse in={isOpen} timeout="auto" unmountOnExit>
-                          <List component="div" disablePadding>
-                            {visibleSubItems.map((sub: any) => {
-                              const isActive = pathname === sub.href || (sub.href !== '/' && pathname?.startsWith(sub.href));
-                              return (
-                                <ListItem key={sub.href} disablePadding sx={{ mb: 0.5, pl: 3 }}>
-                                  <Link href={sub.href} passHref style={{ width: '100%', textDecoration: 'none' }} onClick={closeMobileSidebar}>
-                                    <ListItemButton
-                                      selected={isActive}
-                                      sx={{
-                                        borderRadius: 1,
-                                        '&.Mui-selected': {
-                                          bgcolor: 'primary.light',
-                                          color: 'primary.main',
-                                        }
-                                      }}
-                                    >
-                                      {sub.icon && (
-                                        <ListItemIcon sx={{ color: isActive ? 'primary.main' : 'inherit', minWidth: 32 }}>
-                                          {sub.icon}
-                                        </ListItemIcon>
-                                      )}
-                                      <ListItemText
-                                        primary={sub.label}
-                                        primaryTypographyProps={{ 
-                                          fontSize: '0.8rem', 
-                                          fontWeight: isActive ? 600 : 400,
-                                          color: sub.isGroup ? 'text.secondary' : 'inherit',
-                                          textTransform: sub.isGroup ? 'uppercase' : 'none',
-                                          letterSpacing: sub.isGroup ? 0.5 : 0
-                                        }}
-                                      />
-                                    </ListItemButton>
-                                  </Link>
-                                </ListItem>
-                              );
-                            })}
-                          </List>
-                        </Collapse>
-                      </React.Fragment>
-                    );
-                  }
-
-                  return (
-                    <ListItem key={item.href} disablePadding sx={{ mb: 0.5 }}>
-                      <Link href={item.href!} passHref style={{ width: '100%', textDecoration: 'none' }} onClick={closeMobileSidebar}>
-                        <ListItemButton
-                          selected={isMenuActive}
-                          sx={{
-                            borderRadius: 1,
-                            '&.Mui-selected': {
-                              bgcolor: 'primary.light',
-                              color: 'primary.main',
-                              '&:hover': { bgcolor: 'primary.light' }
-                            }
-                          }}
-                        >
-                          <ListItemIcon sx={{ color: isMenuActive ? 'primary.main' : 'inherit', minWidth: 40 }}>
-                            {item.icon}
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={item.label}
-                            primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isMenuActive ? 600 : 400 }}
-                          />
-                        </ListItemButton>
-                      </Link>
-                    </ListItem>
-                  );
-                })}
-              </Box>
+              <ListItem key={group.href || group.label} disablePadding sx={{ mb: 0.5 }}>
+                <Link href={group.href!} passHref style={{ width: '100%', textDecoration: 'none' }} onClick={closeMobileSidebar}>
+                  <ListItemButton
+                    selected={isMenuActive}
+                    sx={{
+                      borderRadius: 1,
+                      '&.Mui-selected': {
+                        bgcolor: alpha(theme.palette.primary.main, 0.08),
+                        color: 'primary.main',
+                        '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) }
+                      }
+                    }}
+                  >
+                    <ListItemIcon sx={{ color: isMenuActive ? 'primary.main' : 'inherit', minWidth: 40 }}>
+                      {group.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={group.label}
+                      primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: isMenuActive ? 700 : 500 }}
+                    />
+                  </ListItemButton>
+                </Link>
+              </ListItem>
             );
           })
         )}

@@ -21,7 +21,7 @@ export interface Cliente {
 // 8. FICHAS TÉCNICAS E CARDÁPIOS UAN (NOVO MÓDULO LOGÍSTICO)
 // ==============================================================================
 
-export type CategoriaUAN = 'Salada' | 'Guarnição' | 'Proteína' | 'Prato Principal' | 'Sobremesa' | 'Bebida' | 'Sopa' | 'Lanche' | 'Desjejum';
+export type CategoriaUAN = 'Prato Base' | 'Prato Principal' | 'Alternativa' | 'Opção Vegetariana' | 'Guarnição' | 'Saladas' | 'Bebidas' | 'Complemento' | 'Sopa' | 'Bebida Quente' | 'Bebida Fria' | 'Base' | 'Recheio' | 'Sobremesa';
 
 export interface FichaTecnicaUAN {
   id: string;
@@ -32,6 +32,7 @@ export interface FichaTecnicaUAN {
   peso_porcao_g: number;
   modo_preparo: string | null;
   tempo_preparo_min: number | null;
+  refeicoes?: string[];
   created_at?: string;
   updated_at?: string;
   
@@ -154,9 +155,33 @@ export interface Fornecedor {
   lead_time_dias?: number;
   frequencia_entrega?: string | null;
   
+  // Portfólio Granular (Matriz de Kraljic)
+  grupos_fornecidos?: string[]; // IDs de ingredientes_grupos
+  itens_fornecidos?: string[];  // IDs de ingredientes
+
   created_at?: string;
 }
 
+export interface OrcamentoFornecedor {
+  id: string;
+  cliente_id: string;
+  unidade_id: string;
+  fornecedor_id: string;
+  ingrediente_id: string;
+  data_orcamento: string;
+  is_embalagem: boolean;
+  unidades_por_embalagem?: number | null;
+  peso_volume_por_unidade?: number | null;
+  preco_embalagem?: number | null;
+  preco_por_kg_l: number;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string;
+  
+  // Joins Front-end
+  fornecedor?: Fornecedor;
+  ingrediente?: Ingrediente;
+}
 // ==============================================================================
 // 3. NUTRIÇÃO & INGREDIENTES (PRESERVANDO LEGADO)
 // ==============================================================================

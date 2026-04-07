@@ -43,6 +43,7 @@ export default function ModalDeliveryConfig({ open, onClose, onSaved }: ModalDel
   }, [open, activeClientId]);
 
   async function loadIntegracoes() {
+    if (!activeClientId) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('fin_integracoes_delivery')
@@ -90,7 +91,7 @@ export default function ModalDeliveryConfig({ open, onClose, onSaved }: ModalDel
   }
 
   async function handleSave() {
-    if (!nomeExibicao.trim()) return;
+    if (!nomeExibicao.trim() || !activeClientId) return;
     setSaving(true);
 
     try {

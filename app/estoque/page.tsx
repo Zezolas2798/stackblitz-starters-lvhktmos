@@ -585,7 +585,7 @@ export default function EstoquePage() {
           quantidade_movimentada: reserva.quantidade_reservada_g,
           quantidade_nova: novaQtdGml,
           data_movimento: new Date().toISOString(),
-          justificativa: `Alocação Automática - OP ${reserva.producao_requisicoes?.producao_ordens?.codigo || 'N/A'}`,
+          justificativa: `Alocação Direta - OP ${reserva.producao_requisicoes?.producao_ordens?.codigo || 'N/A'}`,
           responsavel_id: user?.id
         });
       if (errHist) throw errHist;

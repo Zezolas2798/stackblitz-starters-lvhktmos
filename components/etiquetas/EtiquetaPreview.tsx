@@ -44,10 +44,30 @@ export default function EtiquetaPreview({ dados }: EtiquetaPreviewProps) {
       </Typography>
 
       {/* 2. STATUS E PESO */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-          <Typography variant="body2" fontWeight="800" sx={{ fontSize: '0.75rem' }}>
-            {dados.produto.tipoArmazenamento.toUpperCase()}
-          </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+          <Box 
+            sx={{ 
+              px: 1, 
+              py: 0.2, 
+              borderRadius: '4px',
+              bgcolor: dados.produto.tipoArmazenamento.toUpperCase() === 'CONGELADO' ? '#e3f2fd' : 
+                       dados.produto.tipoArmazenamento.toUpperCase() === 'RESFRIADO' ? '#fff3e0' : 
+                       '#f1f8e9',
+              color: dados.produto.tipoArmazenamento.toUpperCase() === 'CONGELADO' ? '#1976d2' : 
+                     dados.produto.tipoArmazenamento.toUpperCase() === 'RESFRIADO' ? '#e65100' : 
+                     '#2e7d32',
+              border: `1px solid ${
+                dados.produto.tipoArmazenamento.toUpperCase() === 'CONGELADO' ? '#90caf9' : 
+                dados.produto.tipoArmazenamento.toUpperCase() === 'RESFRIADO' ? '#ffb74d' : 
+                '#a5d6a7'
+              }`,
+              display: 'inline-block'
+            }}
+          >
+            <Typography variant="caption" fontWeight="800" sx={{ fontSize: '0.65rem' }}>
+              {dados.produto.tipoArmazenamento.toUpperCase()}
+            </Typography>
+          </Box>
           <Typography variant="body2" fontWeight="900" sx={{ fontSize: '0.85rem' }}>
             {dados.produto.peso}
           </Typography>

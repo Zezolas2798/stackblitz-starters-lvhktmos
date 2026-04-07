@@ -140,6 +140,7 @@ export default function DespesasPage() {
   }
 
   async function loadHistory() {
+    if (!unidadeId) return;
     const [ano, mes] = historicoMes.split('-');
     const startOfMonth = `${ano}-${mes}-01`;
     const endOfMonth = getEndOfMonth(historicoMes);
@@ -157,6 +158,7 @@ export default function DespesasPage() {
   }
 
   async function loadAutomatedTotals() {
+    if (!unidadeId) return;
     const [ano, mes] = competenciaMes.split('-');
     const startOfMonth = `${ano}-${mes}-01`;
     const endOfMonth = getEndOfMonth(competenciaMes);
@@ -744,14 +746,14 @@ export default function DespesasPage() {
                     primary={conta.nome} 
                     secondary={
                       <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                        <Chip label={conta.comportamento_custo} size="tiny" sx={{ fontSize: '0.65rem', height: 18 }} />
+                        <Chip label={conta.comportamento_custo} size="small" sx={{ fontSize: '0.65rem', height: 18 }} />
                         <Chip 
                           label={
                             conta.subtipo_usar === 'CUSTOS_CONTROLAVEIS' ? 'Operacional' :
                             conta.subtipo_usar === 'CUSTO_MAO_DE_OBRA' ? 'Mão de Obra' :
                             conta.subtipo_usar === 'CUSTO_OCUPACAO' ? 'Ocupação' : 'Outros'
                           } 
-                          size="tiny" 
+                          size="small" 
                           variant="outlined"
                           color="primary"
                           sx={{ fontSize: '0.65rem', height: 18 }} 

@@ -404,7 +404,7 @@ export default function VendasPDVPage() {
       const payloads = Object.entries(vendasLote)
         .filter(([_, data]) => data.qtd !== '' && data.preco !== '')
         .map(([receitaId, data]) => ({
-          cliente_id: activeClientId,
+          cliente_id: (activeClientId as string),
           receita_id: receitaId,
           mes_ano: competencia,
           quantidade_vendida: parseFloat(data.qtd) || 0,
@@ -488,7 +488,7 @@ export default function VendasPDVPage() {
     // Simula tempo de rede e processamento da matriz BCG
     setTimeout(() => {
       const results = analyzeMenuEngineering(mockPosData);
-      setAnalyzedItems(results);
+      setAnalyzedItems(results.items);
       setIsUploading(false);
     }, 1500);
   };

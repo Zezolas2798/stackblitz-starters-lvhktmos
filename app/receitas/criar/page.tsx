@@ -61,6 +61,8 @@ interface ItemComposicao {
   nome: string;
   peso_bruto_g: number;
   peso_liquido_g: number;
+  fator_correcao: number;
+  indice_coccao: number;
   unidade: string;
   peso_bruto_display: number | '';
   peso_liquido_display: number | '';
@@ -138,6 +140,8 @@ function CriarEditarReceitaComponent() {
   const [funcaoAditivoSelecionada, setFuncaoAditivoSelecionada] = useState<string>('');
   const [pesoBruto, setPesoBruto] = useState<number | ''>('');
   const [pesoLiquido, setPesoLiquido] = useState<number | ''>('');
+  const [fatorCorrecao, setFatorCorrecao] = useState<number | ''>(1);
+  const [indiceCoccao, setIndiceCoccao] = useState<number | ''>(1);
   const [unidadeIngrediente, setUnidadeIngrediente] = useState('g');
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
@@ -329,6 +333,8 @@ function CriarEditarReceitaComponent() {
               nome: itemInfo?.nome || 'Item Desconhecido',
               peso_bruto_g: item.peso_bruto_g,
               peso_liquido_g: item.peso_liquido_g,
+              fator_correcao: item.fator_correcao || 1,
+              indice_coccao: item.indice_coccao || 1,
               unidade: 'g',
               peso_bruto_display: item.peso_bruto_g,
               peso_liquido_display: item.peso_liquido_g,
@@ -467,6 +473,40 @@ function CriarEditarReceitaComponent() {
     setMedidaCaseiraPesoG('');
   };
 
+  // --- LOGICA REACTIVE DE PESOS E FATORES ---
+  const handlePesoBrutoChange = (val: number | '') => {
+    setPesoBruto(val);
+    if (typeof val === 'number') {
+      if (typeof fatorCorrecao === 'number' && fatorCorrecao > 0) {
+        setPesoLiquido(Number((val / fatorCorrecao).toFixed(3)));
+      } else if (typeof pesoLiquido === 'number' && pesoLiquido > 0) {
+        setFatorCorrecao(Number((val / pesoLiquido).toFixed(3)));
+      }
+    }
+  };
+
+  const handlePesoLiquidoChange = (val: number | '') => {
+    setPesoLiquido(val);
+    if (typeof val === 'number') {
+      if (typeof fatorCorrecao === 'number' && fatorCorrecao > 0) {
+        setPesoBruto(Number((val * fatorCorrecao).toFixed(3)));
+      } else if (typeof pesoBruto === 'number' && pesoBruto > 0) {
+        setFatorCorrecao(Number((pesoBruto / val).toFixed(3)));
+      }
+    }
+  };
+
+  const handleFatorCorrecaoChange = (val: number | '') => {
+    setFatorCorrecao(val);
+    if (typeof val === 'number' && val > 0) {
+      if (typeof pesoBruto === 'number') {
+        setPesoLiquido(Number((pesoBruto / val).toFixed(3)));
+      } else if (typeof pesoLiquido === 'number') {
+        setPesoBruto(Number((pesoLiquido * val).toFixed(3)));
+      }
+    }
+  };
+
   // === HANDLER DE ADICIONAR/ATUALIZAR ITEM ===
   async function handleAddItemOrUpdateItem() {
     if (!itemSelecionado || !pesoLiquido || !pesoBruto || pesoLiquido <= 0 || pesoBruto <= 0) {
@@ -539,6 +579,8 @@ function CriarEditarReceitaComponent() {
       nome: itemSelecionado.nome,
       peso_bruto_g: valorBruto,
       peso_liquido_g: valorLiquido,
+      fator_correcao: Number(fatorCorrecao) || 1,
+      indice_coccao: Number(indiceCoccao) || 1,
       unidade: unidadeIngrediente,
       peso_bruto_display: pesoBruto,
       peso_liquido_display: pesoLiquido,
@@ -589,6 +631,8 @@ function CriarEditarReceitaComponent() {
     setItemSelecionado(itemInfo as ItemDeBusca || null);
     setPesoBruto(item.peso_bruto_display);
     setPesoLiquido(item.peso_liquido_display);
+    setFatorCorrecao(item.fator_correcao);
+    setIndiceCoccao(item.indice_coccao);
     setUnidadeIngrediente(item.unidade || 'g');
   }
 
@@ -601,6 +645,8 @@ function CriarEditarReceitaComponent() {
     setItemSelecionado(null);
     setPesoBruto('');
     setPesoLiquido('');
+    setFatorCorrecao(1);
+    setIndiceCoccao(1);
     setUnidadeIngrediente('g');
     setFuncoesAditivoDisponiveis([]);
     setFuncaoAditivoSelecionada('');
@@ -649,7 +695,12 @@ function CriarEditarReceitaComponent() {
       modo_conservacao: modoConservacao || null,
     };
     const itensParaSalvar = composicao.map((item) => ({
-      item_id: item.item_id, item_type: item.item_type, peso_bruto_g: item.peso_bruto_g, peso_liquido_g: item.peso_liquido_g
+      item_id: item.item_id, 
+      item_type: item.item_type, 
+      peso_bruto_g: item.peso_bruto_g, 
+      peso_liquido_g: item.peso_liquido_g,
+      fator_correcao: item.fator_correcao,
+      indice_coccao: item.indice_coccao
     }));
     try {
       if (editingId) {
@@ -819,8 +870,10 @@ function CriarEditarReceitaComponent() {
                   )}
 
                   <Grid container spacing={2}>
-                    <Grid item xs={6}><TextField label="Peso Bruto" type="number" value={pesoBruto} onChange={(e) => setPesoBruto(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
-                    <Grid item xs={6}><TextField label="Peso Líquido" type="number" value={pesoLiquido} onChange={(e) => setPesoLiquido(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
+                    <Grid item xs={6}><TextField label="Peso Bruto" type="number" value={pesoBruto} onChange={(e) => handlePesoBrutoChange(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
+                    <Grid item xs={6}><TextField label="Peso Líquido" type="number" value={pesoLiquido} onChange={(e) => handlePesoLiquidoChange(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
+                    <Grid item xs={6}><TextField label="Fator de Correção (FC)" type="number" value={fatorCorrecao} onChange={(e) => handleFatorCorrecaoChange(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} inputProps={{ step: 0.001 }} /></Grid>
+                    <Grid item xs={6}><TextField label="Índice de Cocção (IC)" type="number" value={indiceCoccao} onChange={(e) => setIndiceCoccao(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} inputProps={{ step: 0.1 }} /></Grid>
                     <Grid item xs={12}>
                       <FormControl fullWidth size="small" sx={{ bgcolor: 'background.paper' }}>
                         <InputLabel>Unidade</InputLabel>
@@ -855,7 +908,7 @@ function CriarEditarReceitaComponent() {
                       }>
                         <ListItemText 
                           primary={<Box sx={{ display: 'flex', gap: 1 }}>{item.nome} {item.is_aditivo && <Chip label="Aditivo" size="small" color="secondary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}</Box>} 
-                          secondary={`PB: ${item.peso_bruto_display}${item.unidade} | PL: ${item.peso_liquido_display}${item.unidade}`} 
+                          secondary={`PB: ${item.peso_bruto_display}${item.unidade} | PL: ${item.peso_liquido_display}${item.unidade} | FC: ${item.fator_correcao.toFixed(2)} | IC: ${item.indice_coccao.toFixed(2)}`} 
                         />
                       </ListItem>
                     );

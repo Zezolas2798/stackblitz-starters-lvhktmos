@@ -6,17 +6,18 @@ import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import { CardapioUAN, CardapioDiaUAN, FichaTecnicaUAN } from '@/lib/types';
 import {
-  Box, Typography, Button, Paper, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Chip, IconButton,
+  Box, Typography, Button, Paper, Chip, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, TextField,
-  Grid, FormControlLabel, Checkbox, Accordion, AccordionSummary, AccordionDetails, Divider
+  Divider, Grid, FormControlLabel, Checkbox, Accordion, AccordionSummary, AccordionDetails
 } from '@mui/material';
-import { ArrowLeft, Plus, Save, Trash2, CalendarDays, Loader2, RefreshCw, ChevronDown, Pencil } from 'lucide-react';
-
-const DEFAULT_REFEICOES = ['Desjejum', 'Almoço', 'Lanche da Tarde', 'Jantar', 'Ceia'];
+import { alpha, useTheme } from '@mui/material/styles';
+import { ArrowLeft, Plus, Save, Trash2, CalendarDays, Loader2, RefreshCw, ChevronDown, Pencil, Settings, Tag, X } from 'lucide-react';
+const DEFAULT_REFEICOES = ['Desjejum', 'Colação', 'Almoço', 'Lanche da Tarde', 'Jantar', 'Ceia'];
+import { MEAL_CATEGORY_GROUPS, REFEICAO_TO_GROUP } from '@/lib/uan-constants';
 export default function GradeCardapioUANPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { activeClientId } = useClient();
+  const theme = useTheme();
   
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -38,6 +39,13 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
   const [tempComensaisMap, setTempComensaisMap] = useState<Record<string, number>>({});
   const [tempHorariosMap, setTempHorariosMap] = useState<Record<string, { inicio: string, fim: string }>>({});
   const [tempFunciona, setTempFunciona] = useState<boolean>(true);
+
+  // Estado para o Calendário
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [activeDay, setActiveDay] = useState<string | null>(null);
+  const [activeMeal, setActiveMeal] = useState<string | null>(null);
+  const [mealDialogOpen, setMealDialogOpen] = useState(false);
+  const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({}); // 'YYYY-MM-DD_Refeicao' -> boolean
 
   useEffect(() => {
     async function fetchData() {
@@ -208,6 +216,19 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
     setSalvando(true);
     
     try {
+      // 0. Deduplicação Global: Garante que não existam fichas duplicadas no mesmo (dia, refeição)
+      const sanitizedGrade = grade.reduce((acc, curr) => {
+        const key = `${curr.data_consumo}_${curr.tipo_refeicao}_${curr.ficha_uan_id}`;
+        // Prioriza itens que já tem ID (já estão no banco)
+        const existingIdx = acc.findIndex(i => `${i.data_consumo}_${i.tipo_refeicao}_${i.ficha_uan_id}` === key);
+        if (existingIdx === -1) {
+          acc.push(curr);
+        } else if (curr.id && !acc[existingIdx].id) {
+          acc[existingIdx] = curr;
+        }
+        return acc;
+      }, [] as Partial<CardapioDiaUAN>[]);
+
       // 1. Salva alterações no objeto principal do cardápio (exceções de comensais)
       const { error: cErr } = await supabase
         .from('cardapios_uan')
@@ -217,8 +238,8 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
       if (cErr) throw new Error("Erro ao salvar configurações de comensais.");
 
       // 2. Filtra e salva novos itens da grade (temporários)
-      const novosItens = grade.filter(g => g.id?.startsWith('temp_')).map(g => ({
-        cardapio_id: g.cardapio_id!,
+      const novosItens = sanitizedGrade.filter(g => g.id?.startsWith('temp_')).map(g => ({
+        cardapio_id: cardapio.id,
         ficha_uan_id: g.ficha_uan_id!,
         data_consumo: g.data_consumo!,
         tipo_refeicao: g.tipo_refeicao!,
@@ -227,18 +248,19 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
 
       if (novosItens.length > 0) {
         const { error: iErr } = await supabase.from('cardapio_dias_uan').insert(novosItens);
-        if (iErr) throw new Error("Erro ao salvar itens da grade.");
+        if (iErr) throw new Error("Erro ao salvar novos itens da grade.");
       }
 
-      // 3. Salva alterações em itens existentes (fator_multiplicador pode ter mudado)
-      const itensExistentes = grade.filter(g => !g.id?.startsWith('temp_'));
+      // 3. Salva alterações em itens existentes
+      const itensExistentes = sanitizedGrade.filter(g => !g.id?.startsWith('temp_'));
       for (const item of itensExistentes) {
         if (!item.id) continue;
         await supabase.from('cardapio_dias_uan')
-          .update({ fator_multiplicador: item.fator_multiplicador })
+          .update({ fator_multiplicador: item.fator_multiplicador } as any)
           .eq('id', item.id);
       }
 
+      setGrade(sanitizedGrade);
       alert("Grade salva com sucesso!");
       window.location.reload();
     } catch (err: any) {
@@ -248,24 +270,51 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
     }
   };
 
-  const parsePeriodo = () => {
+  const getCalendarDays = () => {
     if (!cardapio) return [];
-    const dates = [];
-    const dt = new Date(cardapio.data_inicio + 'T12:00:00Z');
-    const end = new Date(cardapio.data_fim + 'T12:00:00Z');
     
-    while (dt <= end) {
-      // Se não houver configuração de dias, assumir todos. Se houver, filtrar pelo dia da semana (0=Dom, 6=Sab)
-      if (!cardapio.dias_funcionamento || cardapio.dias_funcionamento.length === 0 || cardapio.dias_funcionamento.includes(dt.getUTCDay())) {
-        dates.push(dt.toISOString().split('T')[0]);
-      }
-      dt.setUTCDate(dt.getUTCDate() + 1);
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+    
+    const daysInMonth = lastDayOfMonth.getDate();
+    const firstDayWeekday = firstDayOfMonth.getDay(); // 0-6
+    
+    const calendar = [];
+    
+    // Dias vazios no início
+    for (let i = 0; i < firstDayWeekday; i++) {
+      calendar.push(null);
     }
-    return dates;
+    
+    // Dias do mês
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(year, month, d, 12, 0, 0);
+      calendar.push(date.toISOString().split('T')[0]);
+    }
+    
+    return calendar;
   };
 
-  const dates = parsePeriodo();
+  const calendarDays = getCalendarDays();
+  const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const refeicoesAtivas = cardapio?.refeicoes_oferecidas?.length ? cardapio.refeicoes_oferecidas : DEFAULT_REFEICOES;
+
+  const handleOpenMealDialog = (date: string, meal: string) => {
+    setActiveDay(date);
+    setActiveMeal(meal);
+    
+    // Sincroniza comensais temporários se necessário
+    const config = cardapio?.config_excecoes_dias?.[date] || {};
+    const d = new Date(date + 'T12:00:00Z');
+    const dayOfWeek = d.getDay().toString();
+    const comensais = config.comensais?.[meal] ?? cardapio?.comensais_modelo?.[dayOfWeek]?.[meal] ?? cardapio?.comensais_estimados_dia ?? 0;
+    setTempComensaisRefeicao(comensais);
+    
+    setMealDialogOpen(true);
+  };
 
   if (loading) return <Box p={4} display="flex" justifyContent="center"><Loader2 className="animate-spin" /></Box>;
   if (!cardapio) return <Box p={4}>Cardápio não encontrado.</Box>;
@@ -287,174 +336,227 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
         </Button>
       </Box>
 
-      <Paper sx={{ mb: 3, p: 2, display: 'flex', gap: 3, bgcolor: 'action.hover' }}>
-         <Box>
-            <Typography variant="caption" color="text.secondary" display="block">Período</Typography>
-            <Typography variant="body1" fontWeight="bold">
-              {new Date(cardapio.data_inicio).toLocaleDateString()} a {new Date(cardapio.data_fim).toLocaleDateString()}
-            </Typography>
-         </Box>
-         <Box>
-            <Typography variant="caption" color="text.secondary" display="block">Comensais (Diários)</Typography>
-            <Typography variant="body1" fontWeight="bold">{cardapio.comensais_estimados_dia}</Typography>
-         </Box>
+      <Paper sx={{ mb: 3, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'background.paper', borderRadius: 2 }}>
+        <Box display="flex" gap={3}>
+           <Box>
+              <Typography variant="caption" color="text.secondary" display="block">Período</Typography>
+              <Typography variant="body1" fontWeight="bold">
+                {new Date(cardapio.data_inicio).toLocaleDateString()} a {new Date(cardapio.data_fim).toLocaleDateString()}
+              </Typography>
+           </Box>
+           <Box>
+              <Typography variant="caption" color="text.secondary" display="block">Comensais (Diários)</Typography>
+              <Typography variant="body1" fontWeight="bold">{cardapio.comensais_estimados_dia}</Typography>
+           </Box>
+        </Box>
+        
+        <Box display="flex" alignItems="center" gap={2}>
+          <IconButton onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}>
+            <ArrowLeft size={20} />
+          </IconButton>
+          <Typography variant="h6" sx={{ minWidth: 150, textAlign: 'center', fontWeight: 'bold', textTransform: 'capitalize' }}>
+            {currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+          </Typography>
+          <IconButton onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}>
+            <ArrowLeft size={20} style={{ transform: 'rotate(180deg)' }} />
+          </IconButton>
+        </Box>
       </Paper>
 
-      <TableContainer component={Paper}>
-        <Table stickyHeader>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ minWidth: 120, bgcolor: 'primary.light', color: 'primary.main', fontWeight: 'bold' }}>DATA</TableCell>
-              {refeicoesAtivas.map(r => (
-                <TableCell key={r} align="center" sx={{ minWidth: 200, bgcolor: 'action.hover', fontWeight: 'bold' }}>
-                  {r}
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {dates.map(dateStr => {
-              const d = new Date(dateStr + 'T12:00:00Z'); 
-              const feriado = feriados.find(f => f.date === dateStr);
-              const config = cardapio.config_excecoes_dias?.[dateStr] || {};
-              const dayOfWeek = d.getDay().toString();
-              const naoFunciona = config.funciona === false;
-              
-              // Total de comensais no dia (soma de todas as refeições)
-              let totalComensais = 0;
-              const refs = cardapio.refeicoes_oferecidas || [];
-              refs.forEach(ref => {
-                totalComensais += config.comensais?.[ref] ?? cardapio.comensais_modelo?.[dayOfWeek]?.[ref] ?? cardapio.comensais_estimados_dia;
-              });
-
-              return (
-                <TableRow key={dateStr} hover sx={{ bgcolor: naoFunciona ? 'rgba(0,0,0,0.04)' : 'inherit' }}>
-                  <TableCell onClick={() => handleOpenConfigDia(dateStr)} sx={{ cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Typography fontWeight="bold">{d.toLocaleDateString()}</Typography>
-                      {feriado && <Chip label="Feriado" size="small" color="error" variant="outlined" sx={{ height: 18, fontSize: 10 }} />}
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                       {d.toLocaleDateString('pt-BR', { weekday: 'long' })}
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1 }}>
+        {weekDays.map(day => (
+          <Box key={day} sx={{ p: 1, textAlign: 'center', bgcolor: 'primary.main', color: 'white', borderRadius: 1, fontWeight: 'bold', fontSize: '0.8rem' }}>
+            {day.toUpperCase()}
+          </Box>
+        ))}
+        
+        {calendarDays.map((dateStr, idx) => {
+          if (!dateStr) return <Paper key={`empty-${idx}`} sx={{ minHeight: 120, bgcolor: 'action.hover', opacity: 0.5, border: '1px dashed #ccc' }} />;
+          
+          const d = new Date(dateStr + 'T12:00:00Z');
+          const dayNum = d.getDate();
+          const dayOfWeek = d.getDay(); // 0-6 (Dom-Sáb)
+          const feriado = feriados.find(f => f.date === dateStr);
+          const config = cardapio.config_excecoes_dias?.[dateStr] || {};
+          
+          // Considera OFF se não estiver nos dias_funcionamento e não houver exceção forçando ON
+          const isNormallyOff = !cardapio.dias_funcionamento?.includes(dayOfWeek);
+          const isOff = config.funciona !== undefined ? !config.funciona : isNormallyOff;
+          
+          const isToday = new Date().toISOString().split('T')[0] === dateStr;
+          
+          return (
+            <Paper 
+              key={dateStr} 
+              sx={{ 
+                minHeight: 150, 
+                display: 'flex', 
+                flexDirection: 'column',
+                border: isToday ? '2px solid primary.main' : '1px solid #eee',
+                position: 'relative',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': { transform: 'translateY(-2px)', boxShadow: 2 }
+              }}
+            >
+              <Box sx={{ p: 0.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: isOff ? 'action.disabledBackground' : 'transparent' }}>
+                <Box display="flex" alignItems="center" gap={0.5}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ color: isOff ? 'text.disabled' : 'inherit' }}>
+                    {dayNum}
+                  </Typography>
+                  {feriado && (
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        fontSize: '0.6rem', 
+                        color: 'error.main', 
+                        fontWeight: 'bold',
+                        bgcolor: 'error.light',
+                        px: 0.5,
+                        borderRadius: 0.5,
+                        opacity: 0.8,
+                        maxWidth: 100,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {feriado.name}
                     </Typography>
-                    {feriado && <Typography variant="caption" color="error.main" sx={{ fontWeight: 'bold' }}>{feriado.name}</Typography>}
-                    
-                    <Box mt={1} sx={{ bgcolor: 'primary.light', p: 0.5, borderRadius: 1, display: 'inline-block' }}>
-                      <Typography variant="caption" color="primary.main" fontWeight="bold">
-                         {naoFunciona ? "FECHADO" : `${totalComensais} comensais (Total)`}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  
-                  {refeicoesAtivas.map(ref => {
-                    const itens = grade.filter(g => g.data_consumo === dateStr && g.tipo_refeicao === ref);
-                    const config = cardapio.config_excecoes_dias?.[dateStr] || {};
-                    const dayOfWeek = d.getDay().toString();
-                    const mealComensais = config.comensais?.[ref] ?? cardapio.comensais_modelo?.[dayOfWeek]?.[ref] ?? cardapio.comensais_estimados_dia;
-                    const mealHorario = config.horarios?.[ref] ?? cardapio.horario_refeicoes?.[ref];
+                  )}
+                </Box>
+                <IconButton size="small" onClick={() => handleOpenConfigDia(dateStr)}>
+                  <Settings size={12} />
+                </IconButton>
+              </Box>
 
-                    // Agrupamento por categoria
-                    const grouped: Record<string, any[]> = {};
-                    itens.forEach(item => {
-                      const cat = (item as any).fichas_tecnicas_uan?.categoria_uan || "Outros";
-                      if (!grouped[cat]) grouped[cat] = [];
-                      grouped[cat].push(item);
-                    });
+              <Box sx={{ p: 0.5, flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {!isOff ? (
+                  refeicoesAtivas.filter(ref => {
+                    // Só mostra se tiver comensais configurados para este dia (modelo ou exceção)
+                    const c = config.comensais?.[ref] ?? cardapio.comensais_modelo?.[dayOfWeek.toString()]?.[ref] ?? 0;
+                    // Se houver itens na grade, deve mostrar mesmo que comensais seja 0 (para permitir remoção/ajuste)
+                    const hasItems = grade.some(g => g.data_consumo === dateStr && g.tipo_refeicao === ref);
+                    return c > 0 || hasItems;
+                  }).map(ref => {
+                    const mealItems = grade.filter(g => g.data_consumo === dateStr && g.tipo_refeicao === ref);
+                    const hasItems = mealItems.length > 0;
+                    const expKey = `${dateStr}_${ref}`;
+                    const isExpanded = expandedMeals[expKey];
+                    
+                    // Agrupa por categoria (Deduplicando nomes na visualização também)
+                    const grouped = mealItems.reduce((acc, curr) => {
+                      const cat = (curr as any).fichas_tecnicas_uan?.categoria_uan || 'Outros';
+                      const name = (curr as any).fichas_tecnicas_uan?.nome || 'Sem nome';
+                      if (!acc[cat]) acc[cat] = new Set();
+                      acc[cat].add(name);
+                      return acc;
+                    }, {} as Record<string, Set<string>>);
 
                     return (
-                      <TableCell key={ref} sx={{ verticalAlign: 'top', minWidth: 220, borderLeft: '1px solid #eee' }}>
-                        <Box sx={{ mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <Box>
-                             <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'primary.main', display: 'block' }}>
-                               {mealComensais} pessoas
-                             </Typography>
-                             {mealHorario && (
-                               <Typography variant="caption" color="text.secondary">
-                                 {mealHorario.inicio} - {mealHorario.fim}
-                               </Typography>
-                             )}
+                      <Box 
+                        key={ref}
+                        sx={{ 
+                          p: 0.75, 
+                          borderRadius: 1, 
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 0.5,
+                          transition: 'all 0.2s',
+                          bgcolor: hasItems ? alpha(theme.palette.primary.main, 0.03) : 'action.hover',
+                          border: '1px solid',
+                          borderColor: hasItems ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+                          position: 'relative',
+                          '&:hover': { 
+                            bgcolor: alpha(theme.palette.primary.main, 0.08),
+                            borderColor: alpha(theme.palette.primary.main, 0.2),
+                            '& .action-btns': { opacity: 1 }
+                          }
+                        }}
+                      >
+                        <Box 
+                          display="flex" 
+                          justifyContent="space-between" 
+                          alignItems="center"
+                          onClick={() => hasItems && setExpandedMeals(prev => ({ ...prev, [expKey]: !isExpanded }))}
+                          sx={{ cursor: hasItems ? 'pointer' : 'default' }}
+                        >
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            {hasItems && (
+                              <ChevronDown 
+                                size={12} 
+                                style={{ 
+                                  transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                  transition: 'transform 0.2s',
+                                  color: theme.palette.primary.main
+                                }} 
+                              />
+                            )}
+                            <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: hasItems ? 'primary.main' : 'text.secondary', textTransform: 'uppercase' }}>
+                              {ref}
+                            </Typography>
+                            {!isExpanded && hasItems && (
+                              <Chip label={mealItems.length} size="small" sx={{ height: 14, fontSize: '0.55rem', ml: 0.5, bgcolor: 'primary.light', color: 'white' }} />
+                            )}
                           </Box>
-                          <IconButton size="small" color="primary" onClick={() => handleOpenAdd(dateStr, ref)} sx={{ mt: -0.5 }}>
-                             <Pencil size={14} />
-                          </IconButton>
+                          
+                          <Box className="action-btns" sx={{ opacity: isExpanded ? 1 : 0.3, transition: 'opacity 0.2s', display: 'flex', gap: 0.5 }}>
+                            <IconButton 
+                              size="small" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenMealDialog(dateStr, ref);
+                              }}
+                              sx={{ p: 0.2, color: 'primary.main' }}
+                            >
+                              <Pencil size={10} />
+                            </IconButton>
+                          </Box>
                         </Box>
                         
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          {Object.keys(grouped).sort().map(cat => (
-                            <details key={cat} open style={{ width: '100%' }}>
-                              <Box component="summary" sx={{ 
-                                cursor: 'pointer', 
-                                listStyle: 'none', 
-                                '&::-webkit-details-marker': { display: 'none' },
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 0.5,
-                                py: 0.3,
-                                '&:hover': { bgcolor: 'rgba(0,0,0,0.02)' }
-                              }}>
-                                <ChevronDown size={10} style={{ transform: 'rotate(-90deg)', transition: '0.2s' }} className="details-chevron" />
-                                <Typography variant="caption" sx={{ fontWeight: 'bold', fontSize: 9, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                  {cat} ({grouped[cat].length})
+                        {isExpanded && hasItems && (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.2, borderTop: '1px dashed #eee', pt: 1 }}>
+                            {Object.entries(grouped).map(([cat, namesSet]) => (
+                              <Box key={cat}>
+                                <Typography sx={{ fontSize: '0.55rem', fontWeight: 800, color: 'text.secondary', lineHeight: 1 }}>
+                                  {cat}:
                                 </Typography>
-                                <Divider sx={{ flexGrow: 1, ml: 1, opacity: 0.5 }} />
+                                {Array.from(namesSet).map((name, i) => (
+                                  <Typography key={i} sx={{ fontSize: '0.6rem', color: 'text.primary', pl: 0.5, lineHeight: 1.1 }}>
+                                    • {name}
+                                  </Typography>
+                                ))}
                               </Box>
-                              
-                              <Box sx={{ mt: 0.5, mb: 1, display: 'flex', flexDirection: 'column', gap: 0.5, pl: 1.5 }}>
-                                {grouped[cat].map(item => {
-                                  const quota = Math.round(mealComensais * (item.fator_multiplicador || 1));
-                                  return (
-                                    <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, p: 0.5, borderRadius: 0.5, bgcolor: 'action.hover' }}>
-                                      <Typography variant="caption" sx={{ flexGrow: 1, fontSize: 11 }}>
-                                        {(item as any).fichas_tecnicas_uan?.nome}
-                                      </Typography>
-                                      <TextField
-                                        size="small"
-                                        type="number"
-                                        value={quota}
-                                        onChange={(e) => {
-                                          const newQuota = Number(e.target.value) || 0;
-                                          const newFator = mealComensais > 0 ? newQuota / mealComensais : 1;
-                                          setGrade(prev => prev.map(g => g.id === item.id ? { ...g, fator_multiplicador: newFator } : g));
-                                        }}
-                                        sx={{ width: 45, '& .MuiInputBase-input': { fontSize: 10, p: 0.2, textAlign: 'center' } }}
-                                      />
-                                      <IconButton size="small" color="error" onClick={() => handleRemoveItem(item.id!)} sx={{ p: 0.2 }}>
-                                        <Trash2 size={10} />
-                                      </IconButton>
-                                    </Box>
-                                  );
-                                })}
-                              </Box>
-                              <style>{`
-                                details[open] .details-chevron { transform: rotate(0deg) !important; }
-                              `}</style>
-                            </details>
-                          ))}
-                          {itens.length === 0 && (
-                            <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic', textAlign: 'center', mt: 1 }}>
-                               Vazio
-                            </Typography>
-                          )}
-                        </Box>
-                      </TableCell>
+                            ))}
+                          </Box>
+                        )}
+                      </Box>
                     );
-                  })}
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                  })
+                ) : (
+                  <Box display="flex" alignItems="center" justifyContent="center" height="100%">
+                    <Typography variant="caption" color="text.disabled" fontWeight="bold">FECHADO</Typography>
+                  </Box>
+                )}
+              </Box>
+            </Paper>
+          );
+        })}
+      </Box>
 
-      {/* MODAL ADICIONAR PREPARAÇÃO (MULTI-SELEÇÃO AGRUPADA COM ACCORDION) */}
-      <Dialog open={modalOpen} onClose={() => setModalOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white' }}>
-          Planejar: {cellTarget?.refeicao} ({cellTarget?.data ? new Date(cellTarget.data + 'T12:00:00Z').toLocaleDateString() : ''})
+      {/* MODAL EDITAR REFEIÇÃO (POR CATEGORIZAÇÃO) */}
+      <Dialog open={mealDialogOpen} onClose={() => setMealDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: 'primary.main', color: 'white' }}>
+          <Box>
+            <Typography variant="h6">{activeMeal}</Typography>
+            <Typography variant="caption">{activeDay ? new Date(activeDay + 'T12:00:00Z').toLocaleDateString() : ''}</Typography>
+          </Box>
+          <IconButton size="small" onClick={() => setMealDialogOpen(false)} sx={{ color: 'white' }}>
+            <X size={20} />
+          </IconButton>
         </DialogTitle>
         <DialogContent sx={{ pt: 3 }}>
-          {/* Edição Contextual de Comensais */}
-          <Box sx={{ mb: 4, p: 2, bgcolor: 'primary.light', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="subtitle2" color="primary.main" fontWeight="bold">Comensais previstos para esta refeição:</Typography>
+          <Box sx={{ mb: 3, p: 2, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>Comensais:</Typography>
             <TextField 
               size="small"
               type="number"
@@ -464,46 +566,86 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
             />
           </Box>
 
-          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>Selecionar Fichas Técnicas (FTP):</Typography>
-          
-          {Array.from(new Set(fichas.map(f => f.categoria_uan || "Outros"))).sort().map(cat => (
-            <Accordion key={cat} variant="outlined" defaultExpanded={cat === 'Prato Principal'}>
-              <AccordionSummary expandIcon={<ChevronDown size={18} />}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'primary.dark' }}>
-                  {cat} ({fichas.filter(f => (f.categoria_uan || "Outros") === cat).length})
-                </Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Grid container spacing={1}>
-                  {fichas.filter(f => (f.categoria_uan || "Outros") === cat).map(f => (
-                    <Grid item xs={12} sm={6} md={4} key={f.id}>
-                      <FormControlLabel
-                        control={
-                          <Checkbox 
-                            checked={selecionados.includes(f.id)}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                              if (e.target.checked) setSelecionados(prev => [...prev, f.id]);
-                              else setSelecionados(prev => prev.filter(id => id !== f.id));
-                            }}
-                          />
-                        }
-                        label={<Typography variant="body2">{f.nome}</Typography>}
-                      />
-                    </Grid>
-                  ))}
-                </Grid>
-              </AccordionDetails>
-            </Accordion>
-          ))}
+          <Box display="flex" flexDirection="column" gap={3}>
+            {(() => {
+              const groupKey = REFEICAO_TO_GROUP[activeMeal!] || 'ALMOCO_JANTAR';
+              const categoriesToShow = [...(MEAL_CATEGORY_GROUPS[groupKey] || [])];
+              
+              const existingItemCategories = Array.from(new Set(
+                grade
+                  .filter(g => g.data_consumo === activeDay && g.tipo_refeicao === activeMeal)
+                  .map(g => (g as any).fichas_tecnicas_uan?.categoria_uan)
+                  .filter(Boolean)
+              ));
+              
+              existingItemCategories.forEach(cat => {
+                if (!categoriesToShow.includes(cat)) categoriesToShow.push(cat);
+              });
+
+              return categoriesToShow.map(cat => {
+                const categoryItems = grade.filter(g => g.data_consumo === activeDay && g.tipo_refeicao === activeMeal && (g as any).fichas_tecnicas_uan?.categoria_uan === cat);
+                const filteredOptions = fichas.filter(f => 
+                  (f.categoria_uan || "Sem Categoria") === cat &&
+                  (!f.refeicoes || f.refeicoes.length === 0 || f.refeicoes.includes(activeMeal!))
+                );
+
+                return (
+                  <Box key={cat}>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', textTransform: 'uppercase' }}>
+                        {cat}
+                      </Typography>
+                    </Box>
+                    <Autocomplete
+                      multiple
+                      options={filteredOptions}
+                      getOptionLabel={(option) => option.nome}
+                      value={filteredOptions.filter(o => categoryItems.some(item => item.ficha_uan_id === o.id))}
+                      onChange={(_, newValues) => {
+                        setGrade(prev => {
+                          const newValIds = newValues.map(v => v.id);
+                          let next = prev.filter(g => !(g.data_consumo === activeDay && g.tipo_refeicao === activeMeal && (g as any).fichas_tecnicas_uan?.categoria_uan === cat));
+                          next = next.filter(g => !(g.data_consumo === activeDay && g.tipo_refeicao === activeMeal && newValIds.includes(g.ficha_uan_id!)));
+                          const newItems = newValues.map(val => {
+                            const existing = categoryItems.find(item => item.ficha_uan_id === val.id);
+                            return {
+                              id: existing?.id || `temp_${Date.now()}_${val.id}`,
+                              cardapio_id: cardapio.id,
+                              ficha_uan_id: val.id,
+                              data_consumo: activeDay!,
+                              tipo_refeicao: activeMeal!,
+                              fator_multiplicador: existing?.fator_multiplicador || 1,
+                              fichas_tecnicas_uan: { nome: val.nome, categoria_uan: val.categoria_uan }
+                            };
+                          });
+                          return [...next, ...newItems];
+                        });
+                      }}
+                      renderInput={(params) => <TextField {...params} size="small" placeholder="Selecione as opções..." />}
+                      renderTags={(value: FichaTecnicaUAN[], getTagProps) =>
+                        value.map((option: FichaTecnicaUAN, index: number) => (
+                          <Chip label={option.nome} size="small" {...getTagProps({ index })} key={option.id} />
+                        ))
+                      }
+                    />
+                  </Box>
+                );
+              });
+            })()}
+          </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2, bgcolor: 'action.hover' }}>
-          <Button onClick={() => setModalOpen(false)}>Cancelar</Button>
-          <Button 
-            variant="contained" 
-            onClick={handleLocalAddMulti} 
-            startIcon={<Plus />}
-          >
-            Confirmar e Adicionar ({selecionados.length})
+          <Button variant="contained" fullWidth onClick={() => {
+            // Salva os comensais da refeição na exceção
+            const currentExcecoes = { ...(cardapio.config_excecoes_dias || {}) };
+            const diaExcecao = currentExcecoes[activeDay!] || { funciona: true, comensais: {}, horarios: {} };
+            const novosComensais = { ...(diaExcecao.comensais || {}), [activeMeal!]: tempComensaisRefeicao };
+            currentExcecoes[activeDay!] = { ...diaExcecao, comensais: novosComensais };
+            setCardapio({ ...cardapio, config_excecoes_dias: currentExcecoes });
+            
+            setMealDialogOpen(false);
+          }}>
+            Concluir Edição
           </Button>
         </DialogActions>
       </Dialog>

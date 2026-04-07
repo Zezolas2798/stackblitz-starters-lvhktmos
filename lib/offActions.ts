@@ -20,9 +20,9 @@ export async function fetchProductServer(barcode: string): Promise<FetchProductR
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), 8000); // 8 segundos de timeout
 
-    const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`, {
+    const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`, {
       headers: {
-        'User-Agent': 'MinhaAppNutri - Browser/Web - Version 1.0 - (https://github.com/Zezolas2798/stackblitz-starters-lvhktmos)'
+        'User-Agent': 'MinhaAppNutri - WebApp - 1.0 (Diagnóstico de Conexão)'
       },
       next: { revalidate: 3600 },
       signal: controller.signal

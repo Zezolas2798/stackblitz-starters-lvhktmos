@@ -1,8 +1,8 @@
 'use client';
 
 import './globals.css';
-import { usePathname } from 'next/navigation'; // <--- Importante para checar a rota
-import React, { useMemo } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation'; // <--- Importante para checar a rota e params
+import React, { useMemo, useEffect, useState } from 'react';
 
 // Fontes
 import '@fontsource/inter/300.css';
@@ -26,23 +26,31 @@ const DRAWER_WIDTH = 280;
 function ThemeApplier({ children }: { children: React.ReactNode }) {
   const { mode } = useThemeContext();
   const theme = useMemo(() => getTheme(mode), [mode]);
-  const pathname = usePathname(); // Pega a rota atual
-  const isLoginPage = pathname === '/login'; // Verifica se é a tela de login
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/login';
+  const searchParams = useSearchParams();
+  const isPreviewFrame = searchParams.get('preview') === 'true';
+  const isSimulationPage = pathname === '/preview';
 
   const { desktopOpen } = useClient();
-  const currentDrawerWidth = desktopOpen ? DRAWER_WIDTH : 0;
+  const currentDrawerWidth = (desktopOpen && !isPreviewFrame) ? DRAWER_WIDTH : 0;
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
 
       {/* LÓGICA DE LAYOUT CONDICIONAL */}
-      {isLoginPage ? (
+      {isSimulationPage ? (
+        // === PÁGINA DE SIMULAÇÃO (Sem layout padrão) ===
+        <Box sx={{ width: '100%', height: '100vh', overflow: 'hidden' }}>
+          {children}
+        </Box>
+      ) : isLoginPage ? (
         // === LAYOUT DE LOGIN (Limpo e Centralizado) ===
         <Box
           sx={{
             minHeight: '100vh',
-            bgcolor: 'background.default', // Usar o novo tema
+            bgcolor: 'background.default',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
