@@ -76,11 +76,19 @@ export default function ConfiguracaoEstoquePage() {
 
     // Edição
     const [editDialogOpen, setEditDialogOpen] = useState(false);
+    const [editEquipDialogOpen, setEditEquipDialogOpen] = useState(false);
+    const [equipamentoParaEditar, setEquipamentoParaEditar] = useState<any>(null);
     const [localParaEditar, setLocalParaEditar] = useState<any>(null);
     const [editNome, setEditNome] = useState('');
     const [editCategorias, setEditCategorias] = useState<string[]>([]);
     const [editEquipamentoConfigId, setEditEquipamentoConfigId] = useState<string | null>(null);
     const [originalEquipId, setOriginalEquipId] = useState<string | null>(null);
+
+    // Estado para campos de equipamento
+    const [editEquipFrequencia, setEditEquipFrequencia] = useState(2);
+    const [editEquipTempMin, setEditEquipTempMin] = useState<string>('');
+    const [editEquipTempMax, setEditEquipTempMax] = useState<string>('');
+    const [editEquipHorarios, setEditEquipHorarios] = useState<string[]>([]);
     
     // Quick Add Equipamento
     const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -317,6 +325,39 @@ export default function ConfiguracaoEstoquePage() {
             loadDados();
         } catch (err: any) {
             setMsg({ open: true, text: 'Erro ao excluir.', type: 'error' });
+        }
+    };
+
+    const handleOpenEditEquipamento = (equip: any) => {
+        setEquipamentoParaEditar(equip);
+        setEditNome(equip.nome);
+        setEditEquipFrequencia(equip.frequencia_diaria || 2);
+        setEditEquipTempMin(equip.temp_ideal_min?.toString() || '');
+        setEditEquipTempMax(equip.temp_ideal_max?.toString() || '');
+        setEditEquipHorarios(equip.horarios_afericao || []);
+        setEditEquipDialogOpen(true);
+    };
+
+    const handleSaveEquipamentoEdit = async () => {
+        if (!editNome.trim() || !equipamentoParaEditar) return;
+        try {
+            const { error } = await (supabase as any)
+                .from('cliente_equipamentos_config')
+                .update({ 
+                    nome: editNome.trim(),
+                    frequencia_diaria: editEquipFrequencia,
+                    temp_ideal_min: editEquipTempMin === '' ? null : parseFloat(editEquipTempMin),
+                    temp_ideal_max: editEquipTempMax === '' ? null : parseFloat(editEquipTempMax),
+                    horarios_afericao: editEquipHorarios
+                })
+                .eq('id', equipamentoParaEditar.id);
+
+            if (error) throw error;
+            setMsg({ open: true, text: 'Equipamento atualizado!', type: 'success' });
+            setEditEquipDialogOpen(false);
+            loadDados();
+        } catch (err: any) {
+            setMsg({ open: true, text: 'Erro ao atualizar: ' + err.message, type: 'error' });
         }
     };
 
@@ -769,6 +810,7 @@ export default function ConfiguracaoEstoquePage() {
                                                             primaryTypographyProps={{ variant: 'body2', fontWeight: 600, color: 'text.primary' }} 
                                                         />
                                                         <ListItemSecondaryAction>
+                                                            <IconButton size="small" onClick={() => handleOpenEditEquipamento(cat)} sx={{ mr: 1, color: 'primary.main' }}><Edit size={12} /></IconButton>
                                                             <IconButton size="small" onClick={() => handleRemoveEquipamento(cat.id)}><Trash2 size={12} /></IconButton>
                                                         </ListItemSecondaryAction>
                                                     </ListItem>
@@ -786,6 +828,7 @@ export default function ConfiguracaoEstoquePage() {
                                                                             primaryTypographyProps={{ variant: 'caption', fontWeight: 600, color: 'info.dark' }} 
                                                                         />
                                                                         <ListItemSecondaryAction>
+                                                                            <IconButton size="small" onClick={() => handleOpenEditEquipamento(sub)} sx={{ mr: 1, color: 'primary.main' }}><Edit size={10} /></IconButton>
                                                                             <IconButton size="small" onClick={() => handleRemoveEquipamento(sub.id)}><Trash2 size={10} /></IconButton>
                                                                         </ListItemSecondaryAction>
                                                                     </ListItem>
@@ -1027,6 +1070,102 @@ export default function ConfiguracaoEstoquePage() {
                     >
                         Criar e Vincular
                     </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* DIALOG DE EDIÇÃO DE EQUIPAMENTO */}
+            <Dialog open={editEquipDialogOpen} onClose={() => setEditEquipDialogOpen(false)} fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: 4 } }}>
+                <DialogTitle sx={{ fontWeight: 'bold' }}>Configurar Equipamento</DialogTitle>
+                <DialogContent>
+                    <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <TextField 
+                            label="Nome do Equipamento" 
+                            fullWidth 
+                            size="small" 
+                            value={editNome} 
+                            onChange={(e) => setEditNome(e.target.value)} 
+                        />
+                        
+                        <Divider>
+                            <Chip label="Monitoramento" size="small" variant="outlined" />
+                        </Divider>
+
+                        <TextField 
+                            label="Frequência Diária (Vezes)" 
+                            type="number"
+                            fullWidth 
+                            size="small" 
+                            value={editEquipFrequencia} 
+                            onChange={(e) => {
+                                const newFreq = Math.max(0, parseInt(e.target.value) || 0);
+                                setEditEquipFrequencia(newFreq);
+                                // Ajustar array de horários
+                                setEditEquipHorarios(prev => {
+                                    const next = [...prev];
+                                    if (newFreq > next.length) {
+                                        for (let i = next.length; i < newFreq; i++) next.push('');
+                                    } else {
+                                        return next.slice(0, newFreq);
+                                    }
+                                    return next;
+                                });
+                            }}
+                            helperText="Quantas vezes ao dia será aferida a temperatura"
+                        />
+
+                        {editEquipFrequencia > 0 && (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 1 }}>
+                                <Typography variant="caption" fontWeight="bold" color="info.main">Horários Sugeridos</Typography>
+                                <Grid container spacing={1}>
+                                    {editEquipHorarios.map((horario, idx) => (
+                                        <Grid item xs={6} key={idx}>
+                                            <TextField 
+                                                label={`Aferição ${idx + 1}`}
+                                                type="time"
+                                                fullWidth
+                                                size="small"
+                                                value={horario}
+                                                onChange={(e) => {
+                                                    const next = [...editEquipHorarios];
+                                                    next[idx] = e.target.value;
+                                                    setEditEquipHorarios(next);
+                                                }}
+                                                InputLabelProps={{ shrink: true }}
+                                            />
+                                        </Grid>
+                                    ))}
+                                </Grid>
+                            </Box>
+                        )}
+
+                        <Box sx={{ display: 'flex', gap: 2 }}>
+                            <TextField 
+                                label="Temp. Ideal Mín." 
+                                type="number"
+                                fullWidth 
+                                size="small" 
+                                value={editEquipTempMin} 
+                                onChange={(e) => setEditEquipTempMin(e.target.value)}
+                                InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
+                            />
+                            <TextField 
+                                label="Temp. Ideal Máx." 
+                                type="number"
+                                fullWidth 
+                                size="small" 
+                                value={editEquipTempMax} 
+                                onChange={(e) => setEditEquipTempMax(e.target.value)}
+                                InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
+                            />
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                            Esses valores serão usados para validar os registros na produção.
+                        </Typography>
+                    </Box>
+                </DialogContent>
+                <DialogActions sx={{ p: 3, pt: 0 }}>
+                    <Button onClick={() => setEditEquipDialogOpen(false)} color="inherit">Cancelar</Button>
+                    <Button onClick={handleSaveEquipamentoEdit} variant="contained" color="primary">Salvar Alterações</Button>
                 </DialogActions>
             </Dialog>
 

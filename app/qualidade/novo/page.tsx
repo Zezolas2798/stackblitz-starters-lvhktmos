@@ -10,6 +10,7 @@ import {
   DialogActions, TextField, DialogContentText
 } from '@mui/material';
 import { ArrowLeft, Calendar, FileCheck, PlayCircle } from 'lucide-react';
+import { getAuditTitleDate, getNowISO } from '@/lib/utils/dateUtils';
 
 export default function NovaAuditoriaPage() {
   const router = useRouter();
@@ -45,8 +46,8 @@ export default function NovaAuditoriaPage() {
   // 1. Ao clicar no card, abre o modal e sugere um nome
   const handleCardClick = (modelo: any) => {
     setModeloSelecionado(modelo);
-    // Sugestão: "Nome do Modelo - DD/MM/AAAA"
-    const sugestao = `${modelo.titulo} - ${new Date().toLocaleDateString('pt-BR')}`;
+    // Sugestão: "Nome do Modelo - DD/MM/AAAA" (Local)
+    const sugestao = `${modelo.titulo} - ${getAuditTitleDate()}`;
     setNomeAuditoria(sugestao);
     setModalOpen(true);
   };
@@ -65,7 +66,7 @@ export default function NovaAuditoriaPage() {
             titulo: nomeAuditoria, // Salva o nome personalizado
             status: 'EM_ANDAMENTO',
             responsavel_id: user?.id,
-            data_inicio: new Date().toISOString()
+            data_inicio: getNowISO()
         }).select().single();
 
         if (error) throw error;

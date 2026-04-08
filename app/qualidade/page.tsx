@@ -7,12 +7,13 @@ import { useClient } from '@/lib/ClientContext';
 import {
     Container, Typography, Box, Button, Paper, Table, TableBody,
     TableCell, TableContainer, TableHead, TableRow, Chip, IconButton,
-    Tooltip, CircularProgress, Grid, Card, CardContent, Stack
+    Tooltip, CircularProgress, Grid, Card, CardContent, Stack, Alert
 } from '@mui/material';
 import {
     Plus, FileText, ClipboardList, Calendar, User,
     Eye, Edit, Trash2 // Ícones novos
 } from 'lucide-react';
+import { formatLocalDate, formatLocalTime } from '@/lib/utils/dateUtils';
 
 export default function DashboardQualidadePage() {
     const router = useRouter();
@@ -20,6 +21,7 @@ export default function DashboardQualidadePage() {
 
     const [auditorias, setAuditorias] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         if (activeClientId) {
@@ -29,6 +31,7 @@ export default function DashboardQualidadePage() {
 
     const fetchAuditorias = async () => {
         setLoading(true);
+        setError(null);
         const { data, error } = await (supabase as any).from('checklist_auditorias')
             .select(`
         *,
@@ -40,6 +43,7 @@ export default function DashboardQualidadePage() {
 
         if (error) {
             console.error('Erro ao buscar auditorias:', error);
+            setError('Falha ao carregar auditorias. Verifique sua conexão ou contate o suporte.');
         } else {
             setAuditorias(data || []);
         }
@@ -165,6 +169,12 @@ export default function DashboardQualidadePage() {
             </Grid>
 
             {/* LISTA DE AUDITORIAS */}
+            {error && (
+                <Alert severity="error" sx={{ mb: 4, borderRadius: 2 }}>
+                    {error}
+                </Alert>
+            )}
+
             {loading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><CircularProgress /></Box>
             ) : (
@@ -205,9 +215,9 @@ export default function DashboardQualidadePage() {
                                             <TableCell>
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                     <Calendar size={14} className="text-gray-400" />
-                                                    {new Date(audit.data_inicio).toLocaleDateString()}
+                                                    {formatLocalDate(audit.data_inicio)}
                                                     <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                                                        {new Date(audit.data_inicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        {formatLocalTime(audit.data_inicio)}
                                                     </Typography>
                                                 </Box>
                                             </TableCell>

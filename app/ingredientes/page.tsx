@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useClient } from '@/lib/ClientContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Ingrediente } from '@/lib/types';
@@ -45,6 +46,15 @@ export default function IngredientesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [mostrarIncompletos, setMostrarIncompletos] = useState(false);
   const [openGerenciarGrupos, setOpenGerenciarGrupos] = useState(false);
+
+  const searchParams = useSearchParams();
+  const filterType = searchParams.get('filter');
+
+  useEffect(() => {
+    if (filterType === 'incomplete') {
+      setMostrarIncompletos(true);
+    }
+  }, [filterType]);
 
 
   const fetchIngredientes = useCallback(async () => {

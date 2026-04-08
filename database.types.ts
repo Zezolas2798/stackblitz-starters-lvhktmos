@@ -1176,30 +1176,42 @@ export type Database = {
           ativo: boolean | null
           cliente_id: string
           created_at: string | null
+          frequencia_diaria: number | null
           grupo: string
+          horarios_afericao: string[] | null
           id: string
           nome: string
           parent_id: string | null
+          temp_ideal_max: number | null
+          temp_ideal_min: number | null
           updated_at: string | null
         }
         Insert: {
           ativo?: boolean | null
           cliente_id: string
           created_at?: string | null
+          frequencia_diaria?: number | null
           grupo: string
+          horarios_afericao?: string[] | null
           id?: string
           nome: string
           parent_id?: string | null
+          temp_ideal_max?: number | null
+          temp_ideal_min?: number | null
           updated_at?: string | null
         }
         Update: {
           ativo?: boolean | null
           cliente_id?: string
           created_at?: string | null
+          frequencia_diaria?: number | null
           grupo?: string
+          horarios_afericao?: string[] | null
           id?: string
           nome?: string
           parent_id?: string | null
+          temp_ideal_max?: number | null
+          temp_ideal_min?: number | null
           updated_at?: string | null
         }
         Relationships: [
@@ -5002,3 +5014,4 @@ export const Constants = {
     },
   },
 } as const
+

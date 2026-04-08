@@ -17,7 +17,7 @@ export function usePermission() {
   const checkPermissions = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         setRole(null);
         setPermissions(new Set());
@@ -35,26 +35,23 @@ export function usePermission() {
       setRole(userRole);
 
       // 2. Se for 'super_admin' ou 'company_owner', não precisa buscar permissões detalhadas
-      // Eles têm "God Mode" (acesso total) na função can() abaixo.
       if (userRole === 'super_admin' || userRole === 'company_owner') {
         setLoading(false);
         return;
       }
 
-      // 3. Para mortais (Managers, Employees, Nutricionistas, etc.), buscamos as permissões granulares
-      // Chamando a RPC que criamos no Passo 1
+      // 3. Para mortais, buscamos as permissões granulares
       const { data: userPerms, error: rpcError } = await supabase.rpc('get_user_permissions');
 
       if (rpcError) {
         console.error('Erro ao buscar permissões granulares (RPC):', rpcError);
       }
 
-      // Transformamos array de objetos [{permission_slug: 'x'}, ...] em um Set de strings
       const permsSet = new Set<string>();
       if (userPerms && Array.isArray(userPerms)) {
         userPerms.forEach((p: any) => permsSet.add(p.permission_slug));
       }
-      
+
       setPermissions(permsSet);
 
     } catch (err) {
@@ -65,25 +62,23 @@ export function usePermission() {
   };
 
   // A FUNÇÃO MÁGICA: "CAN"
-  // Agora híbrida: Suporta o Legado (God Mode) e o Novo Sistema (Granular)
   const can = useCallback((permission: string) => {
     if (loading) return false;
-    
+
     // 1. REGRA DE OURO: Super Admin e Dono acessam TUDO
     if (role === 'super_admin' || role === 'company_owner') {
       return true;
     }
 
-    // 2. REGRA GRANULAR: Verifica se a string da permissão existe no Set carregado do banco
+    // 2. REGRA GRANULAR
     return permissions.has(permission);
 
   }, [role, permissions, loading]);
 
-  return { 
-    role, // Retorna para quem ainda usa (ex: exibir label "Gerente")
-    loading, 
+  return {
+    role,
+    loading,
     can,
     isSuperAdmin: role === 'super_admin'
   };
 }
-

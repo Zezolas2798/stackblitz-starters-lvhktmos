@@ -169,46 +169,52 @@ export default function NovaOrdemProducaoPage() {
       )}
 
       <Grid container spacing={4}>
-        <Grid item xs={12} md={4}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+        <Grid item xs={12}>
+          <Paper elevation={0} sx={{ p: 4, borderRadius: 3, border: '1px solid', borderColor: 'divider', bgcolor: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(8px)' }}>
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
               <Settings size={20} /> Detalhes Gerais
             </Typography>
 
-            <TextField 
-              label="Código da OP" 
-              fullWidth 
-              value={codigo} 
-              onChange={e => setCodigo(e.target.value)} 
-              sx={{ mb: 3 }} 
-              required
-            />
-            
-            <TextField 
-              label="Título / Referência (Opcional)" 
-              fullWidth 
-              value={titulo} 
-              onChange={e => setTitulo(e.target.value)} 
-              sx={{ mb: 3 }}
-              placeholder="Ex: Produção Semanal"
-            />
-            
-            <TextField 
-              label="Data Prevista" 
-              type="date" 
-              fullWidth 
-              InputLabelProps={{ shrink: true }} 
-              value={dataPrevista} 
-              onChange={e => setDataPrevista(e.target.value)} 
-              InputProps={{
-                startAdornment: <Calendar size={18} style={{ marginRight: 8, color: '#999' }} />
-              }}
-            />
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={4}>
+                <TextField 
+                  label="Código da OP" 
+                  fullWidth 
+                  value={codigo} 
+                  onChange={e => setCodigo(e.target.value)} 
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <TextField 
+                  label="Título / Referência (Opcional)" 
+                  fullWidth 
+                  value={titulo} 
+                  onChange={e => setTitulo(e.target.value)} 
+                  placeholder="Ex: Produção Semanal"
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <TextField 
+                  label="Data Prevista" 
+                  type="date" 
+                  fullWidth 
+                  InputLabelProps={{ shrink: true }} 
+                  value={dataPrevista} 
+                  onChange={e => setDataPrevista(e.target.value)} 
+                  InputProps={{
+                    startAdornment: <Calendar size={18} style={{ marginRight: 8, color: theme.palette.text.secondary }} />
+                  }}
+                />
+              </Grid>
+            </Grid>
           </Paper>
         </Grid>
 
-        <Grid item xs={12} md={8}>
-          <Paper elevation={0} sx={{ p: 0, borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+        <Grid item xs={12}>
+          <Paper elevation={0} sx={{ p: 0, borderRadius: 3, border: '1px solid', borderColor: 'divider', overflow: 'hidden', bgcolor: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(8px)' }}>
             <Box sx={{ p: 3, bgcolor: alpha(theme.palette.primary.main, 0.03), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                <Typography variant="h6" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.primary' }}>
                  <ChefHat size={20} /> Produtos a Produzir

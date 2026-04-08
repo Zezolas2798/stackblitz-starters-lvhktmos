@@ -65,6 +65,10 @@ export default function ControleProducaoPage() {
                     nome, 
                     grupo,
                     parent_id,
+                    frequencia_diaria,
+                    temp_ideal_min,
+                    temp_ideal_max,
+                    horarios_afericao,
                     parent:cliente_equipamentos_config!parent_id(id, nome),
                     locais:cliente_locais_estoque(id, nome)
                 `)
@@ -152,7 +156,7 @@ export default function ControleProducaoPage() {
         loadDados();
     }, [loadDados]);
 
-    const handleLogChange = (equipId: string, periodo: 'MANHA' | 'TARDE', field: string, value: any) => {
+    const handleLogChange = (equipId: string, periodo: string, field: string, value: any) => {
         const key = `${equipId}-${periodo}`;
         const now = format(new Date(), 'HH:mm:ss');
         
@@ -294,170 +298,135 @@ export default function ControleProducaoPage() {
                                         </TableRow>
                                     ) : (
                                         equipamentosMonitorados.map((equip) => {
-                                            const rowKeyPrefix = `${equip.id}`;
-                                            const manhaLog = logsTemp[`${rowKeyPrefix}-MANHA`] || {};
-                                            const tardeLog = logsTemp[`${rowKeyPrefix}-TARDE`] || {};
+                                            const freq = equip.frequencia_diaria || 2;
+                                            const sessions = Array.from({ length: freq }, (_, i) => {
+                                                if (freq === 2) return i === 0 ? 'MANHA' : 'TARDE';
+                                                return (i + 1).toString();
+                                            });
 
-                                            // Helper para encontrar o alimento no log
-                                            const getAlimento = (log: any) => {
-                                                if (log.alimento_obj) return log.alimento_obj;
-                                                if (log.produto_id) return alimentos.find(a => a.id === log.produto_id && a.tipo === 'PRODUTO');
-                                                if (log.receita_id) return alimentos.find(a => a.id === log.receita_id && a.tipo === 'RECEITA');
-                                                return null;
-                                            };
+                                            return sessions.map((periodo, idx) => {
+                                                const logKey = `${equip.id}-${periodo}`;
+                                                const log = logsTemp[logKey] || {};
 
-                                            return [
-                                                // LINHA MANHÃ
-                                                <TableRow key={`${equip.id}-manha`}>
-                                                    <TableCell rowSpan={2} sx={{ fontWeight: 600, bgcolor: 'background.default', borderBottom: '1px solid', borderColor: 'divider' }}>
-                                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{equip.nome}</Typography>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            {equip.parent?.nome} {equip.locais?.length > 0 && `• ${equip.locais[0].nome}`}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell align="center" sx={{ borderLeft: '1px solid', borderColor: 'divider' }}>
-                                                        <Chip label="MANHÃ" size="small" sx={{ fontSize: '0.6rem', fontWeight: 800, height: 20 }} />
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        <Select
-                                                            size="small"
-                                                            value={manhaLog.status || 'LIGADO'}
-                                                            onChange={(e) => handleLogChange(equip.id, 'MANHA', 'status', e.target.value)}
-                                                            sx={{ fontSize: '0.8rem', minWidth: 100 }}
-                                                        >
-                                                            <MenuItem value="LIGADO">A Ativo</MenuItem>
-                                                            <MenuItem value="DESLIGADO">D Desligado</MenuItem>
-                                                            <MenuItem value="VAZIO">V Vazio</MenuItem>
-                                                        </Select>
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
-                                                            {manhaLog.hora_afericao?.substring(0, 5) || '--:--'}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Autocomplete
-                                                            size="small"
-                                                            disabled={manhaLog.status === 'DESLIGADO' || manhaLog.status === 'VAZIO'}
-                                                            options={alimentos}
-                                                            getOptionLabel={(option) => option.nome}
-                                                            value={getAlimento(manhaLog)}
-                                                            onChange={(_, val) => handleLogChange(equip.id, 'MANHA', 'alimento_obj', val)}
-                                                            renderInput={(params) => (
-                                                                <TextField {...params} placeholder="Selecione o alimento..." variant="outlined" />
-                                                            )}
-                                                            renderOption={(props, option) => (
-                                                                <Box component="li" {...props} sx={{ fontSize: '0.8rem' }}>
-                                                                    {option.tipo === 'RECEITA' ? <ChefHat size={14} style={{ marginRight: 8 }} /> : <ShoppingBag size={14} style={{ marginRight: 8 }} />}
-                                                                    {option.nome}
-                                                                </Box>
-                                                            )}
-                                                            sx={{ minWidth: 220 }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        <TextField
-                                                            size="small"
-                                                            type="number"
-                                                            disabled={manhaLog.status === 'DESLIGADO'}
-                                                            value={manhaLog.temp_equipamento ?? ''}
-                                                            onChange={(e) => handleLogChange(equip.id, 'MANHA', 'temp_equipamento', e.target.value)}
-                                                            InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
-                                                            sx={{ width: 85 }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        <TextField
-                                                            size="small"
-                                                            type="number"
-                                                            disabled={manhaLog.status === 'DESLIGADO' || manhaLog.status === 'VAZIO'}
-                                                            value={manhaLog.temp_alimento ?? ''}
-                                                            onChange={(e) => handleLogChange(equip.id, 'MANHA', 'temp_alimento', e.target.value)}
-                                                            InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
-                                                            sx={{ width: 85 }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        {manhaLog.id ? (
-                                                            <Chip label="Salvo" color="success" size="small" variant="filled" sx={{ height: 20, fontSize: '0.66rem' }} />
-                                                        ) : manhaLog.hora_afericao ? (
-                                                            <Chip label="Pend." color="warning" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.66rem' }} />
-                                                        ) : null}
-                                                    </TableCell>
-                                                </TableRow>,
-                                                // LINHA TARDE
-                                                <TableRow key={`${equip.id}-tarde`} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
-                                                    <TableCell align="center" sx={{ borderLeft: '1px solid', borderColor: 'divider' }}>
-                                                        <Chip label="TARDE" size="small" sx={{ fontSize: '0.6rem', fontWeight: 800, height: 20 }} />
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        <Select
-                                                            size="small"
-                                                            value={tardeLog.status || 'LIGADO'}
-                                                            onChange={(e) => handleLogChange(equip.id, 'TARDE', 'status', e.target.value)}
-                                                            sx={{ fontSize: '0.8rem', minWidth: 100 }}
-                                                        >
-                                                            <MenuItem value="LIGADO">A Ativo</MenuItem>
-                                                            <MenuItem value="DESLIGADO">D Desligado</MenuItem>
-                                                            <MenuItem value="VAZIO">V Vazio</MenuItem>
-                                                        </Select>
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
-                                                            {tardeLog.hora_afericao?.substring(0, 5) || '--:--'}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Autocomplete
-                                                            size="small"
-                                                            disabled={tardeLog.status === 'DESLIGADO' || tardeLog.status === 'VAZIO'}
-                                                            options={alimentos}
-                                                            getOptionLabel={(option) => option.nome}
-                                                            value={getAlimento(tardeLog)}
-                                                            onChange={(_, val) => handleLogChange(equip.id, 'TARDE', 'alimento_obj', val)}
-                                                            renderInput={(params) => (
-                                                                <TextField {...params} placeholder="Selecione o alimento..." variant="outlined" />
-                                                            )}
-                                                            renderOption={(props, option) => (
-                                                                <Box component="li" {...props} sx={{ fontSize: '0.8rem' }}>
-                                                                    {option.tipo === 'RECEITA' ? <ChefHat size={14} style={{ marginRight: 8 }} /> : <ShoppingBag size={14} style={{ marginRight: 8 }} />}
-                                                                    {option.nome}
-                                                                </Box>
-                                                            )}
-                                                            sx={{ minWidth: 220 }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        <TextField
-                                                            size="small"
-                                                            type="number"
-                                                            disabled={tardeLog.status === 'DESLIGADO'}
-                                                            value={tardeLog.temp_equipamento ?? ''}
-                                                            onChange={(e) => handleLogChange(equip.id, 'TARDE', 'temp_equipamento', e.target.value)}
-                                                            InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
-                                                            sx={{ width: 85 }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        <TextField
-                                                            size="small"
-                                                            type="number"
-                                                            disabled={tardeLog.status === 'DESLIGADO' || tardeLog.status === 'VAZIO'}
-                                                            value={tardeLog.temp_alimento ?? ''}
-                                                            onChange={(e) => handleLogChange(equip.id, 'TARDE', 'temp_alimento', e.target.value)}
-                                                            InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
-                                                            sx={{ width: 85 }}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell align="center">
-                                                        {tardeLog.id ? (
-                                                            <Chip label="Salvo" color="success" size="small" variant="filled" sx={{ height: 20, fontSize: '0.66rem' }} />
-                                                        ) : tardeLog.hora_afericao ? (
-                                                            <Chip label="Pend." color="warning" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.66rem' }} />
-                                                        ) : null}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ];
+                                                // Helper para marcar temperatura fora da faixa
+                                                const isOutOfRange = (temp: any) => {
+                                                    if (temp === null || temp === undefined || temp === '') return false;
+                                                    const t = parseFloat(temp);
+                                                    if (equip.temp_ideal_min !== null && t < equip.temp_ideal_min) return true;
+                                                    if (equip.temp_ideal_max !== null && t > equip.temp_ideal_max) return true;
+                                                    return false;
+                                                };
+
+                                                const rangeText = equip.temp_ideal_min !== null || equip.temp_ideal_max !== null 
+                                                    ? `Meta: ${equip.temp_ideal_min ?? '-∞'}°C a ${equip.temp_ideal_max ?? '+∞'}°C`
+                                                    : 'Sem meta';
+
+                                                const getAlimento = (l: any) => {
+                                                    if (l.alimento_obj) return l.alimento_obj;
+                                                    if (l.produto_id) return alimentos.find(a => a.id === l.produto_id && a.tipo === 'PRODUTO');
+                                                    if (l.receita_id) return alimentos.find(a => a.id === l.receita_id && a.tipo === 'RECEITA');
+                                                    return null;
+                                                };
+
+                                                return (
+                                                    <TableRow key={logKey} sx={idx % 2 !== 0 ? { bgcolor: alpha(theme.palette.primary.main, 0.02) } : {}}>
+                                                        {idx === 0 && (
+                                                            <TableCell rowSpan={freq} sx={{ fontWeight: 600, bgcolor: 'background.default', borderBottom: '1px solid', borderColor: 'divider', minWidth: 200 }}>
+                                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>{equip.nome}</Typography>
+                                                                <Typography variant="caption" color="text.secondary" display="block">
+                                                                    {equip.parent?.nome} {equip.locais?.length > 0 && `• ${equip.locais[0].nome}`}
+                                                                </Typography>
+                                                                <Chip 
+                                                                    label={rangeText} 
+                                                                    size="small" 
+                                                                    variant="outlined" 
+                                                                    sx={{ height: 18, fontSize: '0.6rem', mt: 0.5, borderColor: alpha(theme.palette.divider, 0.1) }} 
+                                                                />
+                                                            </TableCell>
+                                                        )}
+                                                        <TableCell align="center" sx={{ borderLeft: '1px solid', borderColor: 'divider' }}>
+                                                            <Chip 
+                                                                label={equip.horarios_afericao?.[idx] ? equip.horarios_afericao[idx] : (periodo === 'MANHA' ? 'MANHÃ' : periodo === 'TARDE' ? 'TARDE' : `${periodo}ª AFER.`)} 
+                                                                size="small" 
+                                                                color={periodo === 'MANHA' ? 'primary' : periodo === 'TARDE' ? 'secondary' : 'default'}
+                                                                sx={{ fontSize: '0.6rem', fontWeight: 800, height: 20 }} 
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell align="center">
+                                                            <Select
+                                                                size="small"
+                                                                value={log.status || 'LIGADO'}
+                                                                onChange={(e) => handleLogChange(equip.id, periodo, 'status', e.target.value)}
+                                                                sx={{ fontSize: '0.8rem', minWidth: 100 }}
+                                                            >
+                                                                <MenuItem value="LIGADO">Ativo</MenuItem>
+                                                                <MenuItem value="DESLIGADO">Desligado</MenuItem>
+                                                                <MenuItem value="VAZIO">Vazio</MenuItem>
+                                                            </Select>
+                                                        </TableCell>
+                                                        <TableCell align="center">
+                                                            <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
+                                                                {log.hora_afericao?.substring(0, 5) || '--:--'}
+                                                            </Typography>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Autocomplete
+                                                                size="small"
+                                                                disabled={log.status === 'DESLIGADO' || log.status === 'VAZIO'}
+                                                                options={alimentos}
+                                                                getOptionLabel={(option) => option.nome}
+                                                                value={getAlimento(log)}
+                                                                onChange={(_, val) => handleLogChange(equip.id, periodo, 'alimento_obj', val)}
+                                                                renderInput={(params) => (
+                                                                    <TextField {...params} placeholder="Alimento..." variant="outlined" />
+                                                                )}
+                                                                renderOption={(props, option) => (
+                                                                    <Box component="li" {...props} sx={{ fontSize: '0.8rem' }}>
+                                                                        {option.tipo === 'RECEITA' ? <ChefHat size={14} style={{ marginRight: 8 }} /> : <ShoppingBag size={14} style={{ marginRight: 8 }} />}
+                                                                        {option.nome}
+                                                                    </Box>
+                                                                )}
+                                                                sx={{ minWidth: 200 }}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell align="center">
+                                                            <Tooltip title={isOutOfRange(log.temp_equipamento) ? "Fora da faixa ideal!" : ""}>
+                                                                <TextField
+                                                                    size="small"
+                                                                    type="number"
+                                                                    disabled={log.status === 'DESLIGADO'}
+                                                                    value={log.temp_equipamento ?? ''}
+                                                                    onChange={(e) => handleLogChange(equip.id, periodo, 'temp_equipamento', e.target.value)}
+                                                                    error={isOutOfRange(log.temp_equipamento)}
+                                                                    InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
+                                                                    sx={{ width: 85, '& .MuiOutlinedInput-root': isOutOfRange(log.temp_equipamento) ? { bgcolor: alpha(theme.palette.error.main, 0.05) } : {} }}
+                                                                />
+                                                            </Tooltip>
+                                                        </TableCell>
+                                                        <TableCell align="center">
+                                                            <Tooltip title={isOutOfRange(log.temp_alimento) ? "Fora da faixa ideal!" : ""}>
+                                                                <TextField
+                                                                    size="small"
+                                                                    type="number"
+                                                                    disabled={log.status === 'DESLIGADO' || log.status === 'VAZIO'}
+                                                                    value={log.temp_alimento ?? ''}
+                                                                    onChange={(e) => handleLogChange(equip.id, periodo, 'temp_alimento', e.target.value)}
+                                                                    error={isOutOfRange(log.temp_alimento)}
+                                                                    InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
+                                                                    sx={{ width: 85, '& .MuiOutlinedInput-root': isOutOfRange(log.temp_alimento) ? { bgcolor: alpha(theme.palette.error.main, 0.05) } : {} }}
+                                                                />
+                                                            </Tooltip>
+                                                        </TableCell>
+                                                        <TableCell align="center">
+                                                            {log.id ? (
+                                                                <Chip label="Salvo" color="success" size="small" sx={{ height: 20, fontSize: '0.6rem' }} />
+                                                            ) : log.hora_afericao ? (
+                                                                <Chip label="Pend." color="warning" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.6rem' }} />
+                                                            ) : null}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            });
                                         }).flat()
                                     )}
                                 </TableBody>

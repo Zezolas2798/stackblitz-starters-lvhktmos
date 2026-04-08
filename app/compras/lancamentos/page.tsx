@@ -870,7 +870,7 @@ export default function LancamentoNotasPage() {
       <QuickIngredienteDialog 
         open={modalOpen} 
         onClose={() => setModalOpen(false)} 
-        initialName={termoBuscaIngrediente} 
+        nomeSugerido={termoBuscaIngrediente} 
         onSuccess={(id, item) => {
           if (nfItemToLink) handleIngredienteSelect(nfItemToLink, id, item);
           setModalOpen(false);
@@ -885,7 +885,6 @@ export default function LancamentoNotasPage() {
           setPreCadastroOpen(false);
           loadDados().then(() => setFornecedorNf(f));
         }}
-        activeClientId={activeClientId || ''}
       />
     </Container>
   );

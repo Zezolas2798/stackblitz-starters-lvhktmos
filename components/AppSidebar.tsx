@@ -348,6 +348,12 @@ export function AppSidebar({ width }: AppSidebarProps) {
           href: '/operacional/tarefas',
           icon: <Assignment />,
           visible: can('sys.tasks.manage')
+        },
+        {
+          label: 'Modelos de Tarefas',
+          href: '/config/tarefas/modelos',
+          icon: <ListAlt />,
+          visible: can('sys.tasks.manage')
         }
       ]
     },
