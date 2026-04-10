@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Box, Typography, Grid, Paper, Card, CardContent, 
   Chip, LinearProgress, Button, IconButton, Dialog,
@@ -63,6 +64,7 @@ interface RequisicaoItem {
 }
 
 export default function ProducaoDashboardPage() {
+  const router = useRouter();
   const theme = useTheme();
   const { activeClientId, unidadeId } = useClient();
   const [loading, setLoading] = useState(true);
@@ -171,7 +173,7 @@ export default function ProducaoDashboardPage() {
                     cursor: 'pointer'
                   }
                 }}
-                onClick={() => window.location.href = `/producao/setor/${setor.id}`}
+                onClick={() => router.push(`/producao/setor/${setor.id}`)}
               >
                 <Box sx={{ p: 3, bgcolor: alpha(theme.palette.primary.main, 0.04), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 2 }}>
                   <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'primary.main', color: 'white' }}>
@@ -238,7 +240,7 @@ export default function ProducaoDashboardPage() {
                 bgcolor: alpha(theme.palette.warning.main, 0.02),
                 '&:hover': { cursor: 'pointer', bgcolor: alpha(theme.palette.warning.main, 0.05) }
               }}
-              onClick={() => window.location.href = `/producao/setor/unassigned`}
+              onClick={() => router.push(`/producao/setor/unassigned`)}
             >
               <CardContent sx={{ p: 4, textAlign: 'center' }}>
                 <Layers size={48} color={theme.palette.warning.main} style={{ marginBottom: 16 }} />

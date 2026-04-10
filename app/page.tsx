@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
+import { usePermission } from '@/hooks/usePermission';
+import { SystemDashboard } from '@/components/SystemDashboard';
 import {
   Box,
   Grid,
@@ -57,7 +59,8 @@ const desempenhoData = [
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { unidadeSelecionada, loading: loadingContext } = useClient();
+  const { unidadeSelecionada, loading: loadingContext, isSystemMode } = useClient();
+  const { role, loading: loadingPerms } = usePermission();
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
 
@@ -84,7 +87,7 @@ export default function DashboardPage() {
   }, [router]);
 
   // Enquanto verifica a senha ou carrega o contexto, mostra Loading
-  if (checkingAuth || loadingContext) {
+  if (checkingAuth || loadingContext || loadingPerms) {
     return (
       <Box
         sx={{
@@ -102,6 +105,11 @@ export default function DashboardPage() {
         </Typography>
       </Box>
     );
+  }
+
+  // Se for SUPER ADMIN em modo sistema (sem unidade selecionada), mostra a Central de Controle
+  if (isSystemMode && role === 'super_admin') {
+    return <SystemDashboard />;
   }
 
   // Se chegou aqui, o usuário está logado.

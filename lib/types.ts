@@ -13,9 +13,37 @@ export interface Cliente {
   razao_social: string;
   nome_fantasia: string | null;
   cnpj_raiz: string;
+  logo_url?: string | null;
   ativo: boolean | null;
   created_at?: string | null;
 }
+
+export interface AppModulo {
+  slug: string;
+  nome: string;
+  descricao?: string | null;
+  ativo: boolean;
+}
+
+export interface ClienteModulo {
+  id: string;
+  cliente_id: string;
+  modulo_slug: string;
+  ativo: boolean;
+  app_modulos?: AppModulo;
+}
+
+export interface Profile {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  company_id: string | null;
+  role: string | null;
+  cpf?: string | null;
+  registro_profissional?: string | null;
+  created_at?: string | null;
+}
+
 
 // ==============================================================================
 // 8. FICHAS TÉCNICAS E CARDÁPIOS UAN (NOVO MÓDULO LOGÍSTICO)
@@ -58,6 +86,7 @@ export interface ComposicaoFichaUAN {
 export interface CardapioUAN {
   id: string;
   cliente_id: string;
+  unidade_id: string;
   nome_ciclo: string;
   data_inicio: string;
   data_fim: string;
@@ -68,6 +97,7 @@ export interface CardapioUAN {
   comensais_modelo?: Record<string, Record<string, number>> | null;
   config_excecoes_dias?: Record<string, { funciona?: boolean, comensais?: Record<string, number>, horarios?: Record<string, { inicio: string, fim: string }> }> | null;
   horario_refeicoes?: Record<string, { inicio: string; fim: string }>;
+  setor_producao_id?: string | null;
   created_at?: string;
 }
 
@@ -100,7 +130,7 @@ export interface ClienteUnidade {
   endereco_completo?: string | null;
   responsavel_tecnico_nome?: string | null;
   responsavel_tecnico_registro?: string | null;
-  ativo: boolean;
+  ativo: boolean | null;
   
   // Relação Virtual (Frontend Join)
   cliente?: Cliente;

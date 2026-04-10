@@ -10,10 +10,11 @@ import {
   CircularProgress, Alert, Container, useTheme, alpha,
   Divider, Tooltip, List, ListItemButton, Breadcrumbs,
   Link, Accordion, AccordionSummary, AccordionDetails,
-  Tabs, Tab, ToggleButtonGroup, ToggleButton, MenuItem, InputAdornment,
+  Tabs, Tab, ToggleButtonGroup, ToggleButton, Menu, MenuItem, InputAdornment,
   Autocomplete, Stack
 } from '@mui/material';
-import { format, addDays, parseISO } from 'date-fns';
+import { format, addDays, parseISO, startOfWeek, endOfWeek, isWithinInterval, startOfDay, addWeeks, subWeeks, eachDayOfInterval, isSameDay, startOfMonth, endOfMonth, isSameMonth } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Layers, ChevronRight, Play, CheckCircle, ChefHat, Info, History, Trash2, Tag, Printer, Save, MapPin, Calendar, User, ArrowLeft, ClipboardList, Clock, Package, ChevronDown, Check, AlertTriangle, RotateCcw, Scan, Box as BoxIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -29,7 +30,8 @@ interface Setor {
 
 interface ItemProducao {
   id: string;
-  receita_id: string;
+  receita_id: string | null;
+  ficha_uan_id: string | null;
   ordem_id: string;
   setor_producao_id: string;
   quantidade_planejada: number;
@@ -39,7 +41,13 @@ interface ItemProducao {
     modo_preparo: string | null;
     rendimento_total_g: number;
     peso_embalagem_g: number | null;
-  };
+  } | null;
+  fichas_tecnicas_uan: {
+    nome: string;
+    modo_preparo: string | null;
+    rendimento_porcoes: number;
+    peso_porcao_g: number;
+  } | null;
   producao_ordens: {
     id: string;
     codigo: string;
@@ -75,6 +83,10 @@ export default function SetorExecucaoPage() {
   const [setor, setSetor] = useState<Setor | null>(null);
   const [itensPorOrdem, setItensPorOrdem] = useState<Record<string, { ordem: any, itens: ItemProducao[] }>>({});
   const [userName, setUserName] = useState('');
+  
+  // Controle de Abas e Datas
+  const [activeTab, setActiveTab] = useState(0); // 0: Esta Semana, 1: Calendário
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [quickEtiqueta, setQuickEtiqueta] = useState<{
     open: boolean;
     type: 'INSUMO' | 'PRODUTO';
@@ -118,6 +130,9 @@ export default function SetorExecucaoPage() {
   const [smartAllocationDraft, setSmartAllocationDraft] = useState<any | null>(null);
   const [showSmartDraft, setShowSmartDraft] = useState(false);
   const [labelSetorOpen, setLabelSetorOpen] = useState(false);
+  
+  // Controle de Status da OP
+  const [statusMenuAnchor, setStatusMenuAnchor] = useState<{ el: HTMLElement, orderId: string } | null>(null);
 
   useEffect(() => {
     if (unidadeId && setorId) {
@@ -149,14 +164,23 @@ export default function SetorExecucaoPage() {
         .select(`
           id,
           receita_id,
+          ficha_uan_id,
           ordem_id,
           setor_producao_id,
           quantidade_planejada,
           quantidade_produzida,
           receitas ( nome, modo_preparo, rendimento_total_g, peso_embalagem_g ),
+          fichas_tecnicas_uan ( nome, modo_preparo, rendimento_porcoes, peso_porcao_g ),
           producao_ordens ( id, codigo, titulo, status, data_prevista )
         `)
-        .in('producao_ordens.status', ['PLANEJADA', 'SEPARADA', 'EM_PRODUCAO'])
+        .in('producao_ordens.status', ['PLANEJADA', 'SEPARADA', 'EM_PRODUCAO']);
+
+      if (setorId !== 'unassigned') {
+        query = query.eq('setor_producao_id', setorId);
+      } else {
+        query = query.is('setor_producao_id', null);
+      }
+
       const { data: itensData, error: itensErr } = await query;
       if (itensErr) throw itensErr;
 
@@ -188,6 +212,149 @@ export default function SetorExecucaoPage() {
       setLoading(false);
     }
   }
+
+  // --- LÓGICA DE DATAS E FILTRAGEM ---
+
+  const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
+  const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 });
+
+  const getFilteredOrders = () => {
+    const orders = Object.values(itensPorOrdem);
+    
+    if (activeTab === 0) {
+      // Aba "Esta Semana"
+      return orders.filter(({ ordem }) => {
+        if (!ordem.data_prevista) return false;
+        const date = parseISO(ordem.data_prevista);
+        return isWithinInterval(date, { 
+          start: startOfDay(weekStart), 
+          end: startOfDay(weekEnd) 
+        });
+      }).sort((a, b) => {
+        const dateA = a.ordem.data_prevista || '';
+        const dateB = b.ordem.data_prevista || '';
+        return dateA.localeCompare(dateB);
+      });
+    }
+    
+    // Aba "Calendário" - Mostra todas as ordens ativas ordenadas por data
+    return orders.sort((a, b) => {
+      const dateA = a.ordem.data_prevista || '';
+      const dateB = b.ordem.data_prevista || '';
+      return dateA.localeCompare(dateB);
+    });
+  };
+
+  const navNextWeek = () => setCurrentDate(activeTab === 0 ? addWeeks(currentDate, 1) : addDays(startOfMonth(addDays(endOfMonth(currentDate), 1)), 0));
+  const navPrevWeek = () => setCurrentDate(activeTab === 0 ? subWeeks(currentDate, 1) : subWeeks(startOfMonth(currentDate), 1));
+  const navToday = () => setCurrentDate(new Date());
+
+  const renderCalendar = () => {
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(monthStart);
+    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+    const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+
+    // Mapear as OPs por data para o calendário
+    const ordersByDate: Record<string, any[]> = {};
+    Object.values(itensPorOrdem).forEach(({ ordem }) => {
+      if (ordem.data_prevista) {
+        const d = format(parseISO(ordem.data_prevista), 'yyyy-MM-dd');
+        if (!ordersByDate[d]) ordersByDate[d] = [];
+        ordersByDate[d].push(ordem);
+      }
+    });
+
+    const dayLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+    return (
+      <Box sx={{ mt: 2 }}>
+         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="h5" fontWeight="bold" sx={{ textTransform: 'capitalize' }}>
+              {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button size="small" variant="outlined" onClick={navPrevWeek}>Anterior</Button>
+              <Button size="small" variant="outlined" onClick={navToday}>Hoje</Button>
+              <Button size="small" variant="outlined" onClick={navNextWeek}>Próximo</Button>
+            </Box>
+         </Box>
+
+         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1 }}>
+            {dayLabels.map(label => (
+              <Typography key={label} align="center" variant="caption" fontWeight="bold" color="text.secondary" sx={{ py: 1 }}>
+                {label}
+              </Typography>
+            ))}
+            {calendarDays.map((day, idx) => {
+              const dKey = format(day, 'yyyy-MM-dd');
+              const dayOrders = ordersByDate[dKey] || [];
+              const isToday = isSameDay(day, new Date());
+              const isOtherMonth = !isSameMonth(day, monthStart);
+
+              return (
+                <Paper 
+                  key={idx} 
+                  elevation={0}
+                  onClick={() => {
+                    if (dayOrders.length > 0) {
+                      setCurrentDate(day);
+                      setActiveTab(0);
+                    }
+                  }}
+                  sx={{ 
+                    minHeight: 100, 
+                    p: 1, 
+                    border: '1px solid', 
+                    borderColor: isToday ? 'primary.main' : 'divider',
+                    bgcolor: isOtherMonth ? alpha(theme.palette.action.disabledBackground, 0.05) : 'background.paper',
+                    opacity: isOtherMonth ? 0.6 : 1,
+                    transition: 'all 0.2s',
+                    cursor: dayOrders.length > 0 ? 'pointer' : 'default',
+                    '&:hover': dayOrders.length > 0 ? {
+                      bgcolor: alpha(theme.palette.primary.main, 0.02),
+                      boxShadow: theme.shadows[2]
+                    } : {}
+                  }}
+                >
+                  <Typography 
+                    variant="caption" 
+                    fontWeight={isToday ? "bold" : "medium"}
+                    color={isToday ? "primary.main" : "text.secondary"}
+                  >
+                    {format(day, 'd')}
+                  </Typography>
+
+                  <Box sx={{ mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    {dayOrders.map((o, i) => (
+                      <Box 
+                        key={i} 
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 0.5,
+                          p: 0.4, 
+                          borderRadius: 1, 
+                          bgcolor: alpha(theme.palette.primary.main, 0.1),
+                          border: '1px solid',
+                          borderColor: alpha(theme.palette.primary.main, 0.2)
+                        }}
+                      >
+                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: o.status === 'EM_PRODUCAO' ? 'warning.main' : (o.status === 'PLANEJADA' ? 'primary.main' : 'success.main') }} />
+                        <Typography variant="caption" noWrap sx={{ fontSize: '0.65rem', fontWeight: 'bold' }}>
+                          {o.codigo}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Paper>
+              );
+            })}
+         </Box>
+      </Box>
+    );
+  };
 
   // --- LÓGICA DE RESERVA DE INSUMOS ---
 
@@ -473,13 +640,43 @@ export default function SetorExecucaoPage() {
     setLoadingReqs(true);
     
     try {
-      // 1. Buscar a composição da receita (ingredientes que compõem o produto)
-      const { data: comp, error: compErr } = await supabase
-        .from('composicao_receitas')
-        .select('id, item_id, item_type, peso_liquido_g')
-        .eq('receita_id', item.receita_id);
+      // 1. Buscar a composição (ingredientes que compõem o produto)
+      const isUAN = !!item.ficha_uan_id;
+      let comp: any[] = [];
+      let factor = 1;
 
-      if (compErr) throw compErr;
+      if (isUAN) {
+        // Fluxo UAN
+        const { data: uanComp, error: compErr } = await supabase
+          .from('composicao_fichas_uan')
+          .select('id, ingrediente_id, peso_liquido_g')
+          .eq('ficha_uan_id', item.ficha_uan_id!);
+
+        if (compErr) throw compErr;
+        comp = (uanComp || []).map(c => ({
+          id: c.id,
+          item_id: c.ingrediente_id,
+          item_type: 'ingrediente',
+          peso_liquido_g: c.peso_liquido_g
+        }));
+
+        const yieldBase = item.fichas_tecnicas_uan?.rendimento_porcoes || 1;
+        factor = item.quantidade_planejada / yieldBase;
+      } else {
+        // Fluxo Indústria (Receitas)
+        const { data: recComp, error: compErr } = await supabase
+          .from('composicao_receitas')
+          .select('id, item_id, item_type, peso_liquido_g')
+          .eq('receita_id', item.receita_id!);
+
+        if (compErr) throw compErr;
+        comp = recComp || [];
+
+        // Fator = (Qtd de produtos na OP * Peso de cada embalagem) / Rendimento base da receita
+        const totalPesoDesejadoG = item.quantidade_planejada * (item.receitas?.peso_embalagem_g || 0);
+        const yieldBase = item.receitas?.rendimento_total_g || 1;
+        factor = totalPesoDesejadoG / yieldBase;
+      }
 
       // 2. Buscar nomes dos itens (ingredientes ou receitas filhas)
       const ingIds = (comp || []).filter(c => c.item_type === 'ingrediente').map(c => c.item_id);
@@ -502,13 +699,7 @@ export default function SetorExecucaoPage() {
 
       if (reqsErr) throw reqsErr;
 
-      // 4. Calcular o fator de escala baseado na regra da indústria:
-      // Fator = (Qtd de produtos na OP * Peso de cada embalagem) / Rendimento base da receita
-      const totalPesoDesejadoG = item.quantidade_planejada * (item.receitas.peso_embalagem_g || 0);
-      const yieldBase = item.receitas.rendimento_total_g || 1;
-      const factor = totalPesoDesejadoG / yieldBase;
-
-      // 5. Montar a lista de insumos específicos
+      // 4. Montar a lista de insumos específicos
       const computedReqs = (comp || []).map(c => {
         const itemIdStr = c.item_id?.toString();
         const reqMatch = reqs?.find(r => r.ingrediente_id?.toString() === itemIdStr || r.grupo_estoque_id?.toString() === itemIdStr);
@@ -536,12 +727,23 @@ export default function SetorExecucaoPage() {
     setSalvando(true);
     try {
       const novaQtd = Number(selectedItem.quantidade_produzida) + Number(qtdProduzida);
-      await supabase
+      
+      // 1. Atualizar quantidade produzida no item
+      const { error: updErr } = await supabase
         .from('producao_ordens_itens')
         .update({ quantidade_produzida: novaQtd })
         .eq('id', selectedItem.id);
 
-      // Registro simplificado apenas de quantidade produzida
+      if (updErr) throw updErr;
+
+      // 2. Transição automática: Se a OP estiver PLANEJADA ou SEPARADA, move para EM_PRODUCAO
+      if (selectedItem.producao_ordens?.status === 'PLANEJADA' || selectedItem.producao_ordens?.status === 'SEPARADA') {
+        await supabase
+          .from('producao_ordens')
+          .update({ status: 'EM_PRODUCAO' })
+          .eq('id', selectedItem.ordem_id);
+      }
+
       setSelectedItem(null);
       await fetchData();
     } catch (err) {
@@ -549,6 +751,37 @@ export default function SetorExecucaoPage() {
       alert('Erro ao salvar produção.');
     } finally {
       setSalvando(false);
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('producao_ordens')
+        .update({ status: newStatus })
+        .eq('id', orderId);
+
+      if (error) throw error;
+      
+      await fetchData();
+    } catch (err) {
+      console.error('Erro ao atualizar status:', err);
+      alert('Erro ao atualizar status da ordem.');
+    } finally {
+      setLoading(false);
+      setStatusMenuAnchor(null);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'EM_PRODUCAO': return 'info';
+      case 'SEPARADA': return 'success';
+      case 'CONCLUIDA': return 'success';
+      case 'CANCELADA': return 'error';
+      case 'PLANEJADA': return 'default';
+      default: return 'default';
     }
   };
 
@@ -753,160 +986,220 @@ export default function SetorExecucaoPage() {
 
       {/* {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>} */} {/* Assuming error state is defined elsewhere or removed */}
 
-      {Object.keys(itensPorOrdem).length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 3, border: '1px dashed', borderColor: 'divider' }}>
-          <History size={48} color={theme.palette.text.disabled} style={{ marginBottom: 16 }} />
-          <Typography variant="h6" color="text.secondary">Nenhuma produção ativa para este setor.</Typography>
-          <Button variant="outlined" sx={{ mt: 2 }} onClick={() => router.push('/producao')}>Voltar ao Dashboard</Button>
-        </Paper>
-      ) : (
-        <Grid container spacing={3}>
-          {Object.values(itensPorOrdem).map(({ ordem, itens }) => (
-            <Grid item xs={12} key={ordem.id}>
-              <Accordion 
-                elevation={0} 
-                sx={{ 
-                  border: '1px solid', 
-                  borderColor: 'divider', 
-                  borderRadius: '12px !important',
-                  overflow: 'hidden',
-                  '&:before': { display: 'none' },
-                  mb: 2
-                }}
-              >
-                <AccordionSummary 
-                  expandIcon={<ChevronRight size={20} />}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={(_, val) => setActiveTab(val)}
+          textColor="primary"
+          indicatorColor="primary"
+        >
+          <Tab 
+            label="Esta Semana" 
+            icon={<Clock size={18} />} 
+            iconPosition="start" 
+            sx={{ fontWeight: 'bold', minHeight: 64 }} 
+          />
+          <Tab 
+            label="Calendário" 
+            icon={<Calendar size={18} />} 
+            iconPosition="start" 
+            sx={{ fontWeight: 'bold', minHeight: 64 }} 
+          />
+        </Tabs>
+      </Box>
+
+      {activeTab === 0 && (
+        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: alpha(theme.palette.primary.main, 0.03), p: 2, borderRadius: 2, border: '1px solid', borderColor: alpha(theme.palette.primary.main, 0.1) }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h6" fontWeight="bold" color="primary.dark">
+              {format(weekStart, "dd 'de' MMM", { locale: ptBR })} - {format(weekEnd, "dd 'de' MMM", { locale: ptBR })}
+            </Typography>
+            <Chip 
+              label="Semana Atual" 
+              size="small" 
+              color="primary" 
+              variant={isWithinInterval(new Date(), { start: weekStart, end: weekEnd }) ? "filled" : "outlined"} 
+            />
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button size="small" variant="outlined" startIcon={<ArrowLeft size={16} />} onClick={navPrevWeek}>Anterior</Button>
+            <Button size="small" variant="outlined" onClick={navToday}>Hoje</Button>
+            <Button size="small" variant="outlined" endIcon={<ChevronRight size={16} />} onClick={navNextWeek}>Próxima</Button>
+          </Box>
+        </Box>
+      )}
+
+      {activeTab === 0 ? (
+        getFilteredOrders().length === 0 ? (
+          <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 3, border: '1px dashed', borderColor: 'divider' }}>
+            <History size={48} color={theme.palette.text.disabled} style={{ marginBottom: 16 }} />
+            <Typography variant="h6" color="text.secondary">Nenhuma produção ativa para este setor no período selecionado.</Typography>
+            <Button variant="outlined" sx={{ mt: 2 }} onClick={navToday}>Ver Semana Atual</Button>
+          </Paper>
+        ) : (
+          <Grid container spacing={3}>
+            {getFilteredOrders().map(({ ordem, itens }) => (
+              <Grid item xs={12} key={ordem.id}>
+                <Accordion 
+                  elevation={0} 
                   sx={{ 
-                    bgcolor: alpha(theme.palette.primary.main, 0.05),
-                    borderBottom: '1px solid',
-                    borderColor: 'divider'
+                    border: '1px solid', 
+                    borderColor: 'divider', 
+                    borderRadius: '12px !important',
+                    overflow: 'hidden',
+                    '&:before': { display: 'none' },
+                    mb: 2
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, width: '100%', pr: 2 }}>
-                    <Box>
-                      <Typography variant="h6" fontWeight="bold" color="primary.main">
-                        {ordem.titulo || 'Sem Título'}
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: '600' }}>
-                          #{ordem.codigo}
+                  <AccordionSummary 
+                    expandIcon={<ChevronRight size={20} />}
+                    sx={{ 
+                      bgcolor: alpha(theme.palette.primary.main, 0.05),
+                      borderBottom: '1px solid',
+                      borderColor: 'divider'
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2, width: '100%', pr: 2 }}>
+                      <Box>
+                        <Typography variant="h6" fontWeight="bold" color="primary.main">
+                          {ordem.titulo || 'Sem Título'}
                         </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: '600' }}>
+                            #{ordem.codigo}
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Typography variant="caption" sx={{ display: 'none', md: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Calendar size={14} /> Previsão: {ordem.data_prevista ? format(parseISO(ordem.data_prevista), 'dd/MM/yyyy') : '-'}
+                        </Typography>
+
+                        <Button 
+                          size="small" 
+                          variant="contained" 
+                          color="primary"
+                          startIcon={<Scan size={14} />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSmartAllocateOP(ordem);
+                          }}
+                          sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}
+                        >
+                          Reserva Inteligente
+                        </Button>
+
+                        <Button 
+                          size="small" 
+                          variant="outlined" 
+                          color="primary"
+                          startIcon={<ClipboardList size={14} />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenReservaOP(ordem);
+                          }}
+                          sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}
+                        >
+                          Reservar Insumos
+                        </Button>
+
+                        <Button 
+                          size="small" 
+                          variant="outlined" 
+                          color="secondary"
+                          startIcon={<Layers size={14} />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenSobrasOP(ordem);
+                          }}
+                          sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}
+                        >
+                          Sobras/Perdas
+                        </Button>
+                        <Chip 
+                          label={ordem.status} 
+                          size="small" 
+                          color={getStatusColor(ordem.status) as any} 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setStatusMenuAnchor({ el: e.currentTarget, orderId: ordem.id });
+                          }}
+                          sx={{ 
+                            fontWeight: 'bold', 
+                            cursor: 'pointer',
+                            '&:hover': { opacity: 0.8 }
+                          }}
+                        />
                       </Box>
                     </Box>
-                    <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Typography variant="caption" sx={{ display: 'none', md: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Calendar size={14} /> Previsão: {ordem.data_prevista ? format(parseISO(ordem.data_prevista), 'dd/MM/yyyy') : '-'}
-                      </Typography>
-
-                      <Button 
-                        size="small" 
-                        variant="contained" 
-                        color="primary"
-                        startIcon={<Scan size={14} />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSmartAllocateOP(ordem);
-                        }}
-                        sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}
-                      >
-                        Reserva Inteligente
-                      </Button>
-
-                      <Button 
-                        size="small" 
-                        variant="outlined" 
-                        color="primary"
-                        startIcon={<ClipboardList size={14} />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenReservaOP(ordem);
-                        }}
-                        sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}
-                      >
-                        Reservar Insumos
-                      </Button>
-
-                      <Button 
-                        size="small" 
-                        variant="outlined" 
-                        color="secondary"
-                        startIcon={<Layers size={14} />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenSobrasOP(ordem);
-                        }}
-                        sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}
-                      >
-                        Sobras/Perdas
-                      </Button>
-                      <Chip 
-                        label={ordem.status} 
-                        size="small" 
-                        color={ordem.status === 'EM_PRODUCAO' ? 'info' : (ordem.status === 'SEPARADA' ? 'success' : 'default')} 
-                      />
-                    </Box>
-                  </Box>
-                </AccordionSummary>
-                
-                <AccordionDetails sx={{ p: 0 }}>
-                  <List disablePadding>
-                    {itens.map((item, idx) => {
-                      const progress = (item.quantidade_produzida / item.quantidade_planejada) * 100;
-                      return (
-                        <Box key={item.id}>
-                          <ListItemButton sx={{ p: 3 }} onClick={() => handleOpenExecucao(item)}>
-                            <Grid container alignItems="center" spacing={2}>
-                              <Grid item xs={12} md={5}>
-                                <Typography variant="subtitle1" fontWeight="bold">{item.receitas?.nome}</Typography>
-                                <Typography variant="caption" color="text.secondary">Receita ID: {item.receita_id}</Typography>
-                              </Grid>
-                              <Grid item xs={12} md={4}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                  <Box sx={{ flex: 1 }}>
-                                    <LinearProgress 
-                                      variant="determinate" 
-                                      value={progress} 
-                                      sx={{ height: 8, borderRadius: 4, bgcolor: alpha(theme.palette.divider, 0.3) }} 
-                                    />
-                                  </Box>
-                                  <Typography variant="body2" fontWeight="bold">
-                                    {item.quantidade_produzida} / {item.quantidade_planejada}
+                  </AccordionSummary>
+                  
+                  <AccordionDetails sx={{ p: 0 }}>
+                    <List disablePadding>
+                      {itens.map((item, idx) => {
+                        const progress = (item.quantidade_produzida / item.quantidade_planejada) * 100;
+                        return (
+                          <Box key={item.id}>
+                            <ListItemButton sx={{ p: 3 }} onClick={() => handleOpenExecucao(item)}>
+                              <Grid container alignItems="center" spacing={2}>
+                                <Grid item xs={12} md={5}>
+                                  <Typography variant="subtitle1" fontWeight="bold">
+                                    {item.receitas?.nome || item.fichas_tecnicas_uan?.nome || 'Sem Nome'}
                                   </Typography>
-                                </Box>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {item.ficha_uan_id ? `FT UAN ID: ${item.ficha_uan_id}` : `Receita ID: ${item.receita_id}`}
+                                  </Typography>
+                                </Grid>
+                                <Grid item xs={12} md={4}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <Box sx={{ flex: 1 }}>
+                                      <LinearProgress 
+                                        variant="determinate" 
+                                        value={progress} 
+                                        sx={{ height: 8, borderRadius: 4, bgcolor: alpha(theme.palette.divider, 0.3) }} 
+                                      />
+                                    </Box>
+                                    <Typography variant="body2" fontWeight="bold">
+                                      {item.quantidade_produzida} / {item.quantidade_planejada}
+                                    </Typography>
+                                  </Box>
+                                </Grid>
+                                <Grid item xs={12} md={3} sx={{ textAlign: 'right' }}>
+                                  <Button 
+                                    size="small" 
+                                    variant="outlined" 
+                                    color="success"
+                                    startIcon={<Play size={14} />}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenExecucao(item);
+                                    }}
+                                  >
+                                    Apontar
+                                  </Button>
+                                </Grid>
                               </Grid>
-                              <Grid item xs={12} md={3} sx={{ textAlign: 'right' }}>
-                                <Button 
-                                  size="small" 
-                                  variant="outlined" 
-                                  color="success"
-                                  startIcon={<Play size={14} />}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenExecucao(item);
-                                  }}
-                                >
-                                  Apontar
-                                </Button>
-                              </Grid>
-                            </Grid>
-                          </ListItemButton>
-                          {idx < itens.length - 1 && <Divider />}
-                        </Box>
-                      );
-                    })}
-                  </List>
-                </AccordionDetails>
-              </Accordion>
-            </Grid>
-          ))}
-        </Grid>
+                            </ListItemButton>
+                            {idx < itens.length - 1 && <Divider />}
+                          </Box>
+                        );
+                      })}
+                    </List>
+                  </AccordionDetails>
+                </Accordion>
+              </Grid>
+            ))}
+          </Grid>
+        )
+      ) : (
+        renderCalendar()
       )}
 
       {/* Dialog de Execução (Simplificado) */}
       <Dialog open={!!selectedItem} onClose={() => !salvando && setSelectedItem(null)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
           <Play size={24} color={theme.palette.success.main} />
-          Apontamento: {selectedItem?.receitas?.nome}
+          Apontamento: {selectedItem?.receitas?.nome || selectedItem?.fichas_tecnicas_uan?.nome || 'Sem Nome'}
         </DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={4}>
@@ -958,7 +1251,7 @@ export default function SetorExecucaoPage() {
                 </TableContainer>
               )}
 
-              {selectedItem?.receitas?.modo_preparo && (
+              {(selectedItem?.receitas?.modo_preparo || selectedItem?.fichas_tecnicas_uan?.modo_preparo) && (
                 <Box sx={{ mt: 4 }}>
                   <Typography variant="h6" fontWeight="bold" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                     <ChefHat size={20} /> Modo de Preparo
@@ -974,7 +1267,9 @@ export default function SetorExecucaoPage() {
                       whiteSpace: 'pre-wrap'
                     }}
                   >
-                    <Typography variant="body2">{selectedItem.receitas.modo_preparo}</Typography>
+                    <Typography variant="body2">
+                      {selectedItem?.receitas?.modo_preparo || selectedItem?.fichas_tecnicas_uan?.modo_preparo}
+                    </Typography>
                   </Paper>
                 </Box>
               )}
@@ -1003,9 +1298,15 @@ export default function SetorExecucaoPage() {
             variant="text" 
             color="primary" 
             startIcon={<Info size={18} />}
-            onClick={() => router.push(`/receitas/${selectedItem?.receita_id}`)}
+            onClick={() => {
+              if (selectedItem?.ficha_uan_id) {
+                router.push(`/uan/fichas/${selectedItem.ficha_uan_id}`);
+              } else if (selectedItem?.receita_id) {
+                router.push(`/receitas/${selectedItem.receita_id}`);
+              }
+            }}
           >
-            Ver Detalhes da Receita
+            Ver Detalhes do Item
           </Button>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button onClick={() => setSelectedItem(null)} variant="outlined">Cancelar</Button>
@@ -1344,6 +1645,20 @@ export default function SetorExecucaoPage() {
           </DialogActions>
         </Dialog>
       )}
+      {/* Menu de Status da OP */}
+      <Menu
+        anchorEl={statusMenuAnchor?.el}
+        open={Boolean(statusMenuAnchor)}
+        onClose={() => setStatusMenuAnchor(null)}
+      >
+        <MenuItem onClick={() => handleUpdateOrderStatus(statusMenuAnchor!.orderId, 'PLANEJADA')}>Planejada</MenuItem>
+        <MenuItem onClick={() => handleUpdateOrderStatus(statusMenuAnchor!.orderId, 'SEPARADA')}>Separada/Preparada</MenuItem>
+        <MenuItem onClick={() => handleUpdateOrderStatus(statusMenuAnchor!.orderId, 'EM_PRODUCAO')}>Em Produção</MenuItem>
+        <MenuItem onClick={() => handleUpdateOrderStatus(statusMenuAnchor!.orderId, 'CONCLUIDA')}>Concluída</MenuItem>
+        <Divider />
+        <MenuItem onClick={() => handleUpdateOrderStatus(statusMenuAnchor!.orderId, 'CANCELADA')} sx={{ color: 'error.main' }}>Cancelar OP</MenuItem>
+      </Menu>
+
       {/* Dialog de Reserva de Insumos da OP (Manual) */}
       <Dialog open={reservaOPDialogOpen} onClose={() => setReservaOPDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>

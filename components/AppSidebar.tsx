@@ -63,6 +63,7 @@ import {
   CorporateFare,
   GppGood
 } from '@mui/icons-material';
+import { Shield } from 'lucide-react';
 
 interface AppSidebarProps {
   width: number;
@@ -71,12 +72,20 @@ interface AppSidebarProps {
 export function AppSidebar({ width }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { mobileOpen, toggleMobileSidebar, closeMobileSidebar, desktopOpen } = useClient();
+  const { 
+    mobileOpen, 
+    toggleMobileSidebar, 
+    closeMobileSidebar, 
+    desktopOpen, 
+    activeModules,
+    isSystemMode,
+    exitClientMode
+  } = useClient();
   const { mode } = useThemeContext();
   const theme = useTheme();
 
   // Hook de Permissões: Traz o poder de decisão para o menu
-  const { can, loading: loadingPermissions } = usePermission();
+  const { role, can, loading: loadingPermissions } = usePermission();
 
   // Estado para menus aninhados
   const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>({});
@@ -134,15 +143,15 @@ export function AppSidebar({ width }: AppSidebarProps) {
   // DEFINIÇÃO CONSOLIDADA EM 8 DEPARTAMENTOS
   const menuGroups = [
     {
-      label: 'Dashboard',
+      label: isSystemMode ? 'Central de Controle' : 'Dashboard',
       href: '/',
       icon: <Dashboard />,
-      visible: true
+      visible: true // Sempre visível como Home
     },
     {
       label: 'Financeiro',
       icon: <AccountBalance />,
-      visible: can('finance.view') || can('finance.cashflow.view'),
+      visible: !isSystemMode && (can('finance.view') || can('finance.cashflow.view')) && activeModules.includes('financeiro'),
       subItems: [
         {
           label: 'Dashboard Financeiro',
@@ -185,7 +194,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       label: 'Compras',
       icon: <ShoppingCart />,
-      visible: can('stock.orders.manage'),
+      visible: !isSystemMode && can('stock.orders.manage') && activeModules.includes('compras'),
       subItems: [
         {
           label: 'Inteligência de Suprimentos',
@@ -216,7 +225,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       label: 'Estoque',
       icon: <Inventory />,
-      visible: can('stock.balance.view'),
+      visible: !isSystemMode && can('stock.balance.view') && activeModules.includes('estoque'),
       subItems: [
         {
           label: 'Estoque',
@@ -241,7 +250,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       label: 'Qualidade',
       icon: <VerifiedUser />,
-      visible: can('nutrition.recipe.view') || can('quality.audit.perform'),
+      visible: !isSystemMode && (can('nutrition.recipe.view') || can('quality.audit.perform')) && activeModules.includes('qualidade'),
       subItems: [
         {
           label: 'Central de Consultoria',
@@ -282,7 +291,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       label: 'Documentos',
       icon: <Description />,
-      visible: true,
+      visible: !isSystemMode && activeModules.includes('documentos'),
       subItems: [
         {
           label: 'Central de Documentos',
@@ -311,7 +320,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       label: 'Planejamento',
       icon: <EventNote />,
-      visible: can('production.order.create') || can('nutrition.menu.manage'),
+      visible: !isSystemMode && (can('production.order.create') || can('nutrition.menu.manage')) && (activeModules.includes('planejamento') || activeModules.includes('uan')),
       subItems: [
         {
           label: '🤝 Comercial',
@@ -335,7 +344,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       label: 'Operação',
       icon: <Engineering />,
-      visible: can('production.order.execute') || can('sys.tasks.manage'),
+      visible: !isSystemMode && (can('production.order.execute') || can('sys.tasks.manage')) && activeModules.includes('producao'),
       subItems: [
         {
           label: 'Módulo de Produção',
@@ -360,7 +369,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
     {
       label: 'Sistema',
       icon: <Settings />,
-      visible: true,
+      visible: !isSystemMode && activeModules.includes('sistema'),
       subItems: [
         {
           label: 'Unidades & Filiais',
@@ -393,8 +402,8 @@ export function AppSidebar({ width }: AppSidebarProps) {
           visible: true
         },
         {
-          label: 'Cargos & Permissões',
-          href: '/config/cargos',
+          label: 'Funcionários & Acessos',
+          href: '/config/usuarios',
           icon: <AdminPanelSettings />,
           visible: can('sys.roles.manage')
         },
@@ -402,6 +411,25 @@ export function AppSidebar({ width }: AppSidebarProps) {
           label: 'Visualização Mobile',
           href: '/preview',
           icon: <Tag />, // Usando um ícone temporário, talvez 'Phonelink' fosse melhor se disponível
+          visible: true
+        }
+      ]
+    },
+    {
+      label: 'Administração Geral',
+      icon: <Shield />,
+      visible: role === 'super_admin' && isSystemMode,
+      subItems: [
+        {
+          label: 'Gestão de Clientes',
+          href: '/admin/sistema',
+          icon: <BusinessCenter />,
+          visible: true
+        },
+        {
+          label: 'Cargos & Permissões',
+          href: '/admin/sistema/permissoes',
+          icon: <Shield />,
           visible: true
         }
       ]
@@ -419,11 +447,39 @@ export function AppSidebar({ width }: AppSidebarProps) {
       <Toolbar sx={{ display: { xs: 'none', md: 'flex' } }} />
       <Divider />
 
-      {/* Seletor de Unidade */}
-      <Box sx={{ p: 2, bgcolor: 'background.default' }}>
-        <ClientSelector />
-      </Box>
-      <Divider />
+      {/* Seletor de Unidade (Oculto no Modo Sistema) */}
+      {!isSystemMode && (
+        <>
+          <Box sx={{ p: 2, bgcolor: 'background.default' }}>
+            <ClientSelector />
+          </Box>
+          <Divider />
+        </>
+      )}
+
+      {/* Botão de Retorno para o Administrador (quando em Modo Cliente) */}
+      {!isSystemMode && (role === 'super_admin' || role === 'company_owner') && (
+        <Box sx={{ px: 2, pt: 2 }}>
+          <Button
+            fullWidth
+            variant="contained"
+            color="secondary"
+            startIcon={<Shield />}
+            onClick={() => {
+              exitClientMode();
+              router.push('/');
+            }}
+            sx={{ 
+              borderRadius: 2, 
+              fontWeight: 'bold',
+              boxShadow: theme.shadows[4],
+              textTransform: 'none'
+            }}
+          >
+            Voltar ao Modo Sistema
+          </Button>
+        </Box>
+      )}
 
       {/* Menu Principal com Skeleton Loading */}
       <List sx={{ flexGrow: 1, overflowY: 'auto', px: 1, mt: 2 }}>

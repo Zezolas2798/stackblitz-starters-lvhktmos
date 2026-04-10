@@ -45,9 +45,19 @@ export default function DetalheChecklistPage() {
         return;
     }
 
+    // 2. Fetch Auditor Name
+    if (exec.responsavel_id) {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', exec.responsavel_id)
+            .single();
+        if (profile) exec.auditor_nome = profile.full_name;
+    }
+
     setChecklist(exec);
 
-    // 2. Buscar Respostas, Itens e Seções
+    // 3. Buscar Respostas, Itens e Seções
     // Precisamos fazer uma query complexa ou joins manuais.
     // Estratégia: Buscar respostas com itens e seções aninhados
     const { data: respostas } = await supabase
@@ -126,7 +136,7 @@ export default function DetalheChecklistPage() {
         <Divider sx={{ my: 2 }} />
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <User size={18} className="text-gray-500" />
-            <Typography variant="body2">Responsável Técnico (ID): <strong>{checklist.responsavel_id || 'Sistema'}</strong></Typography>
+            <Typography variant="body2">Responsável Técnico: <strong>{checklist.auditor_nome || checklist.responsavel_id || 'Sistema'}</strong></Typography>
         </Box>
       </Paper>
 

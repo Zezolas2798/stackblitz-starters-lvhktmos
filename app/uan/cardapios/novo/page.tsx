@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
-import { Box, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Grid, FormControl, FormLabel, FormGroup, FormControlLabel, Checkbox } from '@mui/material';
+import { Box, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Grid, FormControl, FormLabel, FormGroup, FormControlLabel, Checkbox, MenuItem } from '@mui/material';
 import { ArrowLeft, Save, CalendarDays } from 'lucide-react';
 
 const DIAS_SEMANA = [
@@ -34,7 +34,10 @@ export default function NovoCardapioUANPage() {
       "1": { "Almoço": 100 }, "2": { "Almoço": 100 }, "3": { "Almoço": 100 },
       "4": { "Almoço": 100 }, "5": { "Almoço": 100 }, "6": { "Almoço": 0 }, "0": { "Almoço": 0 }
     } as Record<string, Record<string, number>>,
+    setor_producao_id: '',
   });
+
+  const [setores, setSetores] = useState<{ id: string, nome: string }[]>([]);
 
   const [horarios, setHorarios] = useState<Record<string, { inicio: string, fim: string }>>({
     'Desjejum': { inicio: '07:00', fim: '08:30' },
@@ -73,6 +76,20 @@ export default function NovoCardapioUANPage() {
     setHorarios(novosHorarios);
   }, [form.refeicoes_oferecidas]);
 
+  useEffect(() => {
+    async function fetchSetores() {
+      if (!activeClientId) return;
+      const { data } = await supabase
+        .from('cliente_setores_producao')
+        .select('id, nome')
+        .eq('cliente_id', activeClientId)
+        .eq('ativo', true)
+        .order('nome');
+      if (data) setSetores(data);
+    }
+    fetchSetores();
+  }, [activeClientId]);
+
   const [feriados, setFeriados] = useState<any[]>([]);
 
   const handleSalvar = async () => {
@@ -104,6 +121,7 @@ export default function NovoCardapioUANPage() {
         refeicoes_oferecidas: form.refeicoes_oferecidas,
         data_inicio: dataInicio.toISOString().split('T')[0],
         data_fim: dataFim.toISOString().split('T')[0],
+        setor_producao_id: form.setor_producao_id || null,
       };
 
       const { data, error } = await supabase
@@ -156,6 +174,22 @@ export default function NovoCardapioUANPage() {
               required
               InputLabelProps={{ shrink: true }}
             />
+          </Grid>
+
+          <Grid item xs={12}>
+            <TextField
+              select
+              fullWidth
+              label="Setor de Produção Padrão"
+              value={form.setor_producao_id}
+              onChange={e => setForm({ ...form, setor_producao_id: e.target.value })}
+              helperText="Defina qual setor receberá as produções deste cardápio"
+            >
+              <MenuItem value=""><em>Nenhum (Vincular individualmente na OP)</em></MenuItem>
+              {setores.map(s => (
+                <MenuItem key={s.id} value={s.id}>{s.nome}</MenuItem>
+              ))}
+            </TextField>
           </Grid>
 
           <Grid item xs={12}>

@@ -779,7 +779,7 @@ export default function EntradaEstoquePage() {
 
   const handleCloseModal = () => {
     setPrintModalOpen(false);
-    window.location.reload();
+    router.push('/estoque');
   };
 
   return (

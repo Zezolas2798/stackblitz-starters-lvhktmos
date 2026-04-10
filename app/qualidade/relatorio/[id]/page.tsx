@@ -16,6 +16,7 @@ import {
     PieChart, Pie, Cell, ResponsiveContainer, 
     BarChart, Bar, XAxis, YAxis, Tooltip as ChartTooltip, Legend, ReferenceArea, ReferenceLine 
 } from 'recharts';
+import { ChartDefinitions, PremiumBar, getGradientUrl } from '@/components/charts/ChartStyles';
 
 type ViewMode = 'PADRAO' | 'EXECUTIVO' | 'ANALITICO';
 
@@ -28,11 +29,12 @@ function CustomXAxisTick(props: any) {
             <text
                 x={0}
                 y={0}
-                dy={24}
+                dy={14}
+                dx={-4}
                 textAnchor="end"
-                fill="#666"
+                fill="#444"
                 transform="rotate(-45)"
-                style={{ fontSize: 10, fontWeight: 700 }}
+                style={{ fontSize: 11, fontWeight: 800, fontFamily: 'Inter, sans-serif' }}
             >
                 {payload.value}
             </text>
@@ -67,6 +69,18 @@ export default function RelatorioAuditoriaPage() {
             .eq('id', auditId)
             .single();
         if (auditErr) throw auditErr;
+
+        // Fetch auditor profile name
+        if (auditData.responsavel_id) {
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', auditData.responsavel_id)
+                .single();
+            if (profileData) {
+                auditData.auditor_nome = profileData.full_name;
+            }
+        }
         setAuditoria(auditData);
 
         // 3. Respostas
@@ -366,7 +380,9 @@ export default function RelatorioAuditoriaPage() {
                           )}
                       </Box>
                       <Typography variant="body2" fontWeight="bold">Assinatura do Auditor</Typography>
-                      <Typography variant="caption" color="text.secondary">Eduardo Zezolas</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {(auditoria as any)?.auditor_nome || 'Auditor não identificado'}
+                      </Typography>
                   </Box>
               </Grid>
               <Grid item xs={12} md={4}>
@@ -407,53 +423,86 @@ export default function RelatorioAuditoriaPage() {
     <Box mt={2}>
         <Stack spacing={3} mb={4}>
             {/* Resumo Geral (Donut Chart) */}
-            <Paper variant="outlined" sx={{ p: 4, borderRadius: 3, textAlign: 'center' }}>
-                <Typography variant="h6" fontWeight="800" gutterBottom>CONFORMIDADE GERAL</Typography>
-                <Box sx={{ height: 220, mt: 2, position: 'relative' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie 
-                                data={stats.overall} 
-                                innerRadius={70} 
-                                outerRadius={90} 
-                                paddingAngle={5} 
-                                dataKey="value"
-                            >
-                                {stats.overall.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                            </Pie>
-                            <ChartTooltip />
-                        </PieChart>
-                    </ResponsiveContainer>
-                    <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                        <Typography variant="h3" fontWeight="900" color="primary">{stats.pct}%</Typography>
-                        <Typography variant="body2" color="text.secondary" fontWeight="bold">CONFORME</Typography>
-                    </Box>
-                </Box>
-                <Stack direction="row" spacing={4} justifyContent="center" mt={3}>
-                    <Box>
-                        <Typography variant="h5" fontWeight="900" color="#10b981">{stats.conform}</Typography>
-                        <Typography variant="caption" color="text.secondary" fontWeight="bold">CONFORMES</Typography>
-                    </Box>
-                    <Box>
-                        <Typography variant="h5" fontWeight="900" color="#ef4444">{stats.nonConform}</Typography>
-                        <Typography variant="caption" color="text.secondary" fontWeight="bold">NÃO CONFORMES</Typography>
-                    </Box>
-                </Stack>
+            <Paper variant="outlined" sx={{ p: 4, borderRadius: 3 }}>
+                <Typography variant="h6" fontWeight="800" gutterBottom align="center">CONFORMIDADE GERAL</Typography>
+                
+                <Grid container spacing={2} alignItems="center">
+                    <Grid item xs={12} md={6}>
+                        <Box sx={{ height: 220, position: 'relative' }}>
+                            <ChartDefinitions />
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie 
+                                        data={stats.overall} 
+                                        outerRadius={90} 
+                                        paddingAngle={0} 
+                                        dataKey="value"
+                                        animationBegin={0}
+                                        animationDuration={1500}
+                                    >
+                                        {stats.overall.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={getGradientUrl(entry.color)} filter="url(#shadowDepth)" />
+                                        ))}
+                                    </Pie>
+                                    <ChartTooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </Box>
+                    </Grid>
+                    
+                    <Grid item xs={12} md={6}>
+                        <Box sx={{ textAlign: 'left', pl: { md: 4 } }}>
+                            <Box sx={{ mb: 3 }}>
+                                <Typography variant="h2" fontWeight="900" color="primary" sx={{ lineHeight: 1 }}>
+                                    {stats.pct}%
+                                </Typography>
+                                <Typography variant="h6" color="text.secondary" fontWeight="bold" sx={{ letterSpacing: 1 }}>
+                                    CONFORME
+                                </Typography>
+                            </Box>
+                            
+                            <Stack direction="column" spacing={2}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#10b981' }} />
+                                    <Box>
+                                        <Typography variant="h6" fontWeight="900" color="#10b981" sx={{ lineHeight: 1 }}>{stats.conform}</Typography>
+                                        <Typography variant="caption" color="text.secondary" fontWeight="bold">ITENS CONFORMES</Typography>
+                                    </Box>
+                                </Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#ef4444' }} />
+                                    <Box>
+                                        <Typography variant="h6" fontWeight="900" color="#ef4444" sx={{ lineHeight: 1 }}>{stats.nonConform}</Typography>
+                                        <Typography variant="caption" color="text.secondary" fontWeight="bold">NÃO CONFORMES</Typography>
+                                    </Box>
+                                </Box>
+                                {stats.na > 0 && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'text.disabled' }} />
+                                        <Box>
+                                            <Typography variant="h6" fontWeight="900" color="text.disabled" sx={{ lineHeight: 1 }}>{stats.na}</Typography>
+                                            <Typography variant="caption" color="text.secondary" fontWeight="bold">NÃO SE APLICA</Typography>
+                                        </Box>
+                                    </Box>
+                                )}
+                            </Stack>
+                        </Box>
+                    </Grid>
+                </Grid>
             </Paper>
 
             {/* Conformidade por Seção (Bar Chart) */}
             <Paper variant="outlined" sx={{ p: 4, borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
                 <Typography variant="h6" fontWeight="800" sx={{ mb: 4 }}>CONFORMIDADE POR CATEGORIA (%)</Typography>
-                <Box sx={{ height: 480, mt: 1 }}>
+                <Box sx={{ height: 600, mt: 1 }}>
+                    <ChartDefinitions />
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats.sections} margin={{ top: 20, right: 40, left: 20, bottom: 180 }}>
+                        <BarChart data={stats.sections} margin={{ top: 40, right: 40, left: 20, bottom: 180 }}>
                             {/* Faixas de Fundo (Performance Bands - Sincronizado com Central de Consultoria) */}
-                            <ReferenceArea y1={90} y2={100} fill="rgba(37, 99, 235, 0.15)" stroke="none" />
-                            <ReferenceArea y1={75} y2={90} fill="rgba(22, 163, 74, 0.15)" stroke="none" />
-                            <ReferenceArea y1={60} y2={75} fill="rgba(234, 179, 8, 0.15)" stroke="none" />
-                            <ReferenceArea y1={0} y2={60} fill="rgba(239, 68, 68, 0.15)" stroke="none" />
+                            <ReferenceArea y1={90} y2={100} fill="rgba(37, 99, 235, 0.08)" stroke="none" />
+                            <ReferenceArea y1={75} y2={90} fill="rgba(22, 163, 74, 0.08)" stroke="none" />
+                            <ReferenceArea y1={60} y2={75} fill="rgba(234, 179, 8, 0.08)" stroke="none" />
+                            <ReferenceArea y1={0} y2={60} fill="rgba(239, 68, 68, 0.08)" stroke="none" />
 
                             {/* Linhas de Limite Tracejadas (Serão sobrepostas pelas barras) */}
                             <ReferenceLine y={90} stroke="#1d4ed8" strokeDasharray="4 4" strokeOpacity={0.6} label={{ value: '90%', position: 'right', fill: '#1d4ed8', fontSize: 10, fontWeight: 'bold' }} />
@@ -476,7 +525,7 @@ export default function RelatorioAuditoriaPage() {
                             {/* A Bar deve vir por ÚLTIMO para sobrepor as linhas e áreas */}
                             <Bar 
                                 dataKey="compliance" 
-                                radius={[4, 4, 0, 0]} 
+                                shape={<PremiumBar />}
                                 barSize={40}
                                 label={{ 
                                     position: 'top', 
@@ -608,7 +657,7 @@ export default function RelatorioAuditoriaPage() {
               <Grid item xs={6} md={3}>
                   <Stack spacing={0.5}>
                       <Typography variant="caption" fontWeight="bold" color="text.disabled">AUDITOR</Typography>
-                      <Typography variant="body2" fontWeight="700">Eduardo Zezolas</Typography>
+                      <Typography variant="body2" fontWeight="700">{(auditoria as any)?.auditor_nome || 'Auditor não identificado'}</Typography>
                   </Stack>
               </Grid>
               <Grid item xs={6} md={3}>

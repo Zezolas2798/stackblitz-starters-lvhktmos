@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
-import { Box, Typography, Button, Paper, TextField, Grid, FormControl, FormLabel, FormGroup, FormControlLabel, Checkbox, Skeleton } from '@mui/material';
+import { Box, Typography, Button, Paper, TextField, Grid, FormControl, FormLabel, FormGroup, FormControlLabel, Checkbox, Skeleton, MenuItem } from '@mui/material';
 import { ArrowLeft, Save, CalendarDays, Loader2 } from 'lucide-react';
 import { CardapioUAN } from '@/lib/types';
 
@@ -32,7 +32,10 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
     dias_funcionamento: [] as number[],
     refeicoes_oferecidas: [] as string[],
     comensais_estimados_dia: 100,
+    setor_producao_id: '',
   });
+
+  const [setores, setSetores] = useState<{ id: string, nome: string }[]>([]);
 
   useEffect(() => {
     async function fetchCardapio() {
@@ -58,6 +61,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
           dias_funcionamento: cardapio.dias_funcionamento || [],
           refeicoes_oferecidas: cardapio.refeicoes_oferecidas || [],
           comensais_estimados_dia: cardapio.comensais_estimados_dia || 0,
+          setor_producao_id: cardapio.setor_producao_id || '',
         });
       } catch (e: any) {
         alert("Erro ao carregar cardápio: " + e.message);
@@ -68,6 +72,20 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
     }
     fetchCardapio();
   }, [params.id, router]);
+
+  useEffect(() => {
+    async function fetchSetores() {
+      if (!activeClientId) return;
+      const { data } = await supabase
+        .from('cliente_setores_producao')
+        .select('id, nome')
+        .eq('cliente_id', activeClientId)
+        .eq('ativo', true)
+        .order('nome');
+      if (data) setSetores(data);
+    }
+    fetchSetores();
+  }, [activeClientId]);
 
   const handleSalvar = async () => {
     if (!activeClientId) return alert('Selecione um cliente.');
@@ -95,6 +113,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
         refeicoes_oferecidas: form.refeicoes_oferecidas,
         data_inicio: dataInicio.toISOString().split('T')[0],
         data_fim: dataFim.toISOString().split('T')[0],
+        setor_producao_id: form.setor_producao_id || null,
       };
 
       const { error } = await supabase
@@ -165,6 +184,22 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
               value={form.comensais_estimados_dia}
               onChange={e => setForm({ ...form, comensais_estimados_dia: Number(e.target.value) || 0 })}
             />
+          </Grid>
+
+          <Grid item xs={12}>
+            <TextField
+              select
+              fullWidth
+              label="Setor de Produção Padrão"
+              value={form.setor_producao_id}
+              onChange={e => setForm({ ...form, setor_producao_id: e.target.value })}
+              helperText="Defina qual setor receberá as produções deste cardápio"
+            >
+              <MenuItem value=""><em>Nenhum (Vincular individualmente na OP)</em></MenuItem>
+              {setores.map(s => (
+                <MenuItem key={s.id} value={s.id}>{s.nome}</MenuItem>
+              ))}
+            </TextField>
           </Grid>
 
           <Grid item xs={12}>

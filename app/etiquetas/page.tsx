@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Box, Container, Typography, Paper, Tabs, Tab,
   Grid, TextField, Autocomplete, Button, Card,
@@ -21,6 +22,7 @@ import EtiquetaPreview from '@/components/etiquetas/EtiquetaPreview';
 import { DadosEtiqueta } from '@/lib/iot/zplGenerator';
 
 export default function EtiquetasPage() {
+  const router = useRouter();
   const theme = useTheme();
   const { activeClientId, unidadeId } = useClient();
   
@@ -353,7 +355,7 @@ export default function EtiquetasPage() {
         <Button 
           variant="outlined" 
           startIcon={<History size={18} />}
-          onClick={() => window.location.href = '/estoque'}
+          onClick={() => router.push('/estoque')}
         >
           Histórico de Estoque
         </Button>

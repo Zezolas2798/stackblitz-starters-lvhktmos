@@ -7,7 +7,7 @@ import { AppBar, Toolbar, IconButton, Typography, Box, Badge, Avatar, Stack } fr
 import { Menu as MenuIcon, Notifications, Person, LightMode, DarkMode } from '@mui/icons-material';
 
 export function AppHeader() {
-  const { toggleMobileSidebar, toggleDesktopSidebar, unidadeSelecionada } = useClient();
+  const { toggleMobileSidebar, toggleDesktopSidebar, unidadeSelecionada, activeClientLogo, isSystemMode } = useClient();
   const { mode, toggleTheme } = useThemeContext();
 
   return (
@@ -43,23 +43,27 @@ export function AppHeader() {
           <MenuIcon />
         </IconButton>
 
-        {/* LOGO DO SISTEMA NO HEADER */}
+        {/* LOGO DINÂMICA NO HEADER */}
         <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
           <img
-            src={mode === 'dark' ? "/logo-cortex.svg" : "/logo-cortex-light.svg"}
-            alt="Córtex Food Solution"
-            style={{ height: '36px', objectFit: 'contain' }}
+            src={activeClientLogo || (mode === 'dark' ? "/logo-cortex.svg" : "/logo-cortex-light.svg")}
+            alt={unidadeSelecionada?.cliente?.nome_fantasia || "Córtex Food Solution"}
+            style={{ height: '36px', width: 'auto', maxWidth: '120px', objectFit: 'contain' }}
           />
         </Box>
 
-        {/* Breadcrumb da Unidade */}
+        {/* Breadcrumb da Unidade ou Título da Central */}
         <Box sx={{ flexGrow: 1 }}>
           <Typography variant="subtitle1" fontWeight="bold" color="text.primary" sx={{ lineHeight: 1.2 }}>
-            NutriDev Manager
+            {isSystemMode ? 'Gestão de Ecossistema' : 'NutriDev Manager'}
           </Typography>
-          {unidadeSelecionada ? (
+          {!isSystemMode && unidadeSelecionada ? (
             <Typography variant="caption" color="text.secondary">
               {unidadeSelecionada.cliente?.nome_fantasia} • {unidadeSelecionada.nome_unidade}
+            </Typography>
+          ) : isSystemMode ? (
+            <Typography variant="caption" color="primary.main" sx={{ fontWeight: 'bold' }}>
+              Modo Administrador
             </Typography>
           ) : (
             <Typography variant="caption" color="error">

@@ -31,6 +31,8 @@ export default function ListaModelosPage() {
   useEffect(() => {
     if (activeClientId) {
       fetchModelos();
+    } else {
+      setLoading(false);
     }
   }, [activeClientId]);
 

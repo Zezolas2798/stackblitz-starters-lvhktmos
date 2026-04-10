@@ -12,6 +12,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, AreaChart, Area, LabelList, ReferenceArea, ReferenceLine
 } from 'recharts';
+import { ChartDefinitions, getGradientUrl } from '@/components/charts/ChartStyles';
 import { 
   X, Check, AlertTriangle, ChevronDown as ChevronDownIcon, ChevronUp as ChevronUpIcon, 
   Table as TableIcon, TrendingUp, BarChart3, Download, ChevronLeft, Filter, Calendar, ClipboardCheck 
@@ -487,6 +488,7 @@ export default function AnaliseChecklistPage() {
                 <Alert severity="info" variant="outlined">Nenhuma auditoria encontrada para os filtros selecionados.</Alert>
                 ) : (
                 <Box sx={{ height: 450 }}>
+                <ChartDefinitions />
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={data} margin={{ top: 30, right: 30, left: 0, bottom: 40 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
@@ -520,9 +522,10 @@ export default function AnaliseChecklistPage() {
                         dataKey="compliance" 
                         stroke={theme.palette.primary.main} 
                         strokeWidth={4}
-                        fill="none"
+                        fill="url(#gradientPrimary)"
+                        fillOpacity={0.15}
                         dot={{ r: 6, fill: '#fff', stroke: theme.palette.primary.main, strokeWidth: 3 }}
-                        activeDot={{ r: 8 }}
+                        activeDot={{ r: 8, filter: 'url(#shadowDepth)' }}
                     >
                         <LabelList 
                             dataKey="compliance" 

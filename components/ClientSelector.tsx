@@ -10,7 +10,8 @@ export function ClientSelector() {
     minhasUnidades, 
     unidadeSelecionada, 
     setUnidadeSelecionada, 
-    loading 
+    loading,
+    activeClientLogo
   } = useClient();
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -56,15 +57,19 @@ export function ClientSelector() {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, overflow: 'hidden' }}>
-          <Box sx={{ 
-            bgcolor: 'primary.light', 
-            color: 'primary.main', 
-            p: 0.5, 
-            borderRadius: 1, 
-            display: 'flex' 
-          }}>
-            <Store fontSize="small" />
-          </Box>
+          {activeClientLogo ? (
+            <Box component="img" src={activeClientLogo} sx={{ width: 28, height: 28, borderRadius: 0.5, objectFit: 'contain' }} />
+          ) : (
+            <Box sx={{ 
+              bgcolor: 'primary.light', 
+              color: 'primary.main', 
+              p: 0.5, 
+              borderRadius: 1, 
+              display: 'flex' 
+            }}>
+              <Store fontSize="small" />
+            </Box>
+          )}
           <Box sx={{ textAlign: 'left', overflow: 'hidden' }}>
             <Typography variant="caption" display="block" color="text.secondary" noWrap sx={{ lineHeight: 1 }}>
               {unidadeSelecionada?.cliente?.nome_fantasia || 'Cliente'}

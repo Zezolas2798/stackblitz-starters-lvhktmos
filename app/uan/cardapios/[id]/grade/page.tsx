@@ -16,11 +16,12 @@ const DEFAULT_REFEICOES = ['Desjejum', 'Colação', 'Almoço', 'Lanche da Tarde'
 import { MEAL_CATEGORY_GROUPS, REFEICAO_TO_GROUP } from '@/lib/uan-constants';
 export default function GradeCardapioUANPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const { activeClientId } = useClient();
+  const { activeClientId, unidadeId } = useClient();
   const theme = useTheme();
   
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
   
   const [cardapio, setCardapio] = useState<CardapioUAN | null>(null);
   const [fichas, setFichas] = useState<FichaTecnicaUAN[]>([]);
@@ -47,49 +48,50 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
   const [mealDialogOpen, setMealDialogOpen] = useState(false);
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({}); // 'YYYY-MM-DD_Refeicao' -> boolean
 
-  useEffect(() => {
-    async function fetchData() {
-      if (!activeClientId) return;
-      setLoading(true);
+  const fetchData = async () => {
+    if (!activeClientId) return;
+    setLoading(true);
 
-      // 1. Busca Cardápio
-      const { data: cData, error: cErr } = await supabase
-        .from('cardapios_uan')
-        .select('*')
-        .eq('id', params.id)
-        .single();
+    // 1. Busca Cardápio
+    const { data: cData, error: cErr } = await supabase
+      .from('cardapios_uan')
+      .select('*')
+      .eq('id', params.id)
+      .single();
 
-      if (cData) setCardapio(cData as unknown as CardapioUAN);
+    if (cData) setCardapio(cData as unknown as CardapioUAN);
 
-      // 2. Busca Fichas Disponíveis
-      const { data: fData } = await supabase
-        .from('fichas_tecnicas_uan')
-        .select('*')
-        .eq('cliente_id', activeClientId)
-        .order('nome');
+    // 2. Busca Fichas Disponíveis
+    const { data: fData } = await supabase
+      .from('fichas_tecnicas_uan')
+      .select('*')
+      .eq('cliente_id', activeClientId)
+      .order('nome');
+    
+    if (fData) setFichas(fData as unknown as FichaTecnicaUAN[]);
+
+    // 3. Busca Grade Atual
+    const { data: gData } = await supabase
+      .from('cardapio_dias_uan')
+      .select('*, fichas_tecnicas_uan(nome, categoria_uan)')
+      .eq('cardapio_id', params.id);
       
-      if (fData) setFichas(fData as unknown as FichaTecnicaUAN[]);
+    if (gData) setGrade(gData as unknown as Partial<CardapioDiaUAN>[]);
 
-      // 3. Busca Grade Atual
-      const { data: gData } = await supabase
-        .from('cardapio_dias_uan')
-        .select('*, fichas_tecnicas_uan(nome, categoria_uan)')
-        .eq('cardapio_id', params.id);
-        
-      if (gData) setGrade(gData as unknown as Partial<CardapioDiaUAN>[]);
-
-      // 4. Busca Feriados do Ano
-      if (cData?.data_inicio) {
-        const year = cData.data_inicio.split('-')[0];
-        try {
-          const rH = await fetch(`https://brasilapi.com.br/api/feriados/v1/${year}`);
-          const dH = await rH.json();
-          if (Array.isArray(dH)) setFeriados(dH);
-        } catch (e) {}
-      }
-
-      setLoading(false);
+    // 4. Busca Feriados do Ano
+    if (cData?.data_inicio) {
+      const year = cData.data_inicio.split('-')[0];
+      try {
+        const rH = await fetch(`https://brasilapi.com.br/api/feriados/v1/${year}`);
+        const dH = await rH.json();
+        if (Array.isArray(dH)) setFeriados(dH);
+      } catch (e) {}
     }
+
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchData();
   }, [activeClientId, params.id]);
 
@@ -219,7 +221,6 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
       // 0. Deduplicação Global: Garante que não existam fichas duplicadas no mesmo (dia, refeição)
       const sanitizedGrade = grade.reduce((acc, curr) => {
         const key = `${curr.data_consumo}_${curr.tipo_refeicao}_${curr.ficha_uan_id}`;
-        // Prioriza itens que já tem ID (já estão no banco)
         const existingIdx = acc.findIndex(i => `${i.data_consumo}_${i.tipo_refeicao}_${i.ficha_uan_id}` === key);
         if (existingIdx === -1) {
           acc.push(curr);
@@ -237,36 +238,154 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
 
       if (cErr) throw new Error("Erro ao salvar configurações de comensais.");
 
-      // 2. Filtra e salva novos itens da grade (temporários)
-      const novosItens = sanitizedGrade.filter(g => g.id?.startsWith('temp_')).map(g => ({
+      // 2. Prepara payload unificado para UPSERT (Insert + Update em lote)
+      const payload = sanitizedGrade.map(g => ({
         cardapio_id: cardapio.id,
         ficha_uan_id: g.ficha_uan_id!,
         data_consumo: g.data_consumo!,
         tipo_refeicao: g.tipo_refeicao!,
-        fator_multiplicador: g.fator_multiplicador
+        fator_multiplicador: g.fator_multiplicador || 1
       }));
 
-      if (novosItens.length > 0) {
-        const { error: iErr } = await supabase.from('cardapio_dias_uan').insert(novosItens);
-        if (iErr) throw new Error("Erro ao salvar novos itens da grade.");
+      if (payload.length > 0) {
+        const { error: upsertErr } = await supabase
+          .from('cardapio_dias_uan')
+          .upsert(payload, { 
+            onConflict: 'cardapio_id,data_consumo,tipo_refeicao,ficha_uan_id' 
+          });
+
+        if (upsertErr) throw upsertErr;
       }
 
-      // 3. Salva alterações em itens existentes
-      const itensExistentes = sanitizedGrade.filter(g => !g.id?.startsWith('temp_'));
-      for (const item of itensExistentes) {
-        if (!item.id) continue;
-        await supabase.from('cardapio_dias_uan')
-          .update({ fator_multiplicador: item.fator_multiplicador } as any)
-          .eq('id', item.id);
-      }
+      // 3. Verifica itens deletados (se o usuário removeu algo da grade na UI)
+      // Nota: Atualmente a UI só parece permitir deletar itens que não foram salvos ainda,
+      // mas se houver uma lista de IDs deletados, eles deveriam ser processados separadamente.
+      // Como a UI original não parece rastrear 'deletions' explicitamente para o banco no momento do save,
+      // manteremos o comportamento atual de apenas persistir o que está na grade.
 
-      setGrade(sanitizedGrade);
+      await fetchData(); // Recarrega os dados do banco para garantir que temos os IDs reais e dados frescos
       alert("Grade salva com sucesso!");
-      window.location.reload();
     } catch (err: any) {
+      console.error("Erro ao salvar grade:", err);
       alert(err.message || "Erro ao salvar a grade.");
     } finally {
       setSalvando(false);
+    }
+  };
+
+  const handleSyncWithProduction = async () => {
+    if (!cardapio || !activeClientId) return;
+    
+    // 1. Validar se a grade foi salva (não deve haver IDs temp_)
+    const hasTemp = grade.some(g => g.id?.toString().startsWith('temp_'));
+    if (hasTemp) {
+      const confirmSave = confirm("Existem alterações não salvas. Deseja salvar antes de sincronizar?");
+      if (confirmSave) {
+        await handleSalvarGrade();
+      } else {
+        return;
+      }
+    }
+
+    setSincronizando(true);
+    try {
+      // 2. Agrupar grade por Data e Refeição
+      const groups = grade.reduce((acc, item) => {
+        const key = `${item.data_consumo}_${item.tipo_refeicao}`;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(item);
+        return acc;
+      }, {} as Record<string, typeof grade>);
+
+      let ordensProcessadas = 0;
+      let itensSincronizados = 0;
+
+      for (const [key, items] of Object.entries(groups)) {
+        const [dateStr, mealStr] = key.split('_');
+        
+        // A. Verificar se a cozinha funciona e obter comensais
+        const config = cardapio.config_excecoes_dias?.[dateStr] || {};
+        const d = new Date(dateStr + 'T12:00:00Z');
+        const dayOfWeek = d.getDay().toString();
+        const isOff = config.funciona !== undefined ? !config.funciona : !cardapio.dias_funcionamento?.includes(d.getDay());
+        
+        if (isOff) continue;
+
+        const comensais = config.comensais?.[mealStr] ?? cardapio.comensais_modelo?.[dayOfWeek]?.[mealStr] ?? cardapio.comensais_estimados_dia ?? 0;
+        if (comensais <= 0) continue;
+
+        // B. Buscar Ordem existente para este Cardápio/Data/Refeição
+        const { data: existingOrdem } = await supabase
+          .from('producao_ordens')
+          .select('id, status, codigo')
+          .eq('cardapio_id', cardapio.id)
+          .eq('data_prevista', dateStr)
+          .eq('refeicao_slug', mealStr)
+          .single();
+
+        // Se existir e não estiver PLANEJADA, pulamos (não sobrescrever produção em andamento)
+        if (existingOrdem && existingOrdem.status !== 'PLANEJADA') {
+          console.log(`Pulando sincronização para ${dateStr} ${mealStr} - Status: ${existingOrdem.status}`);
+          continue;
+        }
+
+        // C. Upsert Ordem de Produção
+        const { data: userData } = await supabase.auth.getUser();
+        const userId = userData.user?.id;
+        const targetUnidadeId = cardapio.unidade_id || unidadeId; // Prioritizar unidade do cardápio, fallback para a selecionada
+        const generatedCodigo = `UAN-${dateStr.replace(/-/g, '')}-${Math.floor(Math.random() * 1000)}`;
+
+        if (!targetUnidadeId) {
+          throw new Error("Nenhuma unidade selecionada ou vinculada ao cardápio.");
+        }
+
+        const { data: orderData, error: orderErr } = await supabase
+          .from('producao_ordens')
+          .upsert({
+            id: existingOrdem?.id,
+            unidade_id: targetUnidadeId,
+            cardapio_id: cardapio.id,
+            codigo: existingOrdem?.codigo || generatedCodigo,
+            data_prevista: dateStr,
+            refeicao_slug: mealStr,
+            status: 'PLANEJADA',
+            titulo: `Sincronizado do cardápio: ${cardapio.nome_ciclo}`,
+            created_by: userId
+          } as any)
+          .select()
+          .single();
+
+        if (orderErr) throw orderErr;
+        const ordemId = orderData.id;
+
+        // D. Sincronizar Itens da Ordem
+        // Deletamos itens antigos da ordem para reinserir os atuais do cardápio
+        await supabase.from('producao_ordens_itens').delete().eq('ordem_id', ordemId);
+
+        const itemsPayload = items.map(it => ({
+          ordem_id: ordemId,
+          ficha_uan_id: it.ficha_uan_id,
+          quantidade_planejada: Math.round(comensais * (it.fator_multiplicador || 1)),
+          setor_producao_id: cardapio.setor_producao_id // Usar o setor padrão configurado no cardápio
+        }));
+
+        const { error: itemsErr } = await supabase.from('producao_ordens_itens').insert(itemsPayload as any);
+        if (itemsErr) throw itemsErr;
+
+        // E. Gerar Requisição (RPC)
+        const { error: rpcErr } = await supabase.rpc('gerar_requisicao_producao', { p_ordem_id: ordemId });
+        if (rpcErr) console.warn(`Erro ao gerar requisição para ordem ${ordemId}:`, rpcErr);
+
+        ordensProcessadas++;
+        itensSincronizados += items.length;
+      }
+
+      alert(`Sincronização concluída!\n${ordensProcessadas} Ordens de Produção atualizadas/criadas.\n${itensSincronizados} Pratos vinculados.`);
+    } catch (err: any) {
+      console.error("Erro na sincronização:", err);
+      alert("Erro ao sincronizar com produção: " + err.message);
+    } finally {
+      setSincronizando(false);
     }
   };
 
@@ -326,14 +445,25 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
         <Typography variant="h5" fontWeight="bold" flexGrow={1}>
           Grade de Cardápio: {cardapio.nome_ciclo}
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={salvando ? <Loader2 className="animate-spin" /> : <Save />}
-          onClick={handleSalvarGrade}
-          disabled={salvando}
-        >
-          {salvando ? 'Salvando...' : 'Salvar Alterações'}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={sincronizando ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            onClick={handleSyncWithProduction}
+            disabled={sincronizando || salvando}
+            color="secondary"
+          >
+            {sincronizando ? 'Sincronizando...' : 'Sincronizar com Produção'}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={salvando ? <Loader2 className="animate-spin" /> : <Save />}
+            onClick={handleSalvarGrade}
+            disabled={salvando || sincronizando}
+          >
+            {salvando ? 'Salvando...' : 'Salvar Alterações'}
+          </Button>
+        </Box>
       </Box>
 
       <Paper sx={{ mb: 3, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'background.paper', borderRadius: 2 }}>

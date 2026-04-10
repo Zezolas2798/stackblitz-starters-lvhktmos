@@ -27,9 +27,11 @@ interface OrdemItem {
   id: string;
   quantidade_planejada: number;
   quantidade_produzida: number;
-  receita_id: string;
+  receita_id: string | null;
+  ficha_uan_id: string | null;
   setor_producao_id: string | null;
-  receitas: { nome: string };
+  receitas: { nome: string } | null;
+  fichas_tecnicas_uan: { nome: string } | null;
   cliente_setores_producao?: { id: string; nome: string } | null;
 }
 
@@ -71,7 +73,8 @@ interface ReceitaOpt {
 
 interface EditItemInput {
   tempId: string;
-  receita_id: string;
+  receita_id: string | null;
+  ficha_uan_id: string | null;
   quantidade_planejada: number;
   setor_producao_id: string;
 }
@@ -125,8 +128,10 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
           quantidade_planejada,
           quantidade_produzida,
           receita_id,
+          ficha_uan_id,
           setor_producao_id,
           receitas ( nome ),
+          fichas_tecnicas_uan ( nome ),
           cliente_setores_producao ( id, nome )
         `)
         .eq('ordem_id', params.id);
@@ -352,18 +357,31 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
     const currentItens = itens.map(i => ({
       tempId: Math.random().toString(),
       receita_id: i.receita_id,
+      ficha_uan_id: i.ficha_uan_id,
       quantidade_planejada: i.quantidade_planejada,
       setor_producao_id: i.setor_producao_id || ''
     }));
     if (currentItens.length === 0) {
-      currentItens.push({ tempId: Math.random().toString(), receita_id: '', quantidade_planejada: 1, setor_producao_id: '' });
+      currentItens.push({ 
+        tempId: Math.random().toString(), 
+        receita_id: null, 
+        ficha_uan_id: null,
+        quantidade_planejada: 1, 
+        setor_producao_id: '' 
+      });
     }
     setEditItens(currentItens);
     setEditProductsDialogOpen(true);
   };
 
   const handleAddEditItem = () => {
-    setEditItens([...editItens, { tempId: Math.random().toString(), receita_id: '', quantidade_planejada: 1, setor_producao_id: '' }]);
+    setEditItens([...editItens, { 
+      tempId: Math.random().toString(), 
+      receita_id: null, 
+      ficha_uan_id: null,
+      quantidade_planejada: 1, 
+      setor_producao_id: '' 
+    }]);
   };
 
   const handleRemoveEditItem = (tempId: string) => {
@@ -378,9 +396,9 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
     if (!ordem) return;
     setSalvandoProducts(true);
     
-    const validItens = editItens.filter(i => i.receita_id && i.quantidade_planejada > 0);
+    const validItens = editItens.filter(i => (i.receita_id || i.ficha_uan_id) && i.quantidade_planejada > 0);
     if (validItens.length === 0) {
-      alert('Adicione pelo menos uma receita com quantidade válida.');
+      alert('Adicione pelo menos uma receita ou ficha UAN com quantidade válida.');
       setSalvandoProducts(false);
       return;
     }
@@ -397,6 +415,7 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
       const itensPayload = validItens.map(i => ({
         ordem_id: ordem.id,
         receita_id: i.receita_id,
+        ficha_uan_id: i.ficha_uan_id,
         quantidade_planejada: i.quantidade_planejada,
         setor_producao_id: i.setor_producao_id || null
       }));
@@ -510,7 +529,10 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
                     <TableRow key={item.id} hover>
                       <TableCell>
                         <Typography variant="body1" fontWeight="bold" color="primary.main">
-                          {item.receitas?.nome}
+                          {item.receitas?.nome || item.fichas_tecnicas_uan?.nome || 'Sem Nome'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {item.ficha_uan_id ? `FT UAN ID: ${item.ficha_uan_id}` : `Receita ID: ${item.receita_id}`}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -520,12 +542,12 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="body1" fontWeight="bold">
-                          {item.quantidade_planejada} un
+                          {item.quantidade_planejada} {item.ficha_uan_id ? 'porções' : 'un'}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="body1" color="text.secondary">
-                          {item.quantidade_produzida} un
+                          {item.quantidade_produzida} {item.ficha_uan_id ? 'porções' : 'un'}
                         </Typography>
                       </TableCell>
                       <TableCell align="center">
