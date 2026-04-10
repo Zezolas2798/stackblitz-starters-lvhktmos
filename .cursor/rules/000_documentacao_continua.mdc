@@ -1,0 +1,7 @@
+---
+description: Regra estrita para garantir a atualização do README.md e ARCHITECTURE.md em cada entrega.
+globs: ["*"]
+---
+# REGRA DE DOCUMENTAÇÃO CONTÍNUA
+
+Toda vez que uma nova funcionalidade for criada, uma nova tabela for adicionada ao banco de dados ou uma nova dependência for instalada, a IA é OBRIGADA a atualizar o README.md e o ARCHITECTURE.md antes de considerar a tarefa como concluída. Nenhuma PR (Pull Request) ou código final pode ser entregue sem o reflexo na documentação.
