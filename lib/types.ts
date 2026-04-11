@@ -462,9 +462,11 @@ export interface ComposicaoReceita {
   item_type: 'ingrediente' | 'receita';
   peso_bruto_g: number;
   peso_liquido_g: number;
+  referencia_id?: string | null;
   
   ingrediente?: Ingrediente;
   receita?: Receita;
+  referencia_nutricional?: ReferenciaNutricional;
   ingredientes?: Ingrediente; // Legado
   receitas?: { nome: string }; // Legado
 }

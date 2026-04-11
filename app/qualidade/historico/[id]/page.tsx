@@ -30,12 +30,13 @@ export default function DetalheChecklistPage() {
   async function loadDetails() {
     setLoading(true);
     
-    // 1. Buscar Execução e Modelo
+    // 1. Buscar Execução, Modelo e Perfil do Auditor
     const { data: exec, error } = await supabase
       .from('checklist_execucoes')
       .select(`
         *,
-        checklist_modelos (nome, descricao)
+        checklist_modelos (nome, descricao),
+        profiles:responsavel_id (full_name)
       `)
       .eq('id', id)
       .single();
@@ -45,14 +46,9 @@ export default function DetalheChecklistPage() {
         return;
     }
 
-    // 2. Fetch Auditor Name
-    if (exec.responsavel_id) {
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', exec.responsavel_id)
-            .single();
-        if (profile) exec.auditor_nome = profile.full_name;
+    // Map profile name to auditor_nome for easier usage
+    if ((exec as any).profiles) {
+      (exec as any).auditor_nome = (exec as any).profiles.full_name;
     }
 
     setChecklist(exec);

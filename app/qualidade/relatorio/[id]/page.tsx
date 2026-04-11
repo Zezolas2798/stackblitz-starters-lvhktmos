@@ -62,24 +62,21 @@ export default function RelatorioAuditoriaPage() {
   const loadRelatorio = async () => {
     setLoading(true);
     try {
-        // 1. Dados da Auditoria
+        // 1. Dados da Auditoria com join de perfis
         const { data: auditData, error: auditErr } = await supabase
             .from('checklist_auditorias')
-            .select(`*, checklist_modelos (titulo, descricao)`)
+            .select(`
+                *, 
+                checklist_modelos (titulo, descricao),
+                profiles:responsavel_id (full_name)
+            `)
             .eq('id', auditId)
             .single();
         if (auditErr) throw auditErr;
 
-        // Fetch auditor profile name
-        if (auditData.responsavel_id) {
-            const { data: profileData } = await supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('id', auditData.responsavel_id)
-                .single();
-            if (profileData) {
-                auditData.auditor_nome = profileData.full_name;
-            }
+        // Map profile name to auditor_nome
+        if ((auditData as any).profiles) {
+            (auditData as any).auditor_nome = (auditData as any).profiles.full_name;
         }
         setAuditoria(auditData);
 

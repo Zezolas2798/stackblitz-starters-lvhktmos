@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -411,6 +411,36 @@ export type Database = {
             columns: ["role_id"]
             isOneToOne: false
             referencedRelation: "app_roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_user_permissions: {
+        Row: {
+          permission_slug: string
+          usuario_id: string
+        }
+        Insert: {
+          permission_slug: string
+          usuario_id: string
+        }
+        Update: {
+          permission_slug?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_user_permissions_permission_slug_fkey"
+            columns: ["permission_slug"]
+            isOneToOne: false
+            referencedRelation: "app_permissions"
+            referencedColumns: ["slug"]
+          },
+          {
+            foreignKeyName: "app_user_permissions_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1544,6 +1574,7 @@ export type Database = {
           peso_bruto_g: number
           peso_liquido_g: number
           receita_id: string
+          referencia_id: string | null
         }
         Insert: {
           created_at?: string
@@ -1557,6 +1588,7 @@ export type Database = {
           peso_bruto_g?: number
           peso_liquido_g?: number
           receita_id: string
+          referencia_id?: string | null
         }
         Update: {
           created_at?: string
@@ -1570,6 +1602,7 @@ export type Database = {
           peso_bruto_g?: number
           peso_liquido_g?: number
           receita_id?: string
+          referencia_id?: string | null
         }
         Relationships: [
           {
@@ -1577,6 +1610,13 @@ export type Database = {
             columns: ["receita_id"]
             isOneToOne: false
             referencedRelation: "receitas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "composicao_receitas_referencia_id_fkey"
+            columns: ["referencia_id"]
+            isOneToOne: false
+            referencedRelation: "referencias_nutricionais"
             referencedColumns: ["id"]
           },
         ]

@@ -57,6 +57,8 @@ type ComposicaoDisplayItem = {
   preco_ultima_compra?: number;
   custo_medio?: number;
   unidade_medida?: string;
+  referencia_id?: string | null;
+  referencia_info?: { nome: string, fonte: string } | null;
 };
 
 export default function DetalhesReceitaPage() {
@@ -209,16 +211,19 @@ export default function DetalhesReceitaPage() {
     const receitaIds = composicao.filter((c: any) => c.item_type === 'receita').map((c: any) => c.item_id);
     const materialIds = composicao.filter((c: any) => c.item_type === 'material').map((c: any) => c.item_id);
     
-    const [ingData, recData, matData] = await Promise.all([
+    const [ingData, recData, matData, refData] = await Promise.all([
       ingredienteIds.length > 0 ? supabase.from('ingredientes').select('id, nome, peso_unitario_g, tipo_ingrediente, funcao_aditivo, ins_code, classificacao_nova, preco_ultima_compra, custo_medio').in('id', ingredienteIds) : Promise.resolve({ data: [] }),
       receitaIds.length > 0 ? supabase.from('receitas').select('id, nome').in('id', receitaIds) : Promise.resolve({ data: [] }),
-      materialIds.length > 0 ? supabase.from('materiais').select('id, nome, tipo_material, unidade_medida, custo_medio, preco_ultima_compra').in('id', materialIds) : Promise.resolve({ data: [] })
+      materialIds.length > 0 ? supabase.from('materiais').select('id, nome, tipo_material, unidade_medida, custo_medio, preco_ultima_compra').in('id', materialIds) : Promise.resolve({ data: [] }),
+      supabase.from('referencias_nutricionais').select('id, nome, fonte')
     ]);
     
     const infoMap = new Map();
+    const refMap = new Map();
     ingData.data?.forEach((item: any) => infoMap.set(item.id, item));
     recData.data?.forEach((item: any) => infoMap.set(item.id, { nome: item.nome, tipo_ingrediente: 'RECEITA' }));
     matData.data?.forEach((item: any) => infoMap.set(item.id, { ...item, tipo_ingrediente: 'MATERIAL' }));
+    refData.data?.forEach((item: any) => refMap.set(item.id, { nome: item.nome, fonte: item.fonte }));
     
     const listaMapeada = composicao.map((item: any) => {
       const nomeItem = item.nome_snapshot || infoMap.get(item.item_id)?.nome || 'Item desconhecido';
@@ -238,7 +243,9 @@ export default function DetalhesReceitaPage() {
         classificacao_nova: info.classificacao_nova ?? null,
         preco_ultima_compra: Number(info.preco_ultima_compra || 0),
         custo_medio: Number(info.custo_medio || 0),
-        unidade_medida: info.unidade_medida || 'g'
+        unidade_medida: info.unidade_medida || 'g',
+        referencia_id: item.referencia_id,
+        referencia_info: item.referencia_id ? refMap.get(item.referencia_id) : null
       };
     });
 
@@ -510,6 +517,18 @@ export default function DetalhesReceitaPage() {
                                     <Typography variant="body2" fontWeight={600}>{item.nome}</Typography>
                                     {item.tipo_ingrediente === 'ADITIVO' && (
                                         <Chip label={item.funcao_aditivo || 'Aditivo'} size="small" color="warning" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
+                                    )}
+                                    {item.referencia_info && (
+                                        <Tooltip title={`Referência: ${item.referencia_info.nome} (${item.referencia_info.fonte})`}>
+                                          <Chip 
+                                            label={`${item.referencia_info.nome} (${item.referencia_info.fonte})`} 
+                                            size="small" 
+                                            color="info" 
+                                            variant="outlined" 
+                                            icon={<VerifiedIcon style={{ fontSize: '0.8rem' }} />}
+                                            sx={{ height: 18, fontSize: '0.6rem', bgcolor: alpha(theme.palette.info.main, 0.1) }} 
+                                          />
+                                        </Tooltip>
                                     )}
                                 </Box>
                             }

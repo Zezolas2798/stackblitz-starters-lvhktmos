@@ -46,7 +46,7 @@ interface Role {
   id: string;
   nome: string;
   descricao: string | null;
-  is_system_role: boolean;
+  is_system_role: boolean | null;
 }
 
 interface Permission {
@@ -331,8 +331,8 @@ export default function GestaoPermissoesSistemaV2() {
                       <ListItemText 
                         primary={role.nome} 
                         secondary={role.descricao}
-                        primaryTypographyProps={{ variant: 'body2', sx: { noWrap: true } }}
-                        secondaryTypographyProps={{ variant: 'caption', sx: { noWrap: true, opacity: 0.6 } }}
+                        primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+                        secondaryTypographyProps={{ variant: 'caption', noWrap: true, sx: { opacity: 0.6 } }}
                       />
                       <ChevronRight size={16} style={{ opacity: selectedRoleId === role.id ? 1 : 0.2 }} />
                     </ListItemButton>

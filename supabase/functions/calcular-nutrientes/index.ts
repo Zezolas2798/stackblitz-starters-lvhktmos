@@ -206,10 +206,33 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
         });
       }
 
+      // Lógica de Sobreposição Nutricional (Override)
+      let dadosNutricionais = { ...ing };
+      if (item.referencia_id) {
+        const { data: refData, error: refError } = await supabaseAdmin
+          .from('referencias_nutricionais')
+          .select('*')
+          .eq('id', item.referencia_id)
+          .single();
+        
+        if (!refError && refData) {
+          // Normalização de nomes de colunas (TACO/TBCA vs Ingredientes)
+          if (refData.gordura_monoinsaturada_g !== undefined) refData.gordura_mono_g = refData.gordura_monoinsaturada_g;
+          if (refData.gordura_poliinsaturada_g !== undefined) refData.gordura_poli_g = refData.gordura_poliinsaturada_g;
+          
+          // Sobrepõe apenas colunas numéricas de nutrição
+          for (const key in refData) {
+            if (typeof refData[key] === 'number' && (key.endsWith('_g') || key.endsWith('_mg') || key.endsWith('_mcg') || key.endsWith('_kcal'))) {
+              dadosNutricionais[key] = refData[key];
+            }
+          }
+        }
+      }
+
       const fator = item.peso_liquido_g / 100.0;
-      for (const key in ing) {
-        if (typeof ing[key] === 'number' && (key.endsWith('_g') || key.endsWith('_mg') || key.endsWith('_mcg') || key.endsWith('_kcal'))) {
-          totaisBrutos[key] = (totaisBrutos[key] || 0) + ((ing[key] ?? 0) * fator);
+      for (const key in dadosNutricionais) {
+        if (typeof dadosNutricionais[key] === 'number' && (key.endsWith('_g') || key.endsWith('_mg') || key.endsWith('_mcg') || key.endsWith('_kcal'))) {
+          totaisBrutos[key] = (totaisBrutos[key] || 0) + ((dadosNutricionais[key] ?? 0) * fator);
         }
       }
 

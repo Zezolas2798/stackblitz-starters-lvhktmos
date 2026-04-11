@@ -62,33 +62,44 @@ export default function UserPermissionEditor({ userId, userName, roleId, roleNam
 
   useEffect(() => {
     async function loadData() {
-      // 1. Catálogo completo
-      const { data: allPerms } = await supabase.from('app_permissions')
-        .select('*')
-        .order('modulo', { ascending: false })
-        .order('descricao', { ascending: true });
+      try {
+        // 1. Catálogo completo
+        const { data: allPerms, error: allError } = await supabase.from('app_permissions')
+          .select('*')
+          .order('modulo', { ascending: false })
+          .order('descricao', { ascending: true });
 
-      // 2. Permissões do Cargo (Herdadas)
-      let roleSet = new Set<string>();
-      if (roleId) {
-        const { data: rolePerms } = await supabase.from('app_role_permissions')
+        if (allError) throw allError;
+
+        // 2. Permissões do Cargo (Herdadas)
+        let roleSet = new Set<string>();
+        if (roleId) {
+          const { data: rolePerms, error: roleError } = await supabase.from('app_role_permissions')
+            .select('permission_slug')
+            .eq('role_id', roleId);
+          
+          if (roleError) throw roleError;
+          rolePerms?.forEach(p => roleSet.add(p.permission_slug));
+        }
+
+        // 3. Permissões Individuais (Overrides)
+        const { data: userPerms, error: userError } = await supabase.from('app_user_permissions')
           .select('permission_slug')
-          .eq('role_id', roleId);
-        rolePerms?.forEach((p: any) => roleSet.add(p.permission_slug));
+          .eq('usuario_id', userId);
+
+        if (userError) throw userError;
+
+        const userSet = new Set<string>();
+        userPerms?.forEach(p => userSet.add(p.permission_slug));
+
+        if (allPerms) setPermissions(allPerms as Permission[]);
+        setInheritedSlugs(roleSet);
+        setIndividualSlugs(userSet);
+      } catch (err: any) {
+        console.error('Erro ao carregar permissões:', err);
+      } finally {
+        setLoading(false);
       }
-
-      // 3. Permissões Individuais (Overrides)
-      const { data: userPerms } = await supabase.from('app_user_permissions')
-        .select('permission_slug')
-        .eq('usuario_id', userId);
-
-      const userSet = new Set<string>();
-      userPerms?.forEach((p: any) => userSet.add(p.permission_slug));
-
-      if (allPerms) setPermissions(allPerms as Permission[]);
-      setInheritedSlugs(roleSet);
-      setIndividualSlugs(userSet);
-      setLoading(false);
     }
     loadData();
   }, [userId, roleId]);
@@ -111,20 +122,30 @@ export default function UserPermissionEditor({ userId, userName, roleId, roleNam
   };
 
   const handleSave = async () => {
+    setSaving(false); // Reset in case of previous error (though shouldn't happen)
     setSaving(true);
-    // Limpar e Inserir overrides individuais
-    await supabase.from('app_user_permissions').delete().eq('usuario_id', userId);
     
-    if (individualSlugs.size > 0) {
-      const inserts = Array.from(individualSlugs).map(slug => ({
-        usuario_id: userId,
-        permission_slug: slug
-      }));
-      await supabase.from('app_user_permissions').insert(inserts);
-    }
+    try {
+      // Limpar e Inserir overrides individuais
+      const { error: deleteError } = await supabase.from('app_user_permissions').delete().eq('usuario_id', userId);
+      if (deleteError) throw deleteError;
+      
+      if (individualSlugs.size > 0) {
+        const inserts = Array.from(individualSlugs).map(slug => ({
+          usuario_id: userId,
+          permission_slug: slug
+        }));
+        const { error: insertError } = await supabase.from('app_user_permissions').insert(inserts);
+        if (insertError) throw insertError;
+      }
 
-    setSaving(false);
-    onClose();
+      onClose();
+    } catch (err: any) {
+      console.error('Erro ao salvar permissões:', err);
+      alert('Erro ao salvar: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

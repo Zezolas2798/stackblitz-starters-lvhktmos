@@ -71,6 +71,7 @@ interface ItemComposicao {
   ins_code?: string | null;
   preco_ultima_compra?: number;
   peso_unitario_g?: number;
+  referencia_id?: string | null;
 }
 
 interface AditivoMestre {
@@ -98,6 +99,7 @@ function CriarEditarReceitaComponent() {
   const [listaMestraAlergenicos, setListaMestraAlergenicos] = useState<AnvisaAlergenico[]>([]);
   const [gruposPopulacionais, setGruposPopulacionais] = useState<AnvisaGrupoPopulacional[]>([]);
   const [listaAditivosMestre, setListaAditivosMestre] = useState<AditivoMestre[]>([]);
+  const [listaReferenciasNutricionais, setListaReferenciasNutricionais] = useState<{id: string, nome: string, fonte: string}[]>([]);
 
   const [tiposReceita, setTiposReceita] = useState<TipoReceita[]>([]);
   const [selectedTipoReceita, setSelectedTipoReceita] = useState<TipoReceita | null>(null);
@@ -143,6 +145,7 @@ function CriarEditarReceitaComponent() {
   const [fatorCorrecao, setFatorCorrecao] = useState<number | ''>(1);
   const [indiceCoccao, setIndiceCoccao] = useState<number | ''>(1);
   const [unidadeIngrediente, setUnidadeIngrediente] = useState('g');
+  const [referenciaIdSelecionada, setReferenciaIdSelecionada] = useState<string | null>(null);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
   // --- GRUPOS DE ALIMENTOS ---
@@ -162,9 +165,8 @@ function CriarEditarReceitaComponent() {
     setLoading(true);
     setError(null);
     try {
-      // NOTA: Adicionei 'alergenicos_ids' na query de ingredientes para suportar o novo formato
-      const [ingPromise, recPromise, catPromise, medPromise, alergenicosPromise, ingAlergLinkPromise, gruposPopPromise, tiposRecPromise, aditivosMestrePromise, materiaisPromise] = await Promise.all([
-        (supabase as any).from('ingredientes').select('id, nome, fonte, ins_code, tipo_ingrediente, funcao_aditivo, alergenicos_ids, preco_ultima_compra, peso_unitario_g').or(`cliente_id.eq.${activeClientId},cliente_id.is.null`).is('deleted_at', null).order('nome'),
+      const [ingPromise, recPromise, catPromise, medPromise, alergenicosPromise, ingAlergLinkPromise, gruposPopPromise, tiposRecPromise, aditivosMestrePromise, materiaisPromise, refPromise] = await Promise.all([
+        (supabase as any).from('ingredientes').select('id, nome, fonte, ins_code, tipo_ingrediente, funcao_aditivo, alergenicos_ids, preco_ultima_compra, peso_unitario_g, referencia_id').or(`cliente_id.eq.${activeClientId},cliente_id.is.null`).is('deleted_at', null).order('nome'),
         (supabase as any).from('receitas').select('id, nome').eq('cliente_id', activeClientId!).neq('id', editingId || '00000000-0000-0000-0000-000000000000').order('nome'),
         (supabase as any).from('anvisa_categorias').select('*').order('nome_produto'),
         (supabase as any).from('anvisa_medidas_caseiras').select('nome').order('nome'),
@@ -173,7 +175,8 @@ function CriarEditarReceitaComponent() {
         (supabase as any).from('anvisa_grupos_populacionais').select('*').order('id'),
         (supabase as any).from('tipos_receita').select('*').eq('cliente_id', activeClientId!).order('nome'),
         (supabase as any).from('anvisa_aditivos').select('*').order('ins'),
-        (supabase as any).from('materiais').select('*').eq('cliente_id', activeClientId!).order('nome')
+        (supabase as any).from('materiais').select('*').eq('cliente_id', activeClientId!).order('nome'),
+        (supabase as any).from('referencias_nutricionais').select('id, nome, fonte').order('nome')
       ]);
 
       if (ingPromise.error) throw ingPromise.error;
@@ -255,6 +258,7 @@ function CriarEditarReceitaComponent() {
       setListaMestraAlergenicos((alergenicosPromise.data || []) as AnvisaAlergenico[]);
       setGruposPopulacionais((gruposPopPromise.data || []) as AnvisaGrupoPopulacional[]);
       setTiposReceita((tiposRecPromise.data || []) as TipoReceita[]);
+      setListaReferenciasNutricionais(refPromise.data || []);
 
       const grupoGeral = (gruposPopPromise.data || []).find((g: any) => g.id === 'GERAL');
       setSelectedGrupoPop(grupoGeral || null);
@@ -342,7 +346,8 @@ function CriarEditarReceitaComponent() {
               is_aditivo: isAditivo,
               ins_code: insCode,
               preco_ultima_compra: itemInfo?.preco_ultima_compra,
-              peso_unitario_g: itemInfo?.peso_unitario_g
+              peso_unitario_g: itemInfo?.peso_unitario_g,
+              referencia_id: item.referencia_id || null
             }
           }
           );
@@ -477,22 +482,18 @@ function CriarEditarReceitaComponent() {
   const handlePesoBrutoChange = (val: number | '') => {
     setPesoBruto(val);
     if (typeof val === 'number') {
-      if (typeof fatorCorrecao === 'number' && fatorCorrecao > 0) {
-        setPesoLiquido(Number((val / fatorCorrecao).toFixed(3)));
-      } else if (typeof pesoLiquido === 'number' && pesoLiquido > 0) {
+      if (typeof pesoLiquido === 'number' && pesoLiquido > 0) {
         setFatorCorrecao(Number((val / pesoLiquido).toFixed(3)));
+      } else if (typeof fatorCorrecao === 'number' && fatorCorrecao > 0) {
+        setPesoLiquido(Number((val / fatorCorrecao).toFixed(3)));
       }
     }
   };
 
   const handlePesoLiquidoChange = (val: number | '') => {
     setPesoLiquido(val);
-    if (typeof val === 'number') {
-      if (typeof fatorCorrecao === 'number' && fatorCorrecao > 0) {
-        setPesoBruto(Number((val * fatorCorrecao).toFixed(3)));
-      } else if (typeof pesoBruto === 'number' && pesoBruto > 0) {
-        setFatorCorrecao(Number((pesoBruto / val).toFixed(3)));
-      }
+    if (typeof val === 'number' && typeof pesoBruto === 'number' && pesoBruto > 0) {
+      setFatorCorrecao(Number((pesoBruto / val).toFixed(3)));
     }
   };
 
@@ -588,7 +589,8 @@ function CriarEditarReceitaComponent() {
       is_aditivo: ehAditivoMestre || ehAditivoEdicao,
       ins_code: itemSelecionado.aditivoData?.ins || composicao[editingItemIndex!]?.ins_code,
       preco_ultima_compra: itemSelecionado.preco_ultima_compra,
-      peso_unitario_g: itemSelecionado.peso_unitario_g || 1000
+      peso_unitario_g: itemSelecionado.peso_unitario_g || 1000,
+      referencia_id: referenciaIdSelecionada || null
     };
 
     if (editingItemIndex !== null) {
@@ -634,6 +636,12 @@ function CriarEditarReceitaComponent() {
     setFatorCorrecao(item.fator_correcao);
     setIndiceCoccao(item.indice_coccao);
     setUnidadeIngrediente(item.unidade || 'g');
+    // Redundância para garantir que o ID chegue como string/null
+    const refId = item.referencia_id ? String(item.referencia_id) : null;
+    setReferenciaIdSelecionada(refId);
+    
+    // Log de segurança para depuração se necessário
+    console.log('Editando item:', item.nome, 'ID Insumo:', item.item_id, 'Ref ID:', refId);
   }
 
   function handleDeleteItem(index: number) {
@@ -648,6 +656,7 @@ function CriarEditarReceitaComponent() {
     setFatorCorrecao(1);
     setIndiceCoccao(1);
     setUnidadeIngrediente('g');
+    setReferenciaIdSelecionada(null);
     setFuncoesAditivoDisponiveis([]);
     setFuncaoAditivoSelecionada('');
   }
@@ -700,7 +709,8 @@ function CriarEditarReceitaComponent() {
       peso_bruto_g: item.peso_bruto_g, 
       peso_liquido_g: item.peso_liquido_g,
       fator_correcao: item.fator_correcao,
-      indice_coccao: item.indice_coccao
+      indice_coccao: item.indice_coccao,
+      referencia_id: item.referencia_id || null
     }));
     try {
       if (editingId) {
@@ -841,24 +851,53 @@ function CriarEditarReceitaComponent() {
               <Grid item xs={12} md={5}>
                 <Box sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05), p: 3, borderRadius: 2, border: `1px dashed ${alpha(theme.palette.primary.main, 0.3)}` }}>
                   <Typography variant="subtitle2" gutterBottom color="primary.dark" fontWeight="bold">{editingItemIndex !== null ? 'EDITANDO INSUMO' : 'ADICIONAR INSUMO'}</Typography>
-                  <Autocomplete
-                    options={itensDeBusca.filter(i => i.tipo !== 'material').sort((a, b) => -a.grupo.localeCompare(b.grupo))}
-                    groupBy={(option) => option.grupo}
-                    getOptionLabel={(option) => option.nome}
-                    value={itemSelecionado}
-                    onChange={(_, newValue) => {
-                      setItemSelecionado(newValue);
-                      setFuncoesAditivoDisponiveis([]);
-                      setFuncaoAditivoSelecionada('');
-                      if (newValue?.tipo === 'aditivo_mestre' && newValue.aditivoData?.funcao) {
-                        const funcs = newValue.aditivoData.funcao.split('/').map(f => f.trim());
-                        if (funcs.length > 1) setFuncoesAditivoDisponiveis(funcs);
-                        else { setFuncoesAditivoDisponiveis([funcs[0]]); setFuncaoAditivoSelecionada(funcs[0]); }
-                      }
-                    }}
-                    renderInput={(params) => <TextField {...params} label="Buscar Insumo ou Receita" size="small" sx={{ bgcolor: 'background.paper' }} />}
-                    sx={{ mb: 2 }}
-                  />
+                    <Autocomplete
+                      fullWidth
+                      options={itensDeBusca.filter(i => i.tipo !== 'material').sort((a, b) => -a.grupo.localeCompare(b.grupo))}
+                      groupBy={(option) => option.grupo}
+                      getOptionLabel={(option) => option.nome}
+                      isOptionEqualToValue={(option, value) => option.id === value.id}
+                      value={itemSelecionado}
+                      onChange={(_, newValue) => {
+                        setItemSelecionado(newValue);
+                        setFuncoesAditivoDisponiveis([]);
+                        setFuncaoAditivoSelecionada('');
+                        if (newValue?.tipo !== 'ingrediente') {
+                          setReferenciaIdSelecionada(null);
+                        }
+                        if (newValue?.tipo === 'aditivo_mestre' && newValue.aditivoData?.funcao) {
+                          const funcs = newValue.aditivoData.funcao.split('/').map(f => f.trim());
+                          if (funcs.length > 1) setFuncoesAditivoDisponiveis(funcs);
+                          else { setFuncoesAditivoDisponiveis([funcs[0]]); setFuncaoAditivoSelecionada(funcs[0]); }
+                        }
+                      }}
+                      renderInput={(params) => <TextField {...params} label="Buscar Insumo ou Receita" size="small" sx={{ bgcolor: 'background.paper' }} />}
+                      sx={{ mb: 2 }}
+                    />
+
+                  {itemSelecionado?.tipo === 'ingrediente' && (
+                    <Autocomplete
+                      fullWidth
+                      options={listaReferenciasNutricionais}
+                      getOptionLabel={(option) => `${option.nome} (${option.fonte})`}
+                      isOptionEqualToValue={(option, value) => option.id === value.id}
+                      value={listaReferenciasNutricionais.find(r => r.id === referenciaIdSelecionada) || null}
+                      onChange={(_, newValue) => {
+                        console.log('Nova referência selecionada:', newValue?.nome, 'ID:', newValue?.id);
+                        setReferenciaIdSelecionada(newValue?.id || null);
+                      }}
+                      renderInput={(params) => (
+                        <TextField 
+                          {...params} 
+                          label="Referência Nutricional / Preparo (TACO-TBCA)" 
+                          size="small" 
+                          helperText="Opcional: Sobrepõe a nutrição do insumo base" 
+                          sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }} 
+                        />
+                      )}
+                      sx={{ mb: 2 }}
+                    />
+                  )}
 
                   {funcoesAditivoDisponiveis.length > 1 && (
                     <FormControl fullWidth size="small" sx={{ mb: 2, bgcolor: '#fffbe6' }}>
@@ -872,7 +911,7 @@ function CriarEditarReceitaComponent() {
                   <Grid container spacing={2}>
                     <Grid item xs={6}><TextField label="Peso Bruto" type="number" value={pesoBruto} onChange={(e) => handlePesoBrutoChange(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
                     <Grid item xs={6}><TextField label="Peso Líquido" type="number" value={pesoLiquido} onChange={(e) => handlePesoLiquidoChange(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
-                    <Grid item xs={6}><TextField label="Fator de Correção (FC)" type="number" value={fatorCorrecao} onChange={(e) => handleFatorCorrecaoChange(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} inputProps={{ step: 0.001 }} /></Grid>
+                    <Grid item xs={6}><TextField label="Fator de Correção (FC)" type="number" value={fatorCorrecao} onChange={(e) => handleFatorCorrecaoChange(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} inputProps={{ step: 0.001 }} helperText="Calculado: Bruto / Líquido" /></Grid>
                     <Grid item xs={6}><TextField label="Índice de Cocção (IC)" type="number" value={indiceCoccao} onChange={(e) => setIndiceCoccao(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} inputProps={{ step: 0.1 }} /></Grid>
                     <Grid item xs={12}>
                       <FormControl fullWidth size="small" sx={{ bgcolor: 'background.paper' }}>
@@ -908,7 +947,22 @@ function CriarEditarReceitaComponent() {
                       }>
                         <ListItemText 
                           primary={<Box sx={{ display: 'flex', gap: 1 }}>{item.nome} {item.is_aditivo && <Chip label="Aditivo" size="small" color="secondary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}</Box>} 
-                          secondary={`PB: ${item.peso_bruto_display}${item.unidade} | PL: ${item.peso_liquido_display}${item.unidade} | FC: ${item.fator_correcao.toFixed(2)} | IC: ${item.indice_coccao.toFixed(2)}`} 
+                          secondary={
+                            <>
+                              {`PB: ${item.peso_bruto_display}${item.unidade} | PL: ${item.peso_liquido_display}${item.unidade} | FC: ${item.fator_correcao.toFixed(2)} | IC: ${item.indice_coccao.toFixed(2)}`}
+                              {item.referencia_id && (
+                                <Box component="span" sx={{ display: 'block', mt: 0.5 }}>
+                                  <Chip 
+                                    size="small" 
+                                    label={`Ref: ${listaReferenciasNutricionais.find(r => r.id === item.referencia_id)?.nome || 'Carregando...'}`} 
+                                    variant="outlined" 
+                                    color="secondary"
+                                    sx={{ height: 20, fontSize: '0.7rem' }}
+                                  />
+                                </Box>
+                              )}
+                            </>
+                          } 
                         />
                       </ListItem>
                     );
