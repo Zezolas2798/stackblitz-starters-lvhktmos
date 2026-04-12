@@ -179,15 +179,33 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
   let coloridoCarmim = false;
   const ingredientesGMO = new Set<string>();
 
+  // Pré-fetch em batch das IDs necessárias neste nível
+  const ingIds = composicao.filter(i => i.item_type === 'ingrediente').map(i => i.item_id);
+  const refIds = composicao.filter(i => i.item_type === 'ingrediente' && i.referencia_id).map(i => i.referencia_id);
+  const recIds = composicao.filter(i => i.item_type === 'receita').map(i => i.item_id);
+
+  const [ingRes, refRes, recRes] = await Promise.all([
+    ingIds.length > 0 ? supabaseAdmin.from('ingredientes').select('*').in('id', ingIds) : Promise.resolve({ data: [] }),
+    refIds.length > 0 ? supabaseAdmin.from('referencias_nutricionais').select('*').in('id', refIds) : Promise.resolve({ data: [] }),
+    recIds.length > 0 ? supabaseAdmin.from('receitas').select('*, composicao_receitas(*)').in('id', recIds) : Promise.resolve({ data: [] })
+  ]);
+
+  if (ingRes.error) throw new Error(`Erro ao buscar ingredientes: ${ingRes.error.message}`);
+  if (refRes.error) throw new Error(`Erro ao buscar referências: ${refRes.error.message}`);
+  if (recRes.error) throw new Error(`Erro ao buscar receitas: ${recRes.error.message}`);
+
+  const ingMap = new Map((ingRes.data || []).map((i: any) => [i.id, i]));
+  const refMap = new Map((refRes.data || []).map((r: any) => [r.id, r]));
+  const recMap = new Map((recRes.data || []).map((r: any) => [r.id, r]));
+
   for (const item of composicao) {
     if (item.item_type === 'ingrediente') {
-      const { data: ing, error } = await supabaseAdmin.from('ingredientes').select('*').eq('id', item.item_id).single();
-      if (error || !ing) throw new Error(`Ingrediente ID ${item.item_id} não encontrado.`);
+      const ing = ingMap.get(item.item_id);
+      if (!ing) throw new Error(`Ingrediente ID ${item.item_id} não encontrado no batch.`);
 
       ingredientesParaLista.push({ peso_liquido_g: item.peso_liquido_g, ingrediente: ing });
       if (ing.contem_gluten) contemGluten = true;
       
-      // Automatização de Corantes via INS
       const insLimpo = ing.ins_code ? ing.ins_code.replace(/ins/i, '').trim() : '';
       const aditivoInfo = aditivosMap.get(insLimpo);
       if (aditivoInfo?.is_artificial) coloridoArtificialmente = true;
@@ -198,7 +216,6 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
         ingredientesGMO.add(esp);
       }
 
-      // Schema: alergenicos_ids é array de inteiros
       if (ing.alergenicos_ids && Array.isArray(ing.alergenicos_ids)) {
         ing.alergenicos_ids.forEach((id: number) => {
           const nome = alergenicosMap.get(id);
@@ -206,21 +223,13 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
         });
       }
 
-      // Lógica de Sobreposição Nutricional (Override)
       let dadosNutricionais = { ...ing };
       if (item.referencia_id) {
-        const { data: refData, error: refError } = await supabaseAdmin
-          .from('referencias_nutricionais')
-          .select('*')
-          .eq('id', item.referencia_id)
-          .single();
-        
-        if (!refError && refData) {
-          // Normalização de nomes de colunas (TACO/TBCA vs Ingredientes)
+        const refData = refMap.get(item.referencia_id);
+        if (refData) {
           if (refData.gordura_monoinsaturada_g !== undefined) refData.gordura_mono_g = refData.gordura_monoinsaturada_g;
           if (refData.gordura_poliinsaturada_g !== undefined) refData.gordura_poli_g = refData.gordura_poliinsaturada_g;
           
-          // Sobrepõe apenas colunas numéricas de nutrição
           for (const key in refData) {
             if (typeof refData[key] === 'number' && (key.endsWith('_g') || key.endsWith('_mg') || key.endsWith('_mcg') || key.endsWith('_kcal'))) {
               dadosNutricionais[key] = refData[key];
@@ -237,8 +246,8 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
       }
 
     } else if (item.item_type === 'receita') {
-      const { data: sub, error } = await supabaseAdmin.from('receitas').select('*, composicao_receitas(*)').eq('id', item.item_id).single();
-      if (error || !sub) throw new Error(`Sub-receita ID ${item.item_id} não encontrada.`);
+      const sub = recMap.get(item.item_id);
+      if (!sub) throw new Error(`Sub-receita ID ${item.item_id} não encontrada no batch.`);
 
       const resSub = await calcularNutrientesRecursivo(sub.composicao_receitas, supabaseAdmin, alergenicosMap, aditivosMap);
       if (resSub.contemGluten) contemGluten = true;
@@ -247,13 +256,13 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
       resSub.ingredientesGMO.forEach((name: string) => ingredientesGMO.add(name));
       alergenicosColetados.push(...resSub.alergenicosColetados);
 
+      // A array resSub.listaIngredientesFormatada vem do retorno de calcularNutrientesRecursivo
       const declSub = resSub.listaIngredientesFormatada.join(', ').toLowerCase();
       ingredientesParaLista.push({
         peso_liquido_g: item.peso_liquido_g,
         ingrediente: { nome: sub.nome, tipo_ingrediente: 'COMPOSTO', declaracao_ingredientes_fornecedor: declSub }
       });
 
-      // Prevenção contra division by zero se o rendimento for 0
       const rendimentoSub = sub.rendimento_total_g || sub.composicao_receitas.reduce((acc: any, i: any) => acc + i.peso_liquido_g, 0) || 1;
       const fator = item.peso_liquido_g / rendimentoSub;
       for (const key in resSub.totaisBrutos) {

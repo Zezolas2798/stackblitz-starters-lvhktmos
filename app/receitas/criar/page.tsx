@@ -9,7 +9,7 @@ import {
   Autocomplete, IconButton, Alert, Grid, List, ListItem, ListItemText,
   Select, MenuItem, FormControl, InputLabel, Chip, InputAdornment, Stack,
   Dialog, DialogTitle, DialogContent, DialogActions, Tooltip, Divider,
-  useTheme, alpha, Tabs, Tab
+  useTheme, alpha, Tabs, Tab, Switch, FormControlLabel
 } from '@mui/material';
 
 // Ícones Modernos
@@ -47,6 +47,7 @@ interface ItemDeBusca {
   id: string;
   nome: string;
   tipo: 'ingrediente' | 'receita' | 'aditivo_mestre' | 'material';
+  tipo_material?: string;
   grupo: string;
   fonte?: string | null;
   aditivoData?: { ins: string; funcao: string | null; };
@@ -132,6 +133,7 @@ function CriarEditarReceitaComponent() {
   const [riscosContaminacao, setRiscosContaminacao] = useState<AnvisaAlergenico[]>([]);
   const [areaPainelCm2, setAreaPainelCm2] = useState<number | ''>('');
   const [modoConservacao, setModoConservacao] = useState('');
+  const [isSubReceita, setIsSubReceita] = useState(false);
 
   // Composição
   const [composicao, setComposicao] = useState<ItemComposicao[]>([]);
@@ -167,7 +169,7 @@ function CriarEditarReceitaComponent() {
     try {
       const [ingPromise, recPromise, catPromise, medPromise, alergenicosPromise, ingAlergLinkPromise, gruposPopPromise, tiposRecPromise, aditivosMestrePromise, materiaisPromise, refPromise] = await Promise.all([
         (supabase as any).from('ingredientes').select('id, nome, fonte, ins_code, tipo_ingrediente, funcao_aditivo, alergenicos_ids, preco_ultima_compra, peso_unitario_g, referencia_id').or(`cliente_id.eq.${activeClientId},cliente_id.is.null`).is('deleted_at', null).order('nome'),
-        (supabase as any).from('receitas').select('id, nome').eq('cliente_id', activeClientId!).neq('id', editingId || '00000000-0000-0000-0000-000000000000').order('nome'),
+        (supabase as any).from('receitas').select('id, nome').eq('cliente_id', activeClientId!).eq('is_sub_receita', true).neq('id', editingId || '00000000-0000-0000-0000-000000000000').order('nome'),
         (supabase as any).from('anvisa_categorias').select('*').order('nome_produto'),
         (supabase as any).from('anvisa_medidas_caseiras').select('nome').order('nome'),
         (supabase as any).from('anvisa_alergenicos').select('id, nome').order('nome'),
@@ -232,6 +234,7 @@ function CriarEditarReceitaComponent() {
         id: mat.id,
         nome: mat.nome,
         tipo: 'material',
+        tipo_material: mat.tipo_material,
         grupo: 'Embalagens e Materiais',
         fonte: 'Própria',
         preco_ultima_compra: Number(mat.preco_ultima_compra || 0),
@@ -284,6 +287,7 @@ function CriarEditarReceitaComponent() {
         setMedidaCaseiraPesoG(recData.medida_caseira_peso_g || '');
         setAreaPainelCm2(recData.area_painel_principal_cm2 || '');
         setModoConservacao(recData.modo_conservacao || '');
+        setIsSubReceita(!!recData.is_sub_receita);
 
         if (recData.anvisa_categorias) {
           const cat = recData.anvisa_categorias as AnvisaCategoria;
@@ -702,6 +706,7 @@ function CriarEditarReceitaComponent() {
       risco_contaminacao_cruzada_ids: riscosContaminacao.map(a => a.id),
       area_painel_principal_cm2: areaPainelCm2 || null,
       modo_conservacao: modoConservacao || null,
+      is_sub_receita: isSubReceita,
     };
     const itensParaSalvar = composicao.map((item) => ({
       item_id: item.item_id, 
@@ -812,6 +817,10 @@ function CriarEditarReceitaComponent() {
                     onChange={(e) => setModoConservacao(e.target.value)} 
                     placeholder="Ex: Mantenha refrigerado de 0°C a 7°C. Após aberto, consumir em até... " 
                     helperText="Obrigatório se o produto exigir condições especiais (RDC 727/2022). Ex: MANTER SOB REFRIGERAÇÃO."
+                  />
+                  <FormControlLabel 
+                    control={<Switch checked={isSubReceita} onChange={(e) => setIsSubReceita(e.target.checked)} color="primary" />} 
+                    label={<Typography variant="body2" sx={{ fontWeight: 500 }}>Disponibilizar como Sub-receita (Permitir uso em outras fichas)</Typography>} 
                   />
                 </Stack>
               </Grid>
@@ -990,26 +999,29 @@ function CriarEditarReceitaComponent() {
                 <Box sx={{ bgcolor: alpha(theme.palette.secondary.main, 0.05), p: 3, borderRadius: 2, border: `1px dashed ${alpha(theme.palette.secondary.main, 0.3)}` }}>
                   <Typography variant="subtitle2" gutterBottom color="secondary.dark" fontWeight="bold">{editingItemIndex !== null ? 'EDITANDO EMBALAGEM' : 'ADICIONAR EMBALAGEM'}</Typography>
                   <Autocomplete
-                    options={itensDeBusca.filter(i => i.tipo === 'material').sort((a, b) => a.nome.localeCompare(b.nome))}
+                    options={itensDeBusca.filter(i => i.tipo === 'material' && i.tipo_material === 'EMBALAGEM').sort((a, b) => a.nome.localeCompare(b.nome))}
                     getOptionLabel={(option) => option.nome}
                     value={itemSelecionado}
-                    onChange={(_, newValue) => setItemSelecionado(newValue)}
+                    onChange={(_, newValue) => {
+                      setItemSelecionado(newValue);
+                      setUnidadeIngrediente('un');
+                    }}
                     renderInput={(params) => <TextField {...params} label="Buscar Embalagem ou Material" size="small" sx={{ bgcolor: 'background.paper' }} />}
                     sx={{ mb: 2 }}
                   />
 
                   <Grid container spacing={2}>
-                    <Grid item xs={6}><TextField label="Qtd/Peso Usado" type="number" value={pesoBruto} onChange={(e) => { setPesoBruto(e.target.value === '' ? '' : parseFloat(e.target.value)); setPesoLiquido(e.target.value === '' ? '' : parseFloat(e.target.value)); }} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
+                    <Grid item xs={6}><TextField label="Quantidade" type="number" value={pesoBruto} onChange={(e) => { setPesoBruto(e.target.value === '' ? '' : parseFloat(e.target.value)); setPesoLiquido(e.target.value === '' ? '' : parseFloat(e.target.value)); }} fullWidth size="small" sx={{ bgcolor: 'background.paper' }} /></Grid>
                     <Grid item xs={6}>
-                      <FormControl fullWidth size="small" sx={{ bgcolor: 'background.paper' }}>
-                        <InputLabel>Unidade</InputLabel>
-                        <Select value={unidadeIngrediente} label="Unidade" onChange={(e) => setUnidadeIngrediente(e.target.value)}>
-                          <MenuItem value="un">un (unidades)</MenuItem>
-                          <MenuItem value="pct">pct (pacote)</MenuItem>
-                          <MenuItem value="cx">cx (caixa)</MenuItem>
-                          <MenuItem value="g">g (gramas)</MenuItem>
-                        </Select>
-                      </FormControl>
+                      <TextField 
+                        label="Unidade" 
+                        value="un" 
+                        disabled 
+                        fullWidth 
+                        size="small" 
+                        sx={{ bgcolor: 'background.paper' }} 
+                        helperText="Padrão por unidade"
+                      />
                     </Grid>
                   </Grid>
 

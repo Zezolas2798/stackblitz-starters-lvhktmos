@@ -46,3 +46,10 @@ tsc_output*.txt
 temp*.js
 .gemini/
 brain/
+
+# development debris
+tmp/
+*.mjs
+replace*.js
+rewrite*.js
+

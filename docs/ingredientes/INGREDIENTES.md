@@ -130,6 +130,8 @@ Estes são os valores padronizados que constam no rótulo primário. Devem ser r
 
 ### C. Nutrientes Secundários e Adicionados (Nova Frente Lupa Anvisa)
 Estes minerais e adições sintéticas requerem preenchimento de acordo com a RDC para gerar a "LUPA" frontal de rótulos.
+> 🔗 Para a aplicação visual e de negócio desses campos, leia: [Legislação ANVISA: Rotulagem RDC 429 / IN 75](../legislacao/ROTULAGEM_RDC_ANVISA.md).
+
 - `acucar_adicionado_g` / `acucar_total_g`
 - Micronutrientes vitamínicos (`vitamina_a_mcg`, `vitamina_c_mg`, `vitamina_d_mcg`, etc.)
 - Minerais complexos (`ferro_mg`, `calcio_mg`, `zinco_mg`)

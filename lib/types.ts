@@ -462,6 +462,8 @@ export interface ComposicaoReceita {
   item_type: 'ingrediente' | 'receita';
   peso_bruto_g: number;
   peso_liquido_g: number;
+  fator_correcao: number;
+  indice_coccao: number;
   referencia_id?: string | null;
   
   ingrediente?: Ingrediente;
