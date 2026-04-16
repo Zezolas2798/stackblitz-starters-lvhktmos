@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Paper, Grid, FormControl, InputLabel, Select, MenuItem, Button, alpha, useTheme, Chip } from '@mui/material';
+import { Box, Paper, Grid, FormControl, InputLabel, Select, MenuItem, Button, alpha, useTheme, Chip, Typography } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import LoadingButton from '@mui/lab/LoadingButton';
@@ -22,12 +22,18 @@ interface RotulagemTabProps {
   tabelaRef: React.RefObject<HTMLDivElement>;
   handleDownloadJPEG: () => void;
   versaoSelecionadaId: string | null;
+  dadosCliente?: {
+    razao_social: string;
+    cnpj: string;
+    endereco: string;
+    nacionalidade: string;
+  } | null;
 }
 
 export default function RotulagemTab({
   isHistorico, tabela, receitaExibida, calculating, handleCalculate,
   layoutTabela, setLayoutTabela, lupaLayout, setLupaLayout,
-  tabelaRef, handleDownloadJPEG, versaoSelecionadaId
+  tabelaRef, handleDownloadJPEG, versaoSelecionadaId, dadosCliente
 }: RotulagemTabProps) {
   const theme = useTheme();
   
@@ -94,6 +100,14 @@ export default function RotulagemTab({
                       CÓPIA CONTROLADA
                   </Box>
               )}
+              <Box sx={{ mb: 2, width: '100%', textAlign: 'left', px: 2 }}>
+                  {receitaExibida.denominacao_venda && (
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', color: '#000', fontSize: '10pt', mb: 1 }}>
+                      {receitaExibida.denominacao_venda}
+                    </Typography>
+                  )}
+              </Box>
+
               <Box sx={{ mb: 4, width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
                   {tabela.declaracoes?.alerta_gmo && (
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -102,8 +116,33 @@ export default function RotulagemTab({
                   )}
                   <LupaFrontalANVISA lupas={tabela.lupas} areaPainelCm2={receitaExibida.area_painel_principal_cm2} layout={lupaLayout} />
               </Box>
-              <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+              <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                 <NutritionalLabel tabela={tabela} modelo={layoutTabela} />
+                {receitaExibida.conteudo_liquido && (
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', color: '#000', fontSize: '10pt', mt: 2, width: '240px', textAlign: 'left' }}>
+                    {receitaExibida.conteudo_liquido}
+                  </Typography>
+                )}
+
+                {/* Bloco de Fabricante Automatizado */}
+                {dadosCliente && (
+                  <Box sx={{ width: '240px', mt: 2, textAlign: 'left' }}>
+                    <Typography variant="caption" sx={{ fontWeight: 900, textTransform: 'uppercase', color: '#000', display: 'block', lineHeight: 1.1 }}>
+                      {dadosCliente.nacionalidade === 'Brasil' ? 'Indústria Brasileira' : `Fabricado em ${dadosCliente.nacionalidade}`}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#000', display: 'block', mt: 1, lineHeight: 1.2, fontSize: '7pt' }}>
+                      <strong>Fabricado por:</strong> {dadosCliente.razao_social}<br/>
+                      <strong>CNPJ:</strong> {dadosCliente.cnpj}<br/>
+                      {dadosCliente.endereco && <><strong>Endereço:</strong> {dadosCliente.endereco}</>}
+                    </Typography>
+                  </Box>
+                )}
+
+                {!dadosCliente && receitaExibida.fabricado_em && (
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', color: '#000', fontSize: '10pt', mt: 1, width: '240px', textAlign: 'left' }}>
+                    {receitaExibida.fabricado_em}
+                  </Typography>
+                )}
               </Box>
             </Box>
           </Box>

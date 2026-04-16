@@ -332,6 +332,7 @@ export const TabelaVertical = React.forwardRef<HTMLDivElement, { tabela: Resulta
       </table>
       <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1' }}>
         *Percentual de valores diários fornecidos pela porção.
+        {tabela.declaracoes.is_preparo && tabela.declaracoes.nota_preparo && <div style={{ marginTop: '2px' }}>{tabela.declaracoes.nota_preparo}</div>}
       </div>
     </div>
   );
@@ -407,6 +408,7 @@ export const TabelaVerticalQuebrada = React.forwardRef<HTMLDivElement, { tabela:
       </div>
       <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1' }}>
         *Percentual de valores diários fornecidos pela porção.
+        {tabela.declaracoes.is_preparo && tabela.declaracoes.nota_preparo && <div style={{ marginTop: '2px' }}>{tabela.declaracoes.nota_preparo}</div>}
       </div>
     </div>
   );
@@ -451,11 +453,12 @@ export const TabelaHorizontal = React.forwardRef<HTMLDivElement, { tabela: Resul
             ))}
           </tbody>
         </table>
-        <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1' }}>
-          *Percentual de valores diários fornecidos pela porção.
+          <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1', borderLeft: borderMedium }}>
+            *Percentual de valores diários fornecidos pela porção.
+            {tabela.declaracoes.is_preparo && tabela.declaracoes.nota_preparo && <div style={{ marginTop: '2px' }}>{tabela.declaracoes.nota_preparo}</div>}
+          </div>
         </div>
       </div>
-    </div>
   );
 });
 TabelaHorizontal.displayName = 'TabelaHorizontal';
@@ -528,6 +531,10 @@ export const TabelaHorizontalQuebrada = React.forwardRef<HTMLDivElement, { tabel
           </tbody>
         </table>
       </div>
+      <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1' }}>
+        *Percentual de valores diários fornecidos pela porção.
+        {tabela.declaracoes.is_preparo && tabela.declaracoes.nota_preparo && <div style={{ marginTop: '2px' }}>{tabela.declaracoes.nota_preparo}</div>}
+      </div>
     </div>
   );
 });
@@ -583,11 +590,71 @@ export const TabelaAgregada = React.forwardRef<HTMLDivElement, { tabela: Resulta
       </table>
       <div style={{ fontSize: fontSizeFooter, padding: '4px 6px', borderTop: borderThin, lineHeight: '1.1' }}>
         *Percentual de valores diários fornecidos pela porção.
+        {tabela.declaracoes.is_preparo && tabela.declaracoes.nota_preparo && <div style={{ marginTop: '2px' }}>{tabela.declaracoes.nota_preparo}</div>}
       </div>
     </div>
   );
 });
 TabelaAgregada.displayName = 'TabelaAgregada';
+
+export const TabelaIsenta = React.forwardRef<HTMLDivElement, { tabela: ResultadoCalculo }>(({ tabela }, ref) => {
+  const { declaracoes, infoPorcao, por100g, porPorcao } = tabela;
+  const isAlcohol = declaracoes.tipoIsencao === 'ALCOOL';
+  const fontSizeLabel = '8.5px';
+  const fontSizeTitle = '14px';
+
+  return (
+    <div ref={ref} style={{ border: borderThin, background: '#fff', width: '450px', padding: '0', fontFamily: font, color: '#231f20', boxSizing: 'border-box', margin: '0 auto' }}>
+      <div style={{ padding: '8px 4px', borderBottom: borderThin, textAlign: 'center' }}>
+        <div style={{ fontSize: fontSizeTitle, fontWeight: 'bold', letterSpacing: '0.02em', textTransform: 'uppercase' }}>INFORMAÇÃO NUTRICIONAL</div>
+      </div>
+      
+      {isAlcohol ? (
+        <Box sx={{ p: 2 }}>
+          <Typography sx={{ fontSize: '10px', fontWeight: 'bold', mb: 1, textTransform: 'uppercase' }}>
+            Bebida Alcoólica - Isenta de Tabela Completa
+          </Typography>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: borderMedium }}>
+                <th style={{ textAlign: 'left', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px' }}>CONSTITUINTE</th>
+                <th style={{ width: '40px', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', textAlign: 'center' }}>100 g</th>
+                <th style={{ width: '40px', fontSize: fontSizeLabel, fontWeight: 'bold', padding: '2px 4px', textAlign: 'center' }}>Porção</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ borderBottom: borderThin }}>
+                <td style={{ fontSize: fontSizeLabel, padding: '4px 6px' }}>Valor energético (kcal)</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center' }}>{por100g['energia_kcal'] || '0'}</td>
+                <td style={{ fontSize: fontSizeLabel, textAlign: 'center' }}>{porPorcao['energia_kcal'] || '0'}</td>
+              </tr>
+            </tbody>
+          </table>
+          <Typography sx={{ fontSize: '8px', mt: 2, fontStyle: 'italic', borderTop: borderThin, pt: 1 }}>
+            * Isento de declaração dos demais nutrientes conforme Anexo I da IN 75/2020.
+          </Typography>
+        </Box>
+      ) : (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ mb: 1 }}>ALIMENTO ISENTO</Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Este produto está dispensado da declaração de tabela nutricional.
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Conforme IN 75/2020 - Anexo I: {declaracoes.tipoIsencao || 'Categoria Isenta'}
+          </Typography>
+        </Box>
+      )}
+
+      {declaracoes.instrucoes_preparo && (
+        <div style={{ fontSize: '8px', padding: '6px', borderTop: borderThick, backgroundColor: '#f9f9f9', lineHeight: '1.2' }}>
+          <strong>Instruções de Preparo:</strong> {declaracoes.instrucoes_preparo}
+        </div>
+      )}
+    </div>
+  );
+});
+TabelaIsenta.displayName = 'TabelaIsenta';
 
 export const TabelaLinear = React.forwardRef<HTMLDivElement, { tabela: ResultadoCalculo }>(({ tabela }, ref) => {
   const { infoPorcao, por100g, porPorcao, percentualVD } = tabela;
@@ -635,7 +702,10 @@ export const TabelaLinear = React.forwardRef<HTMLDivElement, { tabela: Resultado
            );
         })}
         <br />
-        <span style={{ fontSize: fontSizeFooter }}>*Percentual de valores diários fornecidos pela porção.</span>
+        <div style={{ fontSize: fontSizeFooter, marginTop: '4px' }}>
+          *Percentual de valores diários fornecidos pela porção.
+          {tabela.declaracoes.is_preparo && tabela.declaracoes.nota_preparo && <div style={{ marginTop: '2px' }}>{tabela.declaracoes.nota_preparo}</div>}
+        </div>
       </div>
     </div>
   );
@@ -669,6 +739,34 @@ export function GMOIcon({ width = 18 }: { width?: number }) {
   );
 }
 
+export default function NutritionalLabel({ tabela, modelo = 'VERTICAL', extras = [] }: { tabela: ResultadoCalculo, modelo?: 'VERTICAL' | 'VERTICAL_QUEBRADA' | 'HORIZONTAL' | 'HORIZONTAL_QUEBRADA' | 'LINEAR' | 'AGREGADA', extras?: ResultadoCalculo[] }) {
+  if (tabela.declaracoes.isIsento) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: 2 }}>
+        <TabelaIsenta tabela={tabela} />
+        <Box sx={{ width: 'fit-content', margin: '0 auto' }}>
+          <RenderBlocoDeclaracoes declaracoes={tabela.declaracoes} />
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: 2 }}>
+      {modelo === 'VERTICAL' && <TabelaVertical tabela={tabela} />}
+      {modelo === 'VERTICAL_QUEBRADA' && <TabelaVerticalQuebrada tabela={tabela} />}
+      {modelo === 'HORIZONTAL' && <TabelaHorizontal tabela={tabela} />}
+      {modelo === 'HORIZONTAL_QUEBRADA' && <TabelaHorizontalQuebrada tabela={tabela} />}
+      {modelo === 'LINEAR' && <TabelaLinear tabela={tabela} />}
+      {modelo === 'AGREGADA' && <TabelaAgregada tabela={tabela} extras={extras} />}
+      
+      <Box sx={{ width: 'fit-content', margin: '0 auto' }}>
+        <RenderBlocoDeclaracoes declaracoes={tabela.declaracoes} />
+      </Box>
+    </Box>
+  );
+}
+
 export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: DeclaracoesObrigatorias }) {
   const { 
     lista_ingredientes, 
@@ -681,7 +779,12 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
     alerta_gmo,
     alerta_laxativo,
     alerta_gluten,
-    alerta_lactose
+    alerta_lactose,
+    alertas_especificos,
+    nota_preparo,
+    instrucoes_preparo,
+    is_preparo,
+    fabricado_em
   } = declaracoes;
 
   let ingredientesTexto = lista_ingredientes || '';
@@ -692,9 +795,10 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
     }
   }
 
-  let alergenicosTexto = alergenicos || '';
-  if (alergenicosTexto && /[^.]\s+PODE CONTER/.test(alergenicosTexto)) {
-    alergenicosTexto = alergenicosTexto.replace(/([^.])\s+PODE CONTER/, "$1. PODE CONTER");
+  let alergenicosTexto = (alergenicos || '').trim();
+  if (alergenicosTexto) {
+    // Garante que o ponto final exista
+    if (!alergenicosTexto.endsWith('.')) alergenicosTexto += '.';
   }
 
   return (
@@ -709,21 +813,28 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
         </Typography>
       )}
 
-      <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', lineHeight: 1.1 }}>
-        {alerta_gluten || (contem_gluten ? "CONTÉM GLÚTEN." : "NÃO CONTÉM GLÚTEN.")}
-      </Typography>
-
       {(alerta_lactose || contem_lactose) && (
         <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', lineHeight: 1.1 }}>
           {alerta_lactose || "CONTÉM LACTOSE."}
         </Typography>
       )}
-      
-      {alerta_gmo && (
+
+      <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', lineHeight: 1.1 }}>
+          {alerta_gluten || (contem_gluten ? "CONTÉM GLÚTEN." : "NÃO CONTÉM GLÚTEN.")}
+      </Typography>
+
+      {declaracoes.alerta_gmo && (
         <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', mt: '2pt', lineHeight: 1.1 }}>
-          {alerta_gmo}
+          {declaracoes.alerta_gmo}
         </Typography>
       )}
+      
+
+      {alertas_especificos && alertas_especificos.length > 0 && alertas_especificos.map((txt: string, i: number) => (
+        <Typography key={i} sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', mt: '2pt', lineHeight: 1.1 }}>
+          {txt}
+        </Typography>
+      ))}
 
       {colorido_artificialmente && (
         <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', mt: '2pt', lineHeight: 1.1 }}>
@@ -743,28 +854,24 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
         </Typography>
       )}
 
+
+      {is_preparo && instrucoes_preparo && (
+        <Typography sx={{ fontSize: fontSizeLabel, color: '#000', mt: '4pt', lineHeight: 1.1, fontStyle: 'italic' }}>
+          <strong>Preparo:</strong> {instrucoes_preparo}
+        </Typography>
+      )}
+
       {modo_conservacao && (
         <Typography sx={{ fontSize: fontSizeLabel, color: '#000', mt: '4pt', lineHeight: 1.1 }}>
           <strong>Modo de conservação:</strong> {modo_conservacao}
         </Typography>
       )}
-    </Box>
-  );
-}
-
-export default function NutritionalLabel({ tabela, modelo = 'VERTICAL', extras = [] }: { tabela: ResultadoCalculo, modelo?: 'VERTICAL' | 'VERTICAL_QUEBRADA' | 'HORIZONTAL' | 'HORIZONTAL_QUEBRADA' | 'LINEAR' | 'AGREGADA', extras?: ResultadoCalculo[] }) {
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: 2 }}>
-      {modelo === 'VERTICAL' && <TabelaVertical tabela={tabela} />}
-      {modelo === 'VERTICAL_QUEBRADA' && <TabelaVerticalQuebrada tabela={tabela} />}
-      {modelo === 'HORIZONTAL' && <TabelaHorizontal tabela={tabela} />}
-      {modelo === 'HORIZONTAL_QUEBRADA' && <TabelaHorizontalQuebrada tabela={tabela} />}
-      {modelo === 'LINEAR' && <TabelaLinear tabela={tabela} />}
-      {modelo === 'AGREGADA' && <TabelaAgregada tabela={tabela} extras={extras} />}
       
-      <Box sx={{ width: 'fit-content', margin: '0 auto' }}>
-        <RenderBlocoDeclaracoes declaracoes={tabela.declaracoes} />
-      </Box>
+      {fabricado_em && (
+        <Typography sx={{ fontSize: fontSizeLabel, color: '#000', mt: '4pt', lineHeight: 1.1 }}>
+          <strong>{fabricado_em}</strong>
+        </Typography>
+      )}
     </Box>
   );
 }

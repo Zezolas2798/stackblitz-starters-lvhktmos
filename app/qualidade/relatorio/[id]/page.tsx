@@ -64,7 +64,7 @@ export default function RelatorioAuditoriaPage() {
     try {
         // 1. Dados da Auditoria com join de perfis
         const { data: auditData, error: auditErr } = await supabase
-            .from('checklist_auditorias')
+            .from('checklist_execucoes')
             .select(`
                 *, 
                 checklist_modelos (titulo, descricao),
@@ -141,12 +141,11 @@ export default function RelatorioAuditoriaPage() {
         setSecoes(secoesFinais);
 
         // 4. Dados da Unidade (Responsável Técnico)
-        if (auditData.cliente_id) {
+        if (auditData.unidade_id) {
             const { data: unitData } = await supabase
                 .from('cliente_unidades')
                 .select('*')
-                .eq('cliente_id', auditData.cliente_id)
-                .limit(1)
+                .eq('id', auditData.unidade_id)
                 .single();
             if (unitData) setUnidade(unitData);
         }

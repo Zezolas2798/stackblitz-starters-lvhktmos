@@ -10,6 +10,18 @@ const nextConfig = {
   },
   experimental: {
     missingSuspenseWithCSRBailout: false,
+  },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ircjgepumexoqslljtql.supabase.co',
+      },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      }
+    ],
   }
 }
 

@@ -53,7 +53,7 @@ export default function AnaliseChecklistPage() {
       setLoading(true);
       try {
         let query = supabase
-          .from('checklist_auditorias')
+          .from('checklist_execucoes')
           .select(`
             id, 
             data_fim, 
@@ -82,6 +82,10 @@ export default function AnaliseChecklistPage() {
 
         if (selectedModelo !== 'all') {
           query = query.eq('modelo_id', selectedModelo);
+        }
+
+        if (unidadeId) {
+          query = query.eq('unidade_id', unidadeId);
         }
 
         const { data: res, error } = await query;
@@ -118,7 +122,7 @@ export default function AnaliseChecklistPage() {
       }
     }
     fetchData();
-  }, [activeClientId, selectedModelo, dateRange]);
+  }, [activeClientId, unidadeId, selectedModelo, dateRange]);
 
   const stats = useMemo(() => {
     if (data.length === 0) return { avg: 0, total: 0, max: 0, min: 0 };

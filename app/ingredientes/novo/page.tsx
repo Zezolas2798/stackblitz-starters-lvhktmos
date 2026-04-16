@@ -220,8 +220,29 @@ export default function NovoIngredientePage() {
         created_at: new Date().toISOString()
       };
 
-      const { error } = await (supabase as any).from('ingredientes').insert([payload]);
+      const { data: newIng, error } = await (supabase as any)
+        .from('ingredientes')
+        .insert([payload])
+        .select('id')
+        .single();
+
       if (error) throw error;
+
+      // Inserir os links detalhados de alérgenos
+      if (alergenosSelecionados.length > 0 && newIng?.id) {
+        const links = alergenosSelecionados.map(a => ({
+          ingrediente_id: newIng.id,
+          anvisa_alergenico_id: a.alergenico_id,
+          nivel_contato: (a.contem || a.contem_derivado) ? 'DIRETO' : 'TRACOS_CRUZADOS',
+          is_direto: !!a.contem,
+          is_derivado: !!a.contem_derivado
+        }));
+        const { error: linkError } = await (supabase as any)
+            .from('ingrediente_alergenicos')
+            .insert(links);
+        
+        if (linkError) console.error('Erro ao salvar alérgenos detalhados:', linkError);
+      }
 
       alert(`Ingrediente "${formData.nome}" salvo com sucesso!`);
       router.push('/ingredientes');

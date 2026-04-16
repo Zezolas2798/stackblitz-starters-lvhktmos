@@ -27,7 +27,8 @@ import {
   Image as ImageIcon,
   ScrollText,
   Users,
-  Search
+  Search,
+  FileCheck
 } from 'lucide-react';
 
 import { AnvisaCategoria, AnvisaAlergenico, AnvisaGrupoPopulacional, TipoReceita } from '@/lib/types';
@@ -73,6 +74,7 @@ interface ItemComposicao {
   preco_ultima_compra?: number;
   peso_unitario_g?: number;
   referencia_id?: string | null;
+  is_preparation_only?: boolean;
 }
 
 interface AditivoMestre {
@@ -134,6 +136,14 @@ function CriarEditarReceitaComponent() {
   const [areaPainelCm2, setAreaPainelCm2] = useState<number | ''>('');
   const [modoConservacao, setModoConservacao] = useState('');
   const [isSubReceita, setIsSubReceita] = useState(false);
+  const [isPreparo, setIsPreparo] = useState(false);
+  const [rendimentoPreparadoG, setRendimentoPreparadoG] = useState<number | ''>('');
+  const [isIsentoNutricional, setIsIsentoNutricional] = useState(false);
+  const [tipoIsencao, setTipoIsencao] = useState<string | null>(null);
+  const [instrucoesPreparo, setInstrucoesPreparo] = useState('');
+  const [denominacaoVenda, setDenominacaoVenda] = useState('');
+  const [conteudoLiquido, setConteudoLiquido] = useState('');
+  const [fabricadoEm, setFabricadoEm] = useState('');
 
   // Composição
   const [composicao, setComposicao] = useState<ItemComposicao[]>([]);
@@ -148,6 +158,7 @@ function CriarEditarReceitaComponent() {
   const [indiceCoccao, setIndiceCoccao] = useState<number | ''>(1);
   const [unidadeIngrediente, setUnidadeIngrediente] = useState('g');
   const [referenciaIdSelecionada, setReferenciaIdSelecionada] = useState<string | null>(null);
+  const [isPreparationOnly, setIsPreparationOnly] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
   // --- GRUPOS DE ALIMENTOS ---
@@ -288,6 +299,14 @@ function CriarEditarReceitaComponent() {
         setAreaPainelCm2(recData.area_painel_principal_cm2 || '');
         setModoConservacao(recData.modo_conservacao || '');
         setIsSubReceita(!!recData.is_sub_receita);
+        setIsPreparo(!!recData.is_preparo);
+        setRendimentoPreparadoG(recData.rendimento_preparado_g || '');
+        setIsIsentoNutricional(!!recData.is_isento_nutricional);
+        setTipoIsencao(recData.tipo_isencao || null);
+        setInstrucoesPreparo(recData.instrucoes_preparo || '');
+        setDenominacaoVenda(recData.denominacao_venda || '');
+        setConteudoLiquido(recData.conteudo_liquido || '');
+        setFabricadoEm(recData.fabricado_em || '');
 
         if (recData.anvisa_categorias) {
           const cat = recData.anvisa_categorias as AnvisaCategoria;
@@ -351,7 +370,8 @@ function CriarEditarReceitaComponent() {
               ins_code: insCode,
               preco_ultima_compra: itemInfo?.preco_ultima_compra,
               peso_unitario_g: itemInfo?.peso_unitario_g,
-              referencia_id: item.referencia_id || null
+              referencia_id: item.referencia_id || null,
+              is_preparation_only: !!item.is_preparation_only
             }
           }
           );
@@ -594,7 +614,8 @@ function CriarEditarReceitaComponent() {
       ins_code: itemSelecionado.aditivoData?.ins || composicao[editingItemIndex!]?.ins_code,
       preco_ultima_compra: itemSelecionado.preco_ultima_compra,
       peso_unitario_g: itemSelecionado.peso_unitario_g || 1000,
-      referencia_id: referenciaIdSelecionada || null
+      referencia_id: referenciaIdSelecionada || null,
+      is_preparation_only: isPreparationOnly
     };
 
     if (editingItemIndex !== null) {
@@ -643,6 +664,7 @@ function CriarEditarReceitaComponent() {
     // Redundância para garantir que o ID chegue como string/null
     const refId = item.referencia_id ? String(item.referencia_id) : null;
     setReferenciaIdSelecionada(refId);
+    setIsPreparationOnly(!!item.is_preparation_only);
     
     // Log de segurança para depuração se necessário
     console.log('Editando item:', item.nome, 'ID Insumo:', item.item_id, 'Ref ID:', refId);
@@ -663,6 +685,7 @@ function CriarEditarReceitaComponent() {
     setReferenciaIdSelecionada(null);
     setFuncoesAditivoDisponiveis([]);
     setFuncaoAditivoSelecionada('');
+    setIsPreparationOnly(false);
   }
 
   async function handleSalvarReceita(e: React.FormEvent) {
@@ -707,6 +730,14 @@ function CriarEditarReceitaComponent() {
       area_painel_principal_cm2: areaPainelCm2 || null,
       modo_conservacao: modoConservacao || null,
       is_sub_receita: isSubReceita,
+      is_preparo: isPreparo,
+      rendimento_preparado_g: isPreparo ? rendimentoPreparadoG : null,
+      is_isento_nutricional: isIsentoNutricional,
+      tipo_isencao: tipoIsencao,
+      instrucoes_preparo: instrucoesPreparo || null,
+      denominacao_venda: denominacaoVenda || null,
+      conteudo_liquido: conteudoLiquido || null,
+      fabricado_em: fabricadoEm || null,
     };
     const itensParaSalvar = composicao.map((item) => ({
       item_id: item.item_id, 
@@ -715,7 +746,8 @@ function CriarEditarReceitaComponent() {
       peso_liquido_g: item.peso_liquido_g,
       fator_correcao: item.fator_correcao,
       indice_coccao: item.indice_coccao,
-      referencia_id: item.referencia_id || null
+      referencia_id: item.referencia_id || null,
+      is_preparation_only: item.is_preparation_only || false
     }));
     try {
       if (editingId) {
@@ -742,9 +774,29 @@ function CriarEditarReceitaComponent() {
     }
   }
 
-  if (loading) return <Container sx={{ display: 'flex', justifyContent: 'center', mt: 5 }}><CircularProgress /></Container>;
-  if (error) return <Container sx={{ mt: 5 }}><Alert severity="error">{error}</Alert></Container>;
-  if (!activeClientId) return <Container><Alert severity="warning" sx={{ mt: 2 }}>Selecione um Cliente.</Alert></Container>;
+  if (loading) {
+    return (
+      <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress />
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container sx={{ mt: 5 }}>
+        <Alert severity="error">{error}</Alert>
+      </Container>
+    );
+  }
+
+  if (!activeClientId) {
+    return (
+      <Container sx={{ mt: 5 }}>
+        <Alert severity="warning">Por favor, selecione um cliente.</Alert>
+      </Container>
+    );
+  }
 
   const custoTotalParcial = composicao.reduce((acc, item) => {
     if (item.item_type === 'material' && item.preco_ultima_compra) {
@@ -790,6 +842,14 @@ function CriarEditarReceitaComponent() {
               <Grid item xs={12} md={8}>
                 <Stack spacing={3}>
                   <TextField label="Nome da Receita" fullWidth value={nomeReceita} onChange={(e) => setNomeReceita(e.target.value)} required placeholder="Ex: Bolo de Chocolate s/ Glúten" />
+                  <TextField 
+                    label="Denominação de Venda (Obrigatório RDC 727)" 
+                    fullWidth 
+                    value={denominacaoVenda} 
+                    onChange={(e) => setDenominacaoVenda(e.target.value)} 
+                    placeholder="Ex: Mistura para preparo de Bolo sabor Chocolate" 
+                    helperText="Nome regulamentar do produto que aparecerá antes da lista de ingredientes."
+                  />
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Autocomplete
@@ -818,10 +878,40 @@ function CriarEditarReceitaComponent() {
                     placeholder="Ex: Mantenha refrigerado de 0°C a 7°C. Após aberto, consumir em até... " 
                     helperText="Obrigatório se o produto exigir condições especiais (RDC 727/2022). Ex: MANTER SOB REFRIGERAÇÃO."
                   />
-                  <FormControlLabel 
-                    control={<Switch checked={isSubReceita} onChange={(e) => setIsSubReceita(e.target.checked)} color="primary" />} 
-                    label={<Typography variant="body2" sx={{ fontWeight: 500 }}>Disponibilizar como Sub-receita (Permitir uso em outras fichas)</Typography>} 
-                  />
+                   <FormControlLabel 
+                     control={<Switch checked={isSubReceita} onChange={(e) => setIsSubReceita(e.target.checked)} color="primary" />} 
+                     label={<Typography variant="body2" sx={{ fontWeight: 500 }}>Disponibilizar como Sub-receita (Permitir uso em outras fichas)</Typography>} 
+                   />
+ 
+                   <Divider sx={{ my: 1 }} />
+
+                   <FormControl fullWidth>
+                     <InputLabel>Isenção de Rotulagem Nutricional (Perfil IN 75/2020)</InputLabel>
+                     <Select 
+                       value={tipoIsencao || 'NENHUMA'} 
+                       label="Isenção de Rotulagem Nutricional (Perfil IN 75/2020)"
+                       onChange={(e) => {
+                         const val = e.target.value;
+                         setTipoIsencao(val === 'NENHUMA' ? null : val);
+                         setIsIsentoNutricional(val !== 'NENHUMA');
+                       }}
+                       sx={{ bgcolor: tipoIsencao ? alpha(theme.palette.warning.main, 0.05) : 'inherit' }}
+                     >
+                       <MenuItem value="NENHUMA">Não Isento (Regra Geral - Tabela Completa)</MenuItem>
+                       <MenuItem value="ALCOOL">Bebidas Alcoólicas (Regra Específica Energia)</MenuItem>
+                       <MenuItem value="VINAGRE">Vinagres e Ácidos comestíveis</MenuItem>
+                       <MenuItem value="CAFE">Café, Erva-mate e Chás (puros)</MenuItem>
+                       <MenuItem value="ESPECIARIA">Especiarias e Temperos (puros)</MenuItem>
+                       <MenuItem value="AGUA">Águas minerais e potáveis</MenuItem>
+                       <MenuItem value="GELO">Gelo autêntico</MenuItem>
+                       <MenuItem value="OUTROS">Outros Isentos (Embalagens menores que 100cm², etc)</MenuItem>
+                     </Select>
+                     {tipoIsencao && (
+                       <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, fontWeight: 500 }}>
+                         Nota: Produtos isentos terão rótulos simplificados conforme a legislação.
+                       </Typography>
+                     )}
+                   </FormControl>
                 </Stack>
               </Grid>
               <Grid item xs={12} md={4}>
@@ -932,8 +1022,14 @@ function CriarEditarReceitaComponent() {
                           <MenuItem value="ml">mililitros (ml)</MenuItem>
                         </Select>
                       </FormControl>
-                    </Grid>
-                  </Grid>
+                     </Grid>
+                     <Grid item xs={12}>
+                       <FormControlLabel 
+                         control={<Switch checked={isPreparationOnly} onChange={(e) => setIsPreparationOnly(e.target.checked)} size="small" />} 
+                         label={<Typography variant="caption" fontWeight="bold">Ingrediente adicionado apenas no preparo? (Ex: Água, Ovos)</Typography>} 
+                       />
+                     </Grid>
+                   </Grid>
 
                   <Button variant="contained" onClick={handleAddItemOrUpdateItem} sx={{ mt: 2 }} fullWidth startIcon={<PlusCircle />}>
                     {editingItemIndex !== null ? 'Atualizar Insumo' : 'Adicionar Insumo'}
@@ -955,7 +1051,11 @@ function CriarEditarReceitaComponent() {
                         </>
                       }>
                         <ListItemText 
-                          primary={<Box sx={{ display: 'flex', gap: 1 }}>{item.nome} {item.is_aditivo && <Chip label="Aditivo" size="small" color="secondary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}</Box>} 
+                          primary={<Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                            {item.nome} 
+                            {item.is_aditivo && <Chip label="Aditivo" size="small" color="secondary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}
+                            {item.is_preparation_only && <Chip label="Preparação" size="small" color="warning" variant="filled" sx={{ height: 18, fontSize: '0.6rem', color: '#fff' }} />}
+                          </Box>} 
                           secondary={
                             <>
                               {`PB: ${item.peso_bruto_display}${item.unidade} | PL: ${item.peso_liquido_display}${item.unidade} | FC: ${item.fator_correcao.toFixed(2)} | IC: ${item.indice_coccao.toFixed(2)}`}
@@ -1095,6 +1195,7 @@ function CriarEditarReceitaComponent() {
                     renderInput={(params) => <TextField {...params} label="Grupo Populacional (IN 75)" required />}
                   />
                   <TextField label="Área do Painel Principal (cm²)" type="number" value={areaPainelCm2} onChange={(e) => setAreaPainelCm2(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth helperText="Para cálculo do tamanho fixo da lupa nutricional." />
+                  
                 </Stack>
               </Grid>
 
@@ -1107,6 +1208,16 @@ function CriarEditarReceitaComponent() {
                     </Grid>
                     <Grid item xs={6}>
                       <TextField label="Peso Líquido Final (Embalagem)" type="number" value={pesoEmbalagem} onChange={(e) => setPesoEmbalagem(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField 
+                        label="Conteúdo Líquido para Rótulo" 
+                        fullWidth 
+                        value={conteudoLiquido} 
+                        onChange={(e) => setConteudoLiquido(e.target.value)} 
+                        placeholder="Ex: Peso Líquido 500g" 
+                        helperText="Texto que será exibido no rótulo. Ex: 'Peso Líquido 500g' ou 'Contém 1 Litro'"
+                      />
                     </Grid>
                     <Grid item xs={6}>
                       <TextField label="Porção Declarada" value={porcaoFinal} disabled fullWidth InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} helperText="Calculado baseado no RDC" />
@@ -1131,6 +1242,43 @@ function CriarEditarReceitaComponent() {
                     renderInput={(params) => <TextField {...params} label="Medida Caseira" required placeholder="Ex: 1 colher de sopa" />}
                   />
                   <TextField label="Peso da Medida Caseira" type="number" value={medidaCaseiraPesoG} onChange={(e) => setMedidaCaseiraPesoG(e.target.value === '' ? '' : parseFloat(e.target.value))} fullWidth InputProps={{ endAdornment: <InputAdornment position="end">g</InputAdornment> }} />
+
+                  <Divider sx={{ my: 1 }} />
+
+                  <FormControlLabel 
+                    control={<Switch checked={isPreparo} onChange={(e) => setIsPreparo(e.target.checked)} color="warning" />} 
+                    label={
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: 'warning.dark' }}>Produto requer Preparo / Reconstituição?</Typography>
+                        <Typography variant="caption" color="text.secondary">Ex: Mistura para Bolo, Sopas, Sucos concentrados.</Typography>
+                      </Box>
+                    } 
+                  />
+
+                  {isPreparo && (
+                    <Stack spacing={2} sx={{ p: 2, bgcolor: alpha(theme.palette.warning.main, 0.05), borderRadius: 1, border: `1px dashed ${theme.palette.warning.light}` }}>
+                      <TextField 
+                        label="Peso Final Pronto para Consumo (g/ml)" 
+                        type="number" 
+                        fullWidth 
+                        value={rendimentoPreparadoG} 
+                        onChange={(e) => setRendimentoPreparadoG(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                        helperText="Obrigatório para rotulagem correta de produtos que requerem preparo."
+                        sx={{ bgcolor: 'background.paper' }}
+                      />
+                      <TextField 
+                        label="Instruções de Preparo (Obrigatório RDC 727)" 
+                        multiline 
+                        rows={3} 
+                        fullWidth 
+                        placeholder="Ex: Misture 100g do produto com 200ml de leite desnatado..."
+                        value={instrucoesPreparo}
+                        onChange={(e) => setInstrucoesPreparo(e.target.value)}
+                        helperText="Descreva como o consumidor deve preparar o produto para consumo."
+                        sx={{ bgcolor: 'background.paper' }}
+                      />
+                    </Stack>
+                  )}
                 </Stack>
               </Grid>
             </Grid>

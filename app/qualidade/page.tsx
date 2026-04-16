@@ -17,7 +17,7 @@ import { formatLocalDate, formatLocalTime } from '@/lib/utils/dateUtils';
 
 export default function DashboardQualidadePage() {
     const router = useRouter();
-    const { activeClientId } = useClient();
+    const { activeClientId, unidadeId } = useClient();
 
     const [auditorias, setAuditorias] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -27,19 +27,26 @@ export default function DashboardQualidadePage() {
         if (activeClientId) {
             fetchAuditorias();
         }
-    }, [activeClientId]);
+    }, [activeClientId, unidadeId]);
 
     const fetchAuditorias = async () => {
         setLoading(true);
         setError(null);
-        const { data, error } = await (supabase as any).from('checklist_auditorias')
+        
+        let query = (supabase as any).from('checklist_execucoes')
             .select(`
-        *,
-        checklist_modelos (titulo)
-      `)
+                *,
+                checklist_modelos (titulo)
+            `)
             .eq('cliente_id', activeClientId || '')
-            .is('deleted_at', null)      // Filtro GxP: Esconde Laudos inativados (Soft Deleted)
-            .order('data_inicio', { ascending: false });
+            .is('deleted_at', null);
+
+        // Filtro por Unidade (Se houver unidade selecionada)
+        if (unidadeId) {
+            query = query.eq('unidade_id', unidadeId);
+        }
+
+        const { data, error } = await query.order('data_inicio', { ascending: false });
 
         if (error) {
             console.error('Erro ao buscar auditorias:', error);

@@ -7,12 +7,12 @@ import {
     MenuItem, InputAdornment, Tabs, Tab, Divider, Alert,
     Autocomplete, Checkbox, FormControlLabel, Chip, Stack,
     Accordion, AccordionSummary, AccordionDetails,
-    CircularProgress
+    CircularProgress, IconButton
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import {
     Save, ArrowLeft, Leaf, Activity, FileText, FlaskConical,
-    AlertTriangle, ChevronDown, Barcode
+    AlertTriangle, ChevronDown, Barcode, X, Plus
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -87,6 +87,9 @@ export default function EditarIngredientePage() {
         funcao_aditivo: '',
         ins_code: '',
         is_transgenico: false,
+        especie_transgenica: '',
+        especie_doadora: '',
+        transgenicos: [],
 
         // Macronutrientes Obrigatórios
         energia_kcal: null, carboidrato_g: null, proteina_g: null, lipideos_g: null,
@@ -181,13 +184,13 @@ export default function EditarIngredientePage() {
                         .eq('ingrediente_id', ingredienteId);
 
                     if (linkData && linkData.length > 0) {
-                        const tempAl: AlergenicoTag[] = linkData.map(l => {
+                        const tempAl: AlergenicoTag[] = linkData.map((l: any) => {
                             const alergName = alergMestre.find(m => m.id === l.anvisa_alergenico_id)?.nome || 'Alergênico Desconhecido';
                             return {
                                 alergenico_id: l.anvisa_alergenico_id,
                                 nome: alergName,
-                                contem: true, // No longer in table, assuming true if linked
-                                contem_derivado: false // No longer in table
+                                contem: !!l.is_direto,
+                                contem_derivado: !!l.is_derivado
                             };
                         });
                         setAlergenosSelecionados(tempAl);
@@ -271,10 +274,21 @@ export default function EditarIngredientePage() {
 
             const payload: any = {
                 ...formData,
+                // Garantir limpeza de campos legados e persistência correta do JSONB
                 especie_transgenica: formData.is_transgenico ? formData.especie_transgenica : null,
+                especie_doadora: formData.is_transgenico ? formData.especie_doadora : null,
+                transgenicos: formData.is_transgenico ? (formData.transgenicos || []) : [],
                 alergenicos_ids: idsAlergenicos,
                 updated_at: new Date().toISOString()
             };
+
+            // Regra de Negócio: Aditivos não rastreiam transgênicos
+            if (formData.tipo_ingrediente === 'ADITIVO') {
+                payload.is_transgenico = false;
+                payload.especie_transgenica = null;
+                payload.especie_doadora = null;
+                payload.transgenicos = [];
+            }
 
             // Garantir que categoria_produto_id esteja correto se categoriaValue foi selecionado
             if (categoriaValue?.id) {
@@ -297,7 +311,9 @@ export default function EditarIngredientePage() {
                 const links: any[] = alergenosSelecionados.map(a => ({ 
                     ingrediente_id: ingredienteId, 
                     anvisa_alergenico_id: a.alergenico_id, 
-                    nivel_contato: a.contem ? 'DIRETO' : (a.contem_derivado ? 'DIRETO' : 'TRACOS_CRUZADOS')
+                    nivel_contato: (a.contem || a.contem_derivado) ? 'DIRETO' : 'TRACOS_CRUZADOS',
+                    is_direto: !!a.contem,
+                    is_derivado: !!a.contem_derivado
                 }));
                 await supabase.from('ingrediente_alergenicos').insert(links);
             }
@@ -555,19 +571,67 @@ export default function EditarIngredientePage() {
                                 <Typography variant="subtitle2" color="error" fontWeight="bold" sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center' }}>
                                     <AlertTriangle size={18} /> CONTROLE DE ALERGÊNICOS & ADITIVOS CRÍTICOS
                                 </Typography>
-                                <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
+                                <Stack direction="row" spacing={3} sx={{ mb: 2, alignItems: 'flex-start' }}>
                                     <FormControlLabel control={<Checkbox checked={!!formData.contem_gluten} onChange={e => handleChange('contem_gluten', e.target.checked)} color="error" />} label="CONTÉM GLÚTEN" />
-                                    <FormControlLabel control={<Checkbox checked={!!formData.is_transgenico} onChange={e => handleChange('is_transgenico', e.target.checked)} color="error" />} label="ALIMENTO TRANSGÊNICO" />
-                                    {formData.is_transgenico && (
-                                        <TextField
-                                            size="small"
-                                            label="Espécie Transgênica (ex: Soja, Milho)"
-                                            value={formData.especie_transgenica || ''}
-                                            onChange={(e) => handleChange('especie_transgenica', e.target.value)}
-                                            fullWidth
-                                            sx={{ mt: 1 }}
-                                            helperText="A legislação exige informar a espécie doadora do gene."
-                                        />
+                                    
+                                    {formData.tipo_ingrediente !== 'ADITIVO' && (
+                                        <Box sx={{ p: 2, border: '1px solid #ffcdd2', borderRadius: 1, bgcolor: '#fff5f5' }}>
+                                            <FormControlLabel control={<Checkbox checked={!!formData.is_transgenico} onChange={e => handleChange('is_transgenico', e.target.checked)} color="error" />} label={<Typography fontWeight="bold" color="error">ALIMENTO TRANSGÊNICO (GMO)</Typography>} />
+                                            
+                                            {formData.is_transgenico && (
+                                                <Box sx={{ mt: 1, pl: 4 }}>
+                                                    {(formData.transgenicos || []).map((item, idx) => (
+                                                        <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+                                                            <TextField 
+                                                                size="small" 
+                                                                label="Espécie (ex: Milho)" 
+                                                                value={item.especie} 
+                                                                onChange={(e) => {
+                                                                    const newList = [...(formData.transgenicos || [])];
+                                                                    newList[idx].especie = e.target.value;
+                                                                    handleChange('transgenicos', newList);
+                                                                }}
+                                                            />
+                                                            <TextField 
+                                                                size="small" 
+                                                                label="Doador (ex: B. thuringiensis)" 
+                                                                value={item.doadora} 
+                                                                onChange={(e) => {
+                                                                    const newList = [...(formData.transgenicos || [])];
+                                                                    newList[idx].doadora = e.target.value;
+                                                                    handleChange('transgenicos', newList);
+                                                                }}
+                                                                fullWidth
+                                                            />
+                                                            <IconButton size="small" color="error" onClick={() => {
+                                                                const newList = (formData.transgenicos || []).filter((_, i) => i !== idx);
+                                                                handleChange('transgenicos', newList);
+                                                            }}>
+                                                                <X size={18} />
+                                                            </IconButton>
+                                                        </Box>
+                                                    ))}
+                                                    <Button 
+                                                        size="small" 
+                                                        variant="outlined" 
+                                                        startIcon={<Plus size={16} />}
+                                                        onClick={() => handleChange('transgenicos', [...(formData.transgenicos || []), { especie: '', doadora: '' }])}
+                                                        sx={{ mt: 1 }}
+                                                    >
+                                                        Adicionar Transgênico
+                                                    </Button>
+                                                    
+                                                    <Typography variant="caption" display="block" color="error" sx={{ mt: 1, fontWeight: 'bold' }}>
+                                                        {formData.tipo_ingrediente === 'SIMPLES' 
+                                                            ? "Este ingrediente aparecerá como 'Transgênico' na lista de ingredientes com o doador especificado."
+                                                            : "Para industrializados, a transgenia gerará o Ícone (T) e o alerta no final do rótulo, mantendo sua lista original."}
+                                                    </Typography>
+                                                    <Typography variant="caption" display="block" color="text.secondary">
+                                                        A legislação exige informar a espécie doadora do gene para cada item transgênico.
+                                                    </Typography>
+                                                </Box>
+                                            )}
+                                        </Box>
                                     )}
                                 </Stack>
                                 <Autocomplete

@@ -14,12 +14,12 @@ interface ComposicaoDisplayItem {
   peso_unitario_g?: number | null; // Para materiais ou ingredientes por grama pre-calculado
   unidade_medida?: string; // Para materiais
   tipo_ingrediente?: string; // Para identificar aditivos
-  funcao_aditivo?: string;
+  funcao_aditivo?: string | null;
   referencia_info?: {
     nome: string;
     fonte: string;
   } | null;
-  classificacao_nova?: number;
+  classificacao_nova?: number | null;
 }
 
 interface ComposicaoDisplayListProps {

@@ -183,8 +183,10 @@ export function ClientProvider({ children }: { children: ReactNode }) {
     fetchUnidades();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      // Dispara fetchUnidades e sinaliza se for um evento de LOGIN
-      fetchUnidades(event === 'SIGNED_IN');
+      // Dispara fetchUnidades e sinaliza se for um evento de LOGIN real (vindo da página de login).
+      // Se não estiver na página de login, o SIGNED_IN é provavelmente uma recuperação de sessão no refresh.
+      const isActualLogin = event === 'SIGNED_IN' && window.location.pathname === '/login';
+      fetchUnidades(isActualLogin);
     });
 
     return () => { subscription.unsubscribe(); };

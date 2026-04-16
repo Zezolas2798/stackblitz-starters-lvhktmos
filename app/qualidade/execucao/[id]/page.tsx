@@ -56,7 +56,7 @@ export default function ExecucaoChecklistPage() {
     try {
         // 1. Auditoria
         const { data: auditData, error: auditErr } = await supabase
-            .from('checklist_auditorias')
+            .from('checklist_execucoes')
             .select(`*, checklist_modelos (titulo, descricao)`)
             .eq('id', auditId)
             .single();
@@ -309,7 +309,7 @@ export default function ExecucaoChecklistPage() {
                 return;
             }
 
-            await supabase.from('checklist_auditorias').update({
+            await supabase.from('checklist_execucoes').update({
                 status: finalizar ? 'CONCLUIDO' : auditoria.status,
                 data_fim: finalizar ? getNowISO() : auditoria.data_fim,
                 assinatura_auditor_url: assinaturaUrl

@@ -98,6 +98,7 @@ export default function DetalhesReceitaPage() {
   const [error, setError] = useState<string | null>(null);
   const [layoutTabela, setLayoutTabela] = useState<TabelaLayout>('VERTICAL');
   const [lupaLayout, setLupaLayout] = useState<LupaLayout>('VERTICAL');
+  const [dadosCliente, setDadosCliente] = useState<any | null>(null);
   const [abaAtiva, setAbaAtiva] = useState(0);
   const [abaSubGrafico, setAbaSubGrafico] = useState(1); // 0: 100g, 1: Porção
  
@@ -120,7 +121,7 @@ export default function DetalhesReceitaPage() {
     try {
       const { data: recData, error: recError } = await (supabase as any)
         .from('receitas')
-        .select('*, anvisa_categorias(*), composicao_receitas(*), tipos_receita(*), modo_conservacao')
+        .select('*, anvisa_categorias(*), composicao_receitas(*), tipos_receita(*), modo_conservacao, denominacao_venda, conteudo_liquido, fabricado_em')
         .eq('id', recipeId)
         .eq('cliente_id', activeClientId!)
         .single();
@@ -141,6 +142,24 @@ export default function DetalhesReceitaPage() {
 
       if (recData.composicao_receitas?.length > 0) {
           handleCalculateInitial(recipeId, recData);
+      }
+
+      // Buscar Dados do Cliente e Unidade para Rotulagem
+      const { data: clienteData } = await (supabase as any)
+        .from('clientes')
+        .select('razao_social, cnpj_raiz, cliente_unidades(*)')
+        .eq('id', activeClientId!)
+        .single();
+      
+      if (clienteData) {
+        // Pegar a primeira unidade ativa ou qualquer unidade disponível
+        const unidade = clienteData.cliente_unidades?.[0];
+        setDadosCliente({
+          razao_social: clienteData.razao_social,
+          cnpj: unidade?.cnpj_completo || clienteData.cnpj_raiz,
+          endereco: unidade?.endereco_completo || '',
+          nacionalidade: 'Brasil' // Default conforme solicitado "nacionalidade da própria empresa"
+        });
       }
 
     } catch (err: any) {
@@ -313,10 +332,20 @@ export default function DetalhesReceitaPage() {
         const { data } = await supabase.functions.invoke('calcular-nutrientes', { body: { receita_id: id } });
         if (data && !data.error) {
           const result = data as ResultadoCalculo;
-          const conservacao = recBase?.modo_conservacao || receitaExibida?.modo_conservacao;
-          if (conservacao) {
-            result.declaracoes.modo_conservacao = conservacao;
+          const rec = recBase || receitaExibida;
+          
+          // Injetar dados de conformidade do banco (garante sincronia)
+          if (rec) {
+            if (rec.modo_conservacao) result.declaracoes.modo_conservacao = rec.modo_conservacao;
+            if (rec.instrucoes_preparo) result.declaracoes.instrucoes_preparo = rec.instrucoes_preparo;
+            result.declaracoes.is_preparo = !!rec.is_preparo;
+            if (rec.is_isento_nutricional !== undefined) result.declaracoes.isIsento = !!rec.is_isento_nutricional;
+            if (rec.tipo_isencao) result.declaracoes.tipoIsencao = rec.tipo_isencao;
+            if (rec.denominacao_venda) result.declaracoes.denominacao_venda = rec.denominacao_venda;
+            if (rec.fabricado_em) result.declaracoes.fabricado_em = rec.fabricado_em;
+            if (rec.conteudo_liquido) result.declaracoes.conteudo_liquido = rec.conteudo_liquido;
           }
+          
           setTabela(result);
         }
       } catch (e) { console.error("Auto-calc failed", e); }
@@ -328,9 +357,19 @@ export default function DetalhesReceitaPage() {
       const { data, error } = await supabase.functions.invoke('calcular-nutrientes', { body: { receita_id: recipeId } });
       if (error) throw error; if (data.error) throw new Error(data.error);
       const result = data as ResultadoCalculo;
-      if (receitaExibida?.modo_conservacao) {
-        result.declaracoes.modo_conservacao = receitaExibida.modo_conservacao;
+      
+      // Injetar dados de conformidade do banco (garante sincronia)
+      if (receitaExibida) {
+        if (receitaExibida.modo_conservacao) result.declaracoes.modo_conservacao = receitaExibida.modo_conservacao;
+        if (receitaExibida.instrucoes_preparo) result.declaracoes.instrucoes_preparo = receitaExibida.instrucoes_preparo;
+        result.declaracoes.is_preparo = !!receitaExibida.is_preparo;
+        if (receitaExibida.is_isento_nutricional !== undefined) result.declaracoes.isIsento = !!receitaExibida.is_isento_nutricional;
+        if (receitaExibida.tipo_isencao) result.declaracoes.tipoIsencao = receitaExibida.tipo_isencao;
+        if (receitaExibida.denominacao_venda) result.declaracoes.denominacao_venda = receitaExibida.denominacao_venda;
+        if (receitaExibida.fabricado_em) result.declaracoes.fabricado_em = receitaExibida.fabricado_em;
+        if (receitaExibida.conteudo_liquido) result.declaracoes.conteudo_liquido = receitaExibida.conteudo_liquido;
       }
+      
       setTabela(result);
     } catch (err: any) { setError(err.message); } finally { setCalculating(false); }
   };
@@ -500,6 +539,7 @@ export default function DetalhesReceitaPage() {
                 tabelaRef={tabelaRef}
                 handleDownloadJPEG={handleDownloadJPEG}
                 versaoSelecionadaId={versaoSelecionadaId}
+                dadosCliente={dadosCliente}
               />
             )}
             

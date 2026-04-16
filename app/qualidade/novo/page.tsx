@@ -14,7 +14,7 @@ import { getAuditTitleDate, getNowISO } from '@/lib/utils/dateUtils';
 
 export default function NovaAuditoriaPage() {
   const router = useRouter();
-  const { activeClientId } = useClient();
+  const { activeClientId, unidadeId } = useClient();
   
   const [modelos, setModelos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,14 +54,18 @@ export default function NovaAuditoriaPage() {
 
   // 2. Confirmação e Criação no Banco
   const handleConfirmarInicio = async () => {
-    if (!modeloSelecionado) return;
+    if (!modeloSelecionado || !unidadeId) {
+      alert('Unidade não identificada. Selecione uma unidade no menu superior.');
+      return;
+    }
     setCriando(true);
     
     try {
         const user = (await supabase.auth.getUser()).data.user;
 
-        const { data, error } = await (supabase as any).from('checklist_auditorias').insert({
+        const { data, error } = await (supabase as any).from('checklist_execucoes').insert({
             cliente_id: activeClientId,
+            unidade_id: unidadeId,
             modelo_id: modeloSelecionado.id,
             titulo: nomeAuditoria, // Salva o nome personalizado
             status: 'EM_ANDAMENTO',

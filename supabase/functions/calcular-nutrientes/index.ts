@@ -53,6 +53,8 @@ interface AlergenicoDetectado {
   id: number;
   nome: string;
   fonte: 'INGREDIENTE' | 'CONTAMINACAO_CRUZADA';
+  is_direto?: boolean;
+  is_derivado?: boolean;
 }
 
 const corsHeaders = {
@@ -97,7 +99,7 @@ async function loadComplianceData(supabaseAdmin: any) {
   (lupasRes.data ?? []).forEach((d: any) => lupasMap.set(d.nutriente, d));
 
   const alergenicosMap = new Map<number, string>();
-  (alergenicosRes.data ?? []).forEach((d: any) => alergenicosMap.set(d.id, d.nome));
+  (alergenicosRes.data ?? []).forEach((d: any) => alergenicosMap.set(Number(d.id), d.nome));
 
   const medidasMap = new Map<string, AnvisaMedidaCaseira>();
   (medidasRes.data ?? []).forEach((d: any) => medidasMap.set(d.nome, d));
@@ -121,13 +123,26 @@ async function loadReceitaData(supabaseAdmin: any, receita_id: string) {
     .single();
 
   if (error || !receitaData) throw new Error('Receita não encontrada.');
-  return { receita: receitaData, composicao: receitaData.composicao_receitas };
+  return { receita: receitaData, composicao: receitaData.composicao_receitas || [] };
 }
 
 // ==========================================
 // 3. CÁLCULOS E LÓGICA DE NEGÓCIO
 // ==========================================
 
+/**
+ * FORMATAR VALOR (MEMORIAL DESCRITIVO)
+ * 
+ * Regra de Negócio: Realiza o arredondamento e formatação de valores nutricionais.
+ * Base Legal: 
+ *  - IN 75, Anexo III: Define o número de casas decimais por constituinte.
+ *  - RDC 429, Anexo IV: Define as regras de arredondamento matemático.
+ * 
+ * @param valor - Valor bruto calculado.
+ * @param constituinte - Nome do nutriente (ex: 'carboidrato_g').
+ * @param regrasMap - Mapa de regras (anvisa_regras_tabela).
+ * @param isSignificativo - Flag de significância cruzada (Art. 14, RDC 429).
+ */
 function formatarValor(valor: number, constituinte: string, regrasMap: Map<string, AnvisaRegraTabela>, isSignificativo = true) {
   const regra = regrasMap.get(constituinte);
   const isInteiroObrigatorio = constituinte === 'energia_kcal' || constituinte.startsWith('vd_') || constituinte === 'percentual_vd';
@@ -177,6 +192,9 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
   let contemGluten = false;
   let coloridoArtificialmente = false;
   let coloridoCarmim = false;
+  let contemAspartame = false;
+  let contemTartrazina = false;
+  let contemAmareloCrepusculo = false;
   const ingredientesGMO = new Set<string>();
 
   // Pré-fetch em batch das IDs necessárias neste nível
@@ -184,19 +202,32 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
   const refIds = composicao.filter(i => i.item_type === 'ingrediente' && i.referencia_id).map(i => i.referencia_id);
   const recIds = composicao.filter(i => i.item_type === 'receita').map(i => i.item_id);
 
-  const [ingRes, refRes, recRes] = await Promise.all([
+  const [ingRes, refRes, recRes, linksRes] = await Promise.all([
     ingIds.length > 0 ? supabaseAdmin.from('ingredientes').select('*').in('id', ingIds) : Promise.resolve({ data: [] }),
     refIds.length > 0 ? supabaseAdmin.from('referencias_nutricionais').select('*').in('id', refIds) : Promise.resolve({ data: [] }),
-    recIds.length > 0 ? supabaseAdmin.from('receitas').select('*, composicao_receitas(*)').in('id', recIds) : Promise.resolve({ data: [] })
+    recIds.length > 0 ? supabaseAdmin.from('receitas').select('*, composicao_receitas(*)').in('id', recIds) : Promise.resolve({ data: [] }),
+    ingIds.length > 0 ? supabaseAdmin.from('ingrediente_alergenicos').select('*').in('ingrediente_id', ingIds) : Promise.resolve({ data: [] })
   ]);
 
   if (ingRes.error) throw new Error(`Erro ao buscar ingredientes: ${ingRes.error.message}`);
   if (refRes.error) throw new Error(`Erro ao buscar referências: ${refRes.error.message}`);
   if (recRes.error) throw new Error(`Erro ao buscar receitas: ${recRes.error.message}`);
+  if (linksRes.error) throw new Error(`Erro ao buscar links de alérgenos: ${linksRes.error.message}`);
+
+  console.log(`[DIAGNÓSTICO] IDs processados:`, ingIds);
+  console.log(`[DIAGNÓSTICO] Encontados ${linksRes.data?.length || 0} links de alérgenos nesta etapa.`);
 
   const ingMap = new Map((ingRes.data || []).map((i: any) => [i.id, i]));
   const refMap = new Map((refRes.data || []).map((r: any) => [r.id, r]));
   const recMap = new Map((recRes.data || []).map((r: any) => [r.id, r]));
+
+  // Agrupar links por ingrediente para facilitar acesso
+  const linksPorIng = new Map<string, any[]>();
+  (linksRes.data || []).forEach((l: any) => {
+    const list = linksPorIng.get(l.ingrediente_id) || [];
+    list.push(l);
+    linksPorIng.set(l.ingrediente_id, list);
+  });
 
   for (const item of composicao) {
     if (item.item_type === 'ingrediente') {
@@ -205,21 +236,64 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
 
       ingredientesParaLista.push({ peso_liquido_g: item.peso_liquido_g, ingrediente: ing });
       if (ing.contem_gluten) contemGluten = true;
-      
+
       const insLimpo = ing.ins_code ? ing.ins_code.replace(/ins/i, '').trim() : '';
       const aditivoInfo = aditivosMap.get(insLimpo);
       if (aditivoInfo?.is_artificial) coloridoArtificialmente = true;
       if (insLimpo === '120') coloridoCarmim = true;
 
-      if (ing.is_transgenico) {
-        const esp = ing.especie_transgenica ? ing.especie_transgenica.trim().toLowerCase() : ing.nome.toLowerCase();
-        ingredientesGMO.add(esp);
+      if (ing.is_aspartame || insLimpo === '951') contemAspartame = true;
+      if (ing.is_tartrazina || insLimpo === '102') contemTartrazina = true;
+      if (ing.is_sunset_yellow || insLimpo === '110') contemAmareloCrepusculo = true;
+
+      if (ing.is_transgenico || (ing.transgenicos && ing.transgenicos.length > 0)) {
+        // Coletar itens transgênicos (novo formato JSONB ou legado)
+        if (ing.transgenicos && Array.isArray(ing.transgenicos)) {
+          ing.transgenicos.forEach((t: any) => {
+            if (t.especie) {
+              const esp = t.especie.trim().toLowerCase();
+              const doa = t.doadora ? t.doadora.trim() : '';
+              const gmoKey = doa ? `${esp} (doador: ${doa})` : esp;
+              ingredientesGMO.add(gmoKey);
+            }
+          });
+        } else {
+          const esp = (ing.especie_transgenica || ing.nome || '').trim().toLowerCase();
+          const doa = ing.especie_doadora ? ing.especie_doadora.trim() : '';
+          const gmoKey = doa ? `${esp} (doador: ${doa})` : esp;
+          ingredientesGMO.add(gmoKey);
+        }
       }
 
-      if (ing.alergenicos_ids && Array.isArray(ing.alergenicos_ids)) {
-        ing.alergenicos_ids.forEach((id: number) => {
-          const nome = alergenicosMap.get(id);
-          if (nome) alergenicosColetados.push({ id, nome, fonte: 'INGREDIENTE' });
+      // NOVO: Coleta alérgenos detalhados da tabela de links
+      const links = linksPorIng.get(ing.id) || [];
+      if (links.length > 0) {
+        links.forEach((l: any) => {
+          // CORRIGIDO: Forçar Number para evitar falha no Map.get() (Deno BIGINT -> String)
+          const aid = Number(l.anvisa_alergenico_id);
+          const nome = alergenicosMap.get(aid);
+          if (nome) {
+            alergenicosColetados.push({
+              id: aid,
+              nome,
+              fonte: l.nivel_contato === 'DIRETO' ? 'INGREDIENTE' : 'CONTAMINACAO_CRUZADA',
+              is_direto: !!l.is_direto,
+              is_derivado: !!l.is_derivado
+            });
+            console.log(`[DIAGNÓSTICO] Mapeado: ${nome} (ID: ${aid}, Tipo: ${l.nivel_contato})`);
+          } else {
+            console.log(`[AVISO] ID de alérgeno sem nome no Map: ${aid}`);
+          }
+        });
+      } else if (ing.alergenicos_ids && Array.isArray(ing.alergenicos_ids)) {
+        // Fallback robusto (compatibilidade)
+        ing.alergenicos_ids.forEach((id: any) => {
+          const aid = Number(id);
+          const nome = alergenicosMap.get(aid);
+          if (nome) {
+            alergenicosColetados.push({ id: aid, nome, fonte: 'INGREDIENTE', is_direto: true });
+            console.log(`[DIAGNÓSTICO] Fallback via array: ${nome} (ID: ${aid})`);
+          }
         });
       }
 
@@ -229,7 +303,7 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
         if (refData) {
           if (refData.gordura_monoinsaturada_g !== undefined) refData.gordura_mono_g = refData.gordura_monoinsaturada_g;
           if (refData.gordura_poliinsaturada_g !== undefined) refData.gordura_poli_g = refData.gordura_poliinsaturada_g;
-          
+
           for (const key in refData) {
             if (typeof refData[key] === 'number' && (key.endsWith('_g') || key.endsWith('_mg') || key.endsWith('_mcg') || key.endsWith('_kcal'))) {
               dadosNutricionais[key] = refData[key];
@@ -253,6 +327,9 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
       if (resSub.contemGluten) contemGluten = true;
       if (resSub.coloridoArtificialmente) coloridoArtificialmente = true;
       if (resSub.coloridoCarmim) coloridoCarmim = true;
+      if (resSub.contemAspartame) contemAspartame = true;
+      if (resSub.contemTartrazina) contemTartrazina = true;
+      if (resSub.contemAmareloCrepusculo) contemAmareloCrepusculo = true;
       resSub.ingredientesGMO.forEach((name: string) => ingredientesGMO.add(name));
       alergenicosColetados.push(...resSub.alergenicosColetados);
 
@@ -272,7 +349,18 @@ async function calcularNutrientesRecursivo(composicao: any[], supabaseAdmin: any
   }
 
   const listaIngredientesFormatada = gerarListaDeIngredientes(ingredientesParaLista);
-  return { totaisBrutos, alergenicosColetados, contemGluten, listaIngredientesFormatada, coloridoArtificialmente, coloridoCarmim, ingredientesGMO: Array.from(ingredientesGMO) };
+  return {
+    totaisBrutos,
+    alergenicosColetados,
+    contemGluten,
+    listaIngredientesFormatada,
+    coloridoArtificialmente,
+    coloridoCarmim,
+    contemAspartame,
+    contemTartrazina,
+    contemAmareloCrepusculo,
+    ingredientesGMO: Array.from(ingredientesGMO)
+  };
 }
 
 function calculatePor100g(totais: Record<string, number>, rendimento: number) {
@@ -300,6 +388,16 @@ function calculateVD(porPorcao: Record<string, number>, vdrMap: Map<string, Anvi
   return vds;
 }
 
+/**
+ * CÁLCULO DE LUPAS / FOP (FRONT-OF-PACKAGE)
+ * 
+ * Regra de Negócio: Identifica se o produto excede os limites de nutrientes críticos.
+ * Base Legal: IN 75, Anexo XV.
+ * 
+ * @param por100g - Valores baseados em 100g ou 100ml.
+ * @param lupasMap - Tabela de limites (anvisa_limites_lupa).
+ * @param estado - 'solido' ou 'liquido' (determina a coluna de limite no Anexo XV).
+ */
 function calculateLupas(por100g: any, lupasMap: any, estado: string) {
   const lupas = { alto_em_acucar_adicionado: false, alto_em_gordura_saturada: false, alto_em_sodio: false };
   const t = estado === 'solido' ? 'limite_solido_g' : 'limite_liquido_g';
@@ -328,7 +426,7 @@ function calcularPorcoesPorEmbalagem(pesoEmbalagem: number, porcao_g_ml: number)
   // Regra de Tolerância: Se for <= 2.05, considera unitário
   // (Ex: Embalagem 60g, Porção 30g -> n=2 -> É individual)
   if (n <= 2.05) {
-    if (Math.abs(n - 1) < 0.1 || n <= 2) return "1";
+    if (Math.abs(n - 1) < 0.1 || n <= 2) return '1';
   }
 
   const nar = Math.round(n + 1e-9);
@@ -337,6 +435,17 @@ function calcularPorcoesPorEmbalagem(pesoEmbalagem: number, porcao_g_ml: number)
   return nar.toString();
 }
 
+/**
+ * CÁLCULO E HARMONIZAÇÃO DE PORÇÕES
+ * 
+ * Regra de Negócio: Ajusta o peso da porção declarada conforme o rendimento e a medida caseira.
+ * Base Legal:
+ *  - RDC 429, Art. 8: Produto individual (porção = embalagem).
+ *  - RDC 429, Art. 10, §2º: Harmonização com tolerância de +/- 30%.
+ * 
+ * @param receita - Dados mestre da receita.
+ * @param medidasMap - Catálogo de nomes de medidas (anvisa_medidas_caseiras).
+ */
 function calcularInfoPorcao(receita: any, medidasMap: Map<string, AnvisaMedidaCaseira>) {
   let { porcao_final_g_ml, peso_embalagem_g, medida_caseira_nome, medida_caseira_peso_g } = receita;
 
@@ -345,7 +454,7 @@ function calcularInfoPorcao(receita: any, medidasMap: Map<string, AnvisaMedidaCa
 
   // 2. Trava de Segurança (RDC 429 Art. 8)
   // Se for "1 porção", a porção TEM que ser igual à embalagem.
-  if (total_porcoes_embalagem === "1" && peso_embalagem_g > 0) {
+  if (total_porcoes_embalagem === '1' && peso_embalagem_g > 0) {
     porcao_final_g_ml = peso_embalagem_g;
   }
   // 3. Harmonização com a Unidade (RDC 429 Art. 10 §2)
@@ -392,26 +501,47 @@ function calcularInfoPorcao(receita: any, medidasMap: Map<string, AnvisaMedidaCa
   return { porcao_g_ml: porcao_final_g_ml, medida_caseira_nome: nomeMedidaAjustado, medida_caseira_quantidade, total_porcoes_embalagem };
 }
 
-function formatarListaComE(lista: string[]) {
-  if (lista.length === 0) return "";
-  if (lista.length === 1) return lista[0];
-  if (lista.length === 2) return lista.join(' e ');
-  const ultimo = lista[lista.length - 1];
-  const primeiros = lista.slice(0, -1);
-  return `${primeiros.join(', ')} e ${ultimo}`;
+function formatarListaComE(lista: string[], conjuntivo = 'e') {
+  const items = (lista || []).map(i => i?.trim()).filter(i => !!i);
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} ${conjuntivo} ${items[1]}`;
+  const ultimo = items[items.length - 1];
+  const primeiros = items.slice(0, -1);
+  return `${primeiros.join(', ')} ${conjuntivo} ${ultimo}`;
 }
 
 function gerarListaDeIngredientes(lista: any[]) {
-  const normais = lista.filter(i => i.ingrediente.tipo_ingrediente !== 'ADITIVO' && i.peso_liquido_g > 0);
-  const aditivos = lista.filter(i => i.ingrediente.tipo_ingrediente === 'ADITIVO' && i.peso_liquido_g > 0);
+  // Segurança contra nulos ou formato inválido
+  const itemsValidos = (lista || []).filter(i => i && i.ingrediente);
+
+  const normais = itemsValidos.filter(i => i.ingrediente.tipo_ingrediente !== 'ADITIVO' && i.peso_liquido_g > 0);
+  const aditivos = itemsValidos.filter(i => i.ingrediente.tipo_ingrediente === 'ADITIVO' && i.peso_liquido_g > 0);
 
   normais.sort((a, b) => b.peso_liquido_g - a.peso_liquido_g);
 
   const nomesNormais = normais.map(i => {
-    const base = i.ingrediente.nome.toLowerCase();
+    let baseStyle = i.ingrediente.nome.toLowerCase();
+    
+    // Adicionar Texto de Transgênico (Decreto 4.680/2003)
+    // REGRA: Apenas para SIMPLES. Industrializados já trazem na sub-lista (declaracao_ingredientes_fornecedor).
+    if (i.ingrediente.tipo_ingrediente === 'SIMPLES' && (i.ingrediente.is_transgenico || (i.ingrediente.transgenicos && i.ingrediente.transgenicos.length > 0))) {
+      const gmoItems: string[] = [];
+      if (i.ingrediente.transgenicos && Array.isArray(i.ingrediente.transgenicos)) {
+        i.ingrediente.transgenicos.forEach((t: any) => {
+          const info = t.doadora ? ` (doador: ${t.doadora})` : '';
+          gmoItems.push(`${t.especie}${info}`);
+        });
+      } else {
+        const doadora = i.ingrediente.especie_doadora ? ` (doador: ${i.ingrediente.especie_doadora})` : '';
+        gmoItems.push(`${i.ingrediente.especie_transgenica || i.ingrediente.nome}${doadora}`);
+      }
+      baseStyle = `${baseStyle} transgênico* (${gmoItems.join(', ')})`;
+    }
+
     return i.ingrediente.tipo_ingrediente === 'COMPOSTO' && i.ingrediente.declaracao_ingredientes_fornecedor
-      ? `${base} (${i.ingrediente.declaracao_ingredientes_fornecedor.toLowerCase()})`
-      : base;
+      ? `${baseStyle} (${i.ingrediente.declaracao_ingredientes_fornecedor.toLowerCase()})`
+      : baseStyle;
   });
 
   const funcoesAditivos = new Map<string, Set<string>>();
@@ -444,30 +574,98 @@ function gerarListaDeIngredientes(lista: any[]) {
   return [...nomesNormais, ...nomesAditivos];
 }
 
+/**
+ * PROCESSAR DECLARAÇÕES E ADVERTÊNCIAS
+ * 
+ * Regra de Negócio: Gera as frases obrigatórias de advertência.
+ * Base Legal:
+ *  - RDC 727, Art. 6º: Ordem e formatação de Alergênicos e Lactose.
+ *  - Lei 10.674/2003: Declaração de Glúten (sempre obrigatória).
+ *  - Decreto 4.680/2003: Identificação de Transgênicos (GMO).
+ */
 function processarDeclaracoes(rec: any, resRec: any, por100g: any, alergenicosMap: Map<number, string>) {
-  const { contemGluten, alergenicosColetados, listaIngredientesFormatada, coloridoArtificialmente, coloridoCarmim } = resRec;
+  const {
+    contemGluten,
+    alergenicosColetados,
+    listaIngredientesFormatada,
+    coloridoArtificialmente,
+    coloridoCarmim,
+    contemAspartame,
+    contemTartrazina,
+    contemAmareloCrepusculo
+  } = resRec;
   const contemLactose = (por100g['lactose_g'] || 0) > 0.1;
-  const setAlergenicos = new Set<string>();
+  // Agrupar por ID para consolidar direto + derivado
+  const mapAlergenicos = new Map<number, { nome: string, is_direto: boolean, is_derivado: boolean }>();
 
-  alergenicosColetados.forEach((a: AlergenicoDetectado) => setAlergenicos.add(a.nome.toUpperCase()));
+  alergenicosColetados.forEach((a: AlergenicoDetectado) => {
+    const aid = Number(a.id); // Forçar Number novamente na agregação
+    const existing = mapAlergenicos.get(aid) || { nome: a.nome.toUpperCase(), is_direto: false, is_derivado: false };
+    
+    // Alérgenos via link-table já trazem as flags
+    if (a.is_direto) existing.is_direto = true;
+    if (a.is_derivado) existing.is_derivado = true;
+    
+    // Se veio do fallback (fonte INGREDIENTE sem flags), assume direto (RDC 727)
+    if (a.fonte === 'INGREDIENTE' && a.is_direto === undefined && a.is_derivado === undefined) {
+      existing.is_direto = true;
+    }
+    // Caso padrão de segurança se nada foi marcado
+    if (!existing.is_direto && !existing.is_derivado) existing.is_direto = true;
+    
+    mapAlergenicos.set(aid, existing);
+  });
 
-  const setPodeConter = new Set<string>();
-  if (rec.risco_contaminacao_cruzada_ids && Array.isArray(rec.risco_contaminacao_cruzada_ids)) {
-    rec.risco_contaminacao_cruzada_ids.forEach((id: number) => {
-      const nome = alergenicosMap.get(id);
-      if (nome && !setAlergenicos.has(nome.toUpperCase())) setPodeConter.add(nome.toUpperCase());
-    });
+  // --- 1. CONSOLIDAR ALÉRGICOS (RDC 727/2022) ---
+  const sortedIds = Array.from(mapAlergenicos.keys()).sort((a, b) => 
+    (mapAlergenicos.get(a)?.nome || '').localeCompare(mapAlergenicos.get(b)?.nome || '')
+  );
+
+  const derivOnly: string[] = [];
+  const directsAndMixed: string[] = [];
+
+  sortedIds.forEach(id => {
+    const v = mapAlergenicos.get(id);
+    if (!v) return;
+    if (v.is_direto && v.is_derivado) {
+      directsAndMixed.push(`${v.nome} E DERIVADOS`);
+    } else if (v.is_direto) {
+      directsAndMixed.push(v.nome);
+    } else if (v.is_derivado) {
+      derivOnly.push(`DERIVADOS DE ${v.nome}`);
+    }
+  });
+
+  // Reordenar: Itens "DERIVADOS DE" primeiro evita ambiguidades "E" no final.
+  const listContem = [...derivOnly.sort(), ...directsAndMixed.sort()];
+  
+  const blocosAlergicos: string[] = [];
+  if (listContem.length > 0) {
+    blocosAlergicos.push(`CONTÉM ${formatarListaComE(listContem, 'E')}`);
   }
 
-  const listaContem = Array.from(setAlergenicos).sort();
+  // --- 2. CRUZADA (PODE CONTER) ---
+  const setPodeConter = new Set<string>();
+  const riscoIds = (rec.risco_contaminacao_cruzada_ids || []) as (string | number)[];
+
+  for (const id of riscoIds) {
+    const numId = Number(id);
+    const nome = (alergenicosMap.get(numId) || '').trim().toUpperCase();
+    if (nome && !mapAlergenicos.has(numId)) {
+      setPodeConter.add(nome);
+    }
+  }
+
   const listaPode = Array.from(setPodeConter).sort();
-
-  let txtA = null;
-  if (listaContem.length > 0) txtA = `ALÉRGICOS: CONTÉM ${formatarListaComE(listaContem)}.`;
-
   if (listaPode.length > 0) {
-    const txtP = `PODE CONTER ${formatarListaComE(listaPode)}.`;
-    txtA = txtA ? `${txtA} ${txtP}` : `ALÉRGICOS: ${txtP}`;
+    blocosAlergicos.push(`PODE CONTER ${formatarListaComE(listaPode, 'E')}`);
+  }
+
+  // --- 3. MONTAGEM FINAL DA FRASE ÚNICA ---
+  let alergenicos = null;
+  if (blocosAlergicos.length > 0) {
+    // Une os blocos (CONTÉM e PODE CONTER) com " E " conforme RDC 727.
+    alergenicos = `ALÉRGICOS: ${formatarListaComE(blocosAlergicos,'.')}.`;
   }
 
   let txtI = null;
@@ -482,18 +680,35 @@ function processarDeclaracoes(rec: any, resRec: any, por100g: any, alergenicosMa
 
   // Advertência de Lactose (RDC 727/2022) - Limite 100mg/100g (0.1g)
   const lactose100g = por100g['lactose_g'] || 0;
-  const alertaLactose = lactose100g > 0.1 ? "CONTÉM LACTOSE" : null;
+  // Estratégia de Omissão: Se o produto contém leite nos ingredientes mas o valor de lactose está zerado/indeterminado
+  const temLeiteIntencional = resRec.alergenicosColetados.some((a: any) => a.id === 10 || a.nome.toUpperCase() === "LEITE");
+  const alertaLactose = (lactose100g > 0.1 || (temLeiteIntencional && lactose100g === 0)) ? "CONTÉM LACTOSE" : null;
 
   // Transgênicos (Decreto 4.680/2003)
   const gmoList = resRec.ingredientesGMO || [];
   let alertaGMO = null;
   if (gmoList.length > 0) {
-    alertaGMO = `CONTÉM ${formatarListaComE(gmoList).toUpperCase()} TRANSGÊNICO(S).`;
+    // Normalizar nomes para o alerta (usar apenas a espécie em caixa alta para a frase de destaque)
+    const especiesUnicas = new Set<string>();
+    gmoList.forEach((item: string) => {
+        const especieOnly = item.split('(')[0].trim();
+        especiesUnicas.add(especieOnly.toUpperCase());
+    });
+    alertaGMO = `CONTÉM ${formatarListaComE(Array.from(especiesUnicas).sort(), 'E')} TRANSGÊNICO(S).`;
   }
 
   // Efeito Laxativo (RDC 727/2022)
   const poliois100g = por100g['poliois_totais_g'] || 0;
   const alertaLaxativo = poliois100g > 10 ? "ESTE PRODUTO PODE TER EFEITO LAXATIVO" : null;
+
+  // Frases de Advertência Específicas (RDC 727)
+  const alertasEspecificos = [];
+  if (contemAspartame) {
+    alertasEspecificos.push("CONTÉM ASPARTAME");
+    alertasEspecificos.push("CONTÉM FENILALANINA");
+  }
+  if (contemTartrazina) alertasEspecificos.push("ESTE PRODUTO CONTÉM O CORANTE AMARELO DE TARTRAZINA");
+  if (contemAmareloCrepusculo) alertasEspecificos.push("ESTE PRODUTO CONTÉM O CORANTE AMARELO CREPÚSCULO");
 
   return {
     contem_gluten: contemGluten,
@@ -502,11 +717,16 @@ function processarDeclaracoes(rec: any, resRec: any, por100g: any, alergenicosMa
     alerta_lactose: alertaLactose,
     alerta_gmo: alertaGMO,
     alerta_laxativo: alertaLaxativo,
-    alergenicos: txtA,
+    alertas_especificos: alertasEspecificos,
+    alergenicos: alergenicos,
     lista_ingredientes: txtI,
     colorido_artificialmente: coloridoArtificialmente,
     colorido_carmim: coloridoCarmim,
-    modo_conservacao: rec.modo_conservacao || null
+    modo_conservacao: rec.modo_conservacao || null,
+    nota_preparo: rec.is_preparo ? "** No alimento pronto para o consumo." : null,
+    isIsento: !!rec.is_isento_nutricional,
+    tipoIsencao: rec.tipo_isencao || null,
+    instrucoes_preparo: rec.instrucoes_preparo || null
   };
 }
 
@@ -609,8 +829,8 @@ serve(async (req) => {
 
     // 2. Carrega Dados
     const compliance = await loadComplianceData(supabaseAdmin);
-    const dadosRec = await loadReceitaData(supabaseClient, receita_id);
-    const recursivo = await calcularNutrientesRecursivo(dadosRec.composicao, supabaseClient, compliance.alergenicosMap, compliance.aditivosMap);
+    const dadosRec = await loadReceitaData(supabaseAdmin, receita_id);
+    const recursivo = await calcularNutrientesRecursivo(dadosRec.composicao, supabaseAdmin, compliance.alergenicosMap, compliance.aditivosMap);
 
     // 1. CALCULAR PORÇÕES PRIMEIRO (Para determinar a massa base de cálculo)
     // Se a função decidir que a porção é 40g (unidade) e não 50g (banco), ela retorna isso em 'porcao_g_ml'
@@ -622,14 +842,18 @@ serve(async (req) => {
       if (vdrItem.grupo_id === grupoAlvo) vdrMapFiltrado.set(vdrItem.constituinte, vdrItem);
     });
 
-    const rend = dadosRec.receita.rendimento_total_g;
+    // Determine a massa base para o cálculo de 100g (RDC 429 Art. 8 §4º)
+    const isPreparo = !!dadosRec.receita.is_preparo;
+    const rendimentoBase = isPreparo && dadosRec.receita.rendimento_preparado_g
+      ? Number(dadosRec.receita.rendimento_preparado_g)
+      : (dadosRec.receita.rendimento_total_g || 1);
 
     // 2. USAR A PORÇÃO HARMONIZADA PARA O CÁLCULO NUTRICIONAL
     // Isso garante que a tabela reflita o valor real declarado (ex: 40g)
     const porc = infoP.porcao_g_ml;
 
-    const p100 = calculatePor100g(recursivo.totaisBrutos, rend);
-    const pPorc = calculatePorPorcao(recursivo.totaisBrutos, rend, porc);
+    const p100 = calculatePor100g(recursivo.totaisBrutos, rendimentoBase);
+    const pPorc = calculatePorPorcao(recursivo.totaisBrutos, rendimentoBase, porc);
 
     const p100Fmt: Record<string, string> = {};
     const pPorcFmt: Record<string, string> = {};
@@ -688,4 +912,3 @@ serve(async (req) => {
     });
   }
 });
-

@@ -327,8 +327,13 @@ export interface Ingrediente {
 
   is_corante_artificial: boolean;
   is_corante_carmim: boolean;
+  is_tartrazina?: boolean;
+  is_aspartame?: boolean;
+  is_sunset_yellow?: boolean;
   is_transgenico: boolean;
   especie_transgenica?: string | null;
+  especie_doadora?: string | null;
+  transgenicos?: { especie: string, doadora: string }[] | null;
 
   // Custo & Suprimentos UAN
   preco_ultima_compra?: number;
@@ -426,6 +431,12 @@ export interface Receita {
   risco_contaminacao_cruzada_ids: number[] | null; 
   area_painel_principal_cm2: number | null; 
   modo_conservacao: string | null;
+  is_preparo?: boolean;
+  rendimento_preparado_g?: number | null;
+  is_sub_receita: boolean;
+  instrucoes_preparo: string | null;
+  is_isento_nutricional: boolean;
+  tipo_isencao: string | null;
   
   custo_total_estimado?: number;
   custo_embalagem?: number;
@@ -465,6 +476,7 @@ export interface ComposicaoReceita {
   fator_correcao: number;
   indice_coccao: number;
   referencia_id?: string | null;
+  is_preparation_only?: boolean;
   
   ingrediente?: Ingrediente;
   receita?: Receita;
@@ -489,6 +501,15 @@ export interface DeclaracoesObrigatorias {
   alerta_laxativo?: string | null;
   alerta_gluten?: string | null;
   alerta_lactose?: string | null;
+  alertas_especificos?: string[];
+  nota_preparo?: string | null;
+  isIsento?: boolean;
+  tipoIsencao?: string | null;
+  instrucoes_preparo?: string | null;
+  is_preparo?: boolean;
+  denominacao_venda?: string | null;
+  fabricado_em?: string | null;
+  conteudo_liquido?: string | null;
 }
 
 export interface InfoPorcao {

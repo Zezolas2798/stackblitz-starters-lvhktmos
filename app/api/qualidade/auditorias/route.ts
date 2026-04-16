@@ -37,7 +37,7 @@ export async function DELETE(request: Request) {
         const { id } = parsedData.data;
 
         // Ao invés de purgar o laudo físico (proibido pela RDC 216), marcamos `deleted_at` nulo/datatime
-        const { data, error: dbError } = await (supabase as any).from('checklist_auditorias')
+        const { data, error: dbError } = await (supabase as any).from('checklist_execucoes')
             .update({ deleted_at: new Date().toISOString() })
             .eq('id', id)
             .select();

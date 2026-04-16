@@ -11,13 +11,52 @@
             "id": "65509a691ef488c3",
             "type": "leaf",
             "state": {
-              "type": "empty",
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Visualização em gráfico"
+            }
+          },
+          {
+            "id": "139a723bf670635a",
+            "type": "leaf",
+            "state": {
+              "type": "3d-graph-view",
               "state": {},
               "icon": "lucide-file",
-              "title": "Nova aba"
+              "title": "3d graph"
+            }
+          },
+          {
+            "id": "3fa7f69cb192989f",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "ARCHITECTURE.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "ARCHITECTURE"
+            }
+          },
+          {
+            "id": "1077307a7118a07c",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "legislacao/fontes/Guia_Validacao_Sistemas_ANVISA_Original.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Guia_Validacao_Sistemas_ANVISA_Original"
             }
           }
-        ]
+        ],
+        "currentTab": 3
       }
     ],
     "direction": "vertical"
@@ -90,6 +129,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "sistema.registry.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -99,7 +139,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Links inversos"
+              "title": "Links inversos para sistema.registry"
             }
           },
           {
@@ -173,12 +213,46 @@
       "daily-notes:Abrir a nota de hoje": false,
       "templates:Inserir modelo": false,
       "command-palette:Abrir paleta de comandos": false,
-      "bases:Criar nova base": false
+      "bases:Criar nova base": false,
+      "new-3d-graph:Open 3d graph": false,
+      "3d-graph-new:Global 3D Graph": false
     }
   },
-  "active": "65509a691ef488c3",
+  "active": "1077307a7118a07c",
   "lastOpenFiles": [
-    "ingredientes/ESPECIFICACAO.md",
-    "ingredientes/INGREDIENTES.md"
+    "governanca/sistema.guia.validacao.md",
+    "legislacao/fontes/Guia_Validacao_Sistemas_ANVISA_Original.md",
+    "sistema.registry.md",
+    "governanca",
+    "ARCHITECTURE.md",
+    "README.md",
+    "sistema.map.relatorios.md",
+    "sistema.taxonomy.md",
+    "sistema.calc.rotulagem.md",
+    "conceptual/mapeamento_relatorios.md",
+    "legislacao/doc_rotulagem_tecnica.md",
+    "CONSTITUTION.md",
+    "legislacao/GERENCIAMENTO_ROTULAGEM_E_PRODUTO.md",
+    "legislacao/CONFORMIDADE_ROTULAGEM_MESTRE.md",
+    "conceptual/DATA_OWNERSHIP_MAP.md",
+    "conceptual/data_ownership_mapping.md",
+    "conceptual",
+    "ingredientes.md",
+    "Sem título.canvas",
+    "legislacao/RDC_429_2020_IN_75_2020.md",
+    "fichas_tecnicas_industrial.md",
+    "fichas_tecnicas_uan.md",
+    "TAXONOMY.md",
+    "registry.md",
+    "producao.md",
+    "legislacao/fontes/RDC_26_Original.md",
+    "legislacao/fontes/Lei_10674_Original.md",
+    "legislacao/fontes/RDC_54_Original.md",
+    "legislacao/fontes/Decreto_4680_Original.md",
+    "legislacao/fontes",
+    "app",
+    "fichas_tecnicas",
+    "legislacao",
+    "industria"
   ]
 }
