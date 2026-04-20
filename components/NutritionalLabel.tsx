@@ -715,7 +715,7 @@ TabelaLinear.displayName = 'TabelaLinear';
 
 
 export function GMOIcon({ width = 18 }: { width?: number }) {
-  const height = width * (87 / 100);
+  const height = width * (100 / 100);
   return (
     <Box 
       component="span"
@@ -731,22 +731,26 @@ export function GMOIcon({ width = 18 }: { width?: number }) {
         flexShrink: 0
       }}
     >
-      <svg width="100%" height="100%" viewBox="0 0 100 87" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M50 5L95 82H5L50 5Z" fill="#FEE000" stroke="black" strokeWidth="6"/>
-        <text x="50" y="72" fontSize="60" fontWeight="900" fontFamily="Arial, sans-serif" textAnchor="middle" fill="black">T</text>
+      <svg width="100%" height="100%" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Triângulo Equilátero - Proporção Real */}
+        <path d="M50 5 L95 83 H5 L50 5 Z" fill="#FEE000" stroke="black" strokeWidth="6" strokeLinejoin="round"/>
+        {/* Letra T - Proporção Frutiger Bold (Oficial) */}
+        <path d="M35 32 h30 v12 h-8 v30 h-14 v-30 h-8 z" fill="black"/>
       </svg>
     </Box>
   );
 }
 
-export default function NutritionalLabel({ tabela, modelo = 'VERTICAL', extras = [] }: { tabela: ResultadoCalculo, modelo?: 'VERTICAL' | 'VERTICAL_QUEBRADA' | 'HORIZONTAL' | 'HORIZONTAL_QUEBRADA' | 'LINEAR' | 'AGREGADA', extras?: ResultadoCalculo[] }) {
+export default function NutritionalLabel({ tabela, modelo = 'VERTICAL', extras = [], showDeclarations = true }: { tabela: ResultadoCalculo, modelo?: 'VERTICAL' | 'VERTICAL_QUEBRADA' | 'HORIZONTAL' | 'HORIZONTAL_QUEBRADA' | 'LINEAR' | 'AGREGADA', extras?: ResultadoCalculo[], showDeclarations?: boolean }) {
   if (tabela.declaracoes.isIsento) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: 2 }}>
         <TabelaIsenta tabela={tabela} />
-        <Box sx={{ width: 'fit-content', margin: '0 auto' }}>
-          <RenderBlocoDeclaracoes declaracoes={tabela.declaracoes} />
-        </Box>
+        {showDeclarations && (
+          <Box sx={{ width: '100%', maxWidth: '450px', margin: '0 auto' }}>
+            <RenderBlocoDeclaracoes declaracoes={tabela.declaracoes} />
+          </Box>
+        )}
       </Box>
     );
   }
@@ -760,9 +764,11 @@ export default function NutritionalLabel({ tabela, modelo = 'VERTICAL', extras =
       {modelo === 'LINEAR' && <TabelaLinear tabela={tabela} />}
       {modelo === 'AGREGADA' && <TabelaAgregada tabela={tabela} extras={extras} />}
       
-      <Box sx={{ width: 'fit-content', margin: '0 auto' }}>
-        <RenderBlocoDeclaracoes declaracoes={tabela.declaracoes} />
-      </Box>
+      {showDeclarations && (
+        <Box sx={{ width: '100%', maxWidth: '450px', margin: '0 auto' }}>
+          <RenderBlocoDeclaracoes declaracoes={tabela.declaracoes} />
+        </Box>
+      )}
     </Box>
   );
 }
@@ -784,7 +790,9 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
     nota_preparo,
     instrucoes_preparo,
     is_preparo,
-    fabricado_em
+    fabricado_em,
+    conteudo_liquido,
+    denominacao_venda
   } = declaracoes;
 
   let ingredientesTexto = lista_ingredientes || '';
@@ -802,7 +810,12 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
   }
 
   return (
-    <Box sx={{ mt: 2, p: '4pt', border: borderMedium, fontFamily: font, bgcolor: 'background.paper', width: '240px', boxSizing: 'border-box' }}>
+    <Box sx={{ mt: 2, p: '4pt', border: borderMedium, fontFamily: font, bgcolor: 'background.paper', width: '100%', boxSizing: 'border-box' }}>
+      {denominacao_venda && (
+        <Typography sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', mb: '4pt', color: '#000', lineHeight: 1.2, borderBottom: '1px solid #eee', pb: '2pt' }}>
+          <strong>DENOMINAÇÃO DE VENDA:</strong> {denominacao_venda}
+        </Typography>
+      )}
       <Typography sx={{ fontSize: fontSizeLabel, mb: '2pt', color: '#000', lineHeight: 1.2 }}>
         <strong>Ingredientes:</strong> {ingredientesTexto}
       </Typography>
@@ -828,7 +841,8 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
           {declaracoes.alerta_gmo}
         </Typography>
       )}
-      
+
+
 
       {alertas_especificos && alertas_especificos.length > 0 && alertas_especificos.map((txt: string, i: number) => (
         <Typography key={i} sx={{ fontSize: fontSizeLabel, fontWeight: 900, textTransform: 'uppercase', color: '#000', mt: '2pt', lineHeight: 1.1 }}>
@@ -872,6 +886,13 @@ export function RenderBlocoDeclaracoes({ declaracoes }: { declaracoes: Declaraco
           <strong>{fabricado_em}</strong>
         </Typography>
       )}
+
+      {conteudo_liquido && (
+        <Typography sx={{ fontSize: fontSizeLabel, color: '#000', mt: '4pt', lineHeight: 1.1 }}>
+          <strong>PESO LÍQUIDO:</strong> {conteudo_liquido}
+        </Typography>
+      )}
+
     </Box>
   );
 }

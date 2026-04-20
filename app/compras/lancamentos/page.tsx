@@ -136,7 +136,7 @@ export default function LancamentoNotasPage() {
       const endOfMonth = format(endOfMonthDate, 'yyyy-MM-dd');
 
       const { data, error } = await (supabase as any)
-        .from('lotes_estoque')
+        .from('estoque_lotes')
         .select('*, ingredientes(nome), materiais(nome), fornecedores(razao_social, nome_fantasia)')
         .eq('unidade_id', unidadeId)
         .is('deleted_at', null)
@@ -323,7 +323,7 @@ export default function LancamentoNotasPage() {
           payload.categoria_produto = materialCatMap[modalidade] || 'Outros';
         }
 
-        const { error: insertErr } = await (supabase as any).from('lotes_estoque').insert(payload);
+        const { error: insertErr } = await (supabase as any).from('estoque_lotes').insert(payload);
         if (insertErr) throw insertErr;
       }
 
@@ -450,7 +450,7 @@ export default function LancamentoNotasPage() {
       if (!fornId) return;
       
       const { error } = await (supabase as any)
-        .from('lotes_estoque')
+        .from('estoque_lotes')
         .update({ deleted_at: new Date().toISOString() })
         .eq('nota_fiscal', nf)
         .eq('fornecedor_id', fornId)
@@ -468,7 +468,7 @@ export default function LancamentoNotasPage() {
   const handleDeleteLote = async (id: string) => {
     setLoadingHistorico(true);
     try {
-      const { error } = await (supabase as any).from('lotes_estoque').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+      const { error } = await (supabase as any).from('estoque_lotes').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       if (!error) { setDeleteTarget(null); loadHistoricoNfs(); }
     } finally {
       setLoadingHistorico(false);
@@ -478,7 +478,7 @@ export default function LancamentoNotasPage() {
   const handleEditItemSave = async () => {
     if (!editingItem) return;
     try {
-      const { error } = await (supabase as any).from('lotes_estoque').update({
+      const { error } = await (supabase as any).from('estoque_lotes').update({
          nota_fiscal: editingItem.nota_fiscal,
          quantidade_inicial_g_ml: parseFloat(editingItem.quantidade_inicial_g_ml),
          quantidade_atual_g_ml: parseFloat(editingItem.quantidade_inicial_g_ml),
@@ -889,3 +889,4 @@ export default function LancamentoNotasPage() {
     </Container>
   );
 }
+

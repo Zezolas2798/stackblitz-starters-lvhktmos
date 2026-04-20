@@ -40,7 +40,7 @@ export default function InventarioHistoricoDialog({ open, onClose }: Props) {
       .from('estoque_inventarios')
       .select(`
         *,
-        cliente_locais_estoque(nome)
+        estoque_locais(nome)
       `)
       .eq('unidade_id', unidadeId)
       .order('data_inicio', { ascending: false });
@@ -104,7 +104,7 @@ export default function InventarioHistoricoDialog({ open, onClose }: Props) {
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <MapPin size={14} color="gray" />
-                        <Typography variant="body2">{inv.cliente_locais_estoque?.nome || 'Geral'}</Typography>
+                        <Typography variant="body2">{inv.estoque_locais?.nome || 'Geral'}</Typography>
                       </Box>
                     </TableCell>
                     <TableCell>
@@ -162,3 +162,4 @@ export default function InventarioHistoricoDialog({ open, onClose }: Props) {
     </>
   );
 }
+

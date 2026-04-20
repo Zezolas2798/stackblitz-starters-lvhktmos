@@ -8,10 +8,12 @@ import { CardapioUAN, CardapioDiaUAN, FichaTecnicaUAN } from '@/lib/types';
 import {
   Box, Typography, Button, Paper, Chip, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, TextField,
-  Divider, Grid, FormControlLabel, Checkbox, Accordion, AccordionSummary, AccordionDetails
+  Divider, Grid, FormControlLabel, Checkbox, Accordion, AccordionSummary, AccordionDetails, Tooltip, Badge
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
-import { ArrowLeft, Plus, Save, Trash2, CalendarDays, Loader2, RefreshCw, ChevronDown, Pencil, Settings, Tag, X } from 'lucide-react';
+import { ArrowLeft, Plus, Save, Trash2, CalendarDays, Loader2, RefreshCw, ChevronDown, Pencil, Settings, Tag, X, ShieldAlert, AlertTriangle, Wand2 } from 'lucide-react';
+import { validateMenuGrid, ValidationAlert, FichaValidationData } from '@/lib/uan-validator';
+import { CardapioRegraVariedade, PerfilCardapio, PerfilCardapioSlot } from '@/lib/types';
 const DEFAULT_REFEICOES = ['Desjejum', 'Colação', 'Almoço', 'Lanche da Tarde', 'Jantar', 'Ceia'];
 import { MEAL_CATEGORY_GROUPS, REFEICAO_TO_GROUP } from '@/lib/uan-constants';
 export default function GradeCardapioUANPage({ params }: { params: { id: string } }) {
@@ -47,6 +49,15 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
   const [activeMeal, setActiveMeal] = useState<string | null>(null);
   const [mealDialogOpen, setMealDialogOpen] = useState(false);
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({}); // 'YYYY-MM-DD_Refeicao' -> boolean
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // LINTER & AQPC State
+  const [regras, setRegras] = useState<CardapioRegraVariedade[]>([]);
+  const [perfisMap, setPerfisMap] = useState<Record<string, PerfilCardapio & { slots?: PerfilCardapioSlot[] }>>({});
+  const [perfisRefeicao, setPerfisRefeicao] = useState<Record<string, string>>({}); // { Ref: PerfilId }
+  const [fichasMap, setFichasMap] = useState<Record<string, FichaValidationData>>({});
+  const [validationAlerts, setValidationAlerts] = useState<ValidationAlert[]>([]);
+  const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
 
   const fetchData = async () => {
     if (!activeClientId) return;
@@ -61,14 +72,34 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
 
     if (cData) setCardapio(cData as unknown as CardapioUAN);
 
-    // 2. Busca Fichas Disponíveis
+    // 2. Busca Fichas Disponíveis (com composição para cálculo de custo)
     const { data: fData } = await supabase
       .from('fichas_tecnicas_uan')
-      .select('*')
+      .select('*, composicao_fichas_uan(peso_bruto_g, ingrediente:ingredientes(preco_ultima_compra))')
       .eq('cliente_id', activeClientId)
       .order('nome');
     
-    if (fData) setFichas(fData as unknown as FichaTecnicaUAN[]);
+    if (fData) {
+      setFichas(fData as unknown as FichaTecnicaUAN[]);
+      
+      const fMap: Record<string, FichaValidationData> = {};
+      fData.forEach((f: any) => {
+        let custo = 0;
+        if (f.composicao_fichas_uan && Array.isArray(f.composicao_fichas_uan)) {
+          f.composicao_fichas_uan.forEach((comp: any) => {
+            const pbKg = comp.peso_bruto_g / 1000;
+            const precoKg = comp.ingrediente?.preco_ultima_compra || 0;
+            custo += (pbKg * precoKg);
+          });
+        }
+        
+        const rendimento = f.rendimento_porcoes || 1;
+        const custoPorca = custo / rendimento;
+        
+        fMap[f.id] = { ...f, custo_por_porcao: custoPorca } as FichaValidationData;
+      });
+      setFichasMap(fMap);
+    }
 
     // 3. Busca Grade Atual
     const { data: gData } = await supabase
@@ -77,6 +108,28 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
       .eq('cardapio_id', params.id);
       
     if (gData) setGrade(gData as unknown as Partial<CardapioDiaUAN>[]);
+
+    // X1. Busca Regras de Variedade
+    const { data: rData } = await supabase.from('cardapio_regras_variedade' as any).select('*').eq('cliente_id', activeClientId).eq('ativo', true);
+    if (rData) setRegras(rData as any);
+
+    // X2. Busca Perfis e Mapeamentos
+    const { data: pMapData } = await supabase.from('cardapio_perfis_refeicao' as any).select('*').eq('cardapio_id', params.id);
+    if (pMapData) {
+      const pr: Record<string, string> = {};
+      pMapData.forEach((pm: any) => { pr[pm.refeicao] = pm.perfil_id; });
+      setPerfisRefeicao(pr);
+      
+      if (pMapData.length > 0) {
+        const perfisIds = Array.from(new Set(pMapData.map((d: any) => d.perfil_id)));
+        const { data: profiles } = await supabase.from('perfis_cardapio' as any).select('*, slots:perfil_cardapio_slots(*)').in('id', perfisIds);
+        if (profiles) {
+          const map: Record<string, any> = {};
+          profiles.forEach((p: any) => map[p.id] = p);
+          setPerfisMap(map);
+        }
+      }
+    }
 
     // 4. Busca Feriados do Ano
     if (cData?.data_inicio) {
@@ -95,6 +148,17 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
     fetchData();
   }, [activeClientId, params.id]);
 
+  // ENGINE DO LINTER (REATIVO)
+  useEffect(() => {
+    if (!cardapio || grade.length === 0 || !activeClientId) {
+      setValidationAlerts([]);
+      return;
+    }
+    const diasRange = calendarDays.filter(Boolean) as string[];
+    const alerts = validateMenuGrid(grade, perfisRefeicao, perfisMap, regras, fichasMap, diasRange);
+    setValidationAlerts(alerts);
+  }, [grade, regras, perfisRefeicao, perfisMap, fichasMap, cardapio]);
+
   const handleOpenAdd = (dateStr: string, refeicao: string) => {
     const config = cardapio?.config_excecoes_dias?.[dateStr] || {};
     const d = new Date(dateStr + 'T12:00:00Z');
@@ -111,6 +175,57 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
     setSelecionados(existentesId); 
     setModalOpen(true);
   };
+
+  const handleClearMeal = (dateStr: string, refeicao: string) => {
+    setGrade(prev => prev.filter(g => !(g.data_consumo === dateStr && g.tipo_refeicao === refeicao)));
+  };
+
+  const handleGenerateAutomagic = async () => {
+    if(!activeClientId) return;
+    setIsGenerating(true);
+    
+    // Preparar Payload Limpo
+    const diasRange = calendarDays.filter(Boolean) as string[];
+    
+    const plainFichas = Object.values(fichasMap).map(f => ({
+       id: f.id,
+       nome: f.nome,
+       categoria_uan: f.categoria_uan,
+       cor_predominante: f.cor_predominante,
+       textura_principal: f.textura_principal,
+       metodo_coccao: f.metodo_coccao,
+       rico_em_enxofre: f.rico_em_enxofre,
+       custo_por_porcao: f.custo_por_porcao
+    }));
+
+    try {
+      const { data, error } = await supabase.functions.invoke('uan-csp-generator', {
+        body: {
+          diasAtivos: diasRange,
+          perfisRefeicao: perfisRefeicao,
+          perfisMap: perfisMap,
+          regras: regras,
+          fichas: plainFichas
+        }
+      });
+
+      if (error || !data) {
+        throw new Error(data?.error || error?.message || 'Erro Desconhecido.');
+      }
+
+      if (data.gradeOutput) {
+        setGrade(data.gradeOutput);
+        alert('Cardápio Gerado Automaticamente com Sucesso! Analise os Linter Alerts para refinamento fino.');
+      }
+
+    } catch (e: any) {
+      alert(`Falha na Geração Automática: ${e.message}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+
 
   const handleLocalAddMulti = () => {
     if (!cellTarget || !cardapio) return;
@@ -215,6 +330,14 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
 
   const handleSalvarGrade = async () => {
     if (!cardapio) return;
+    
+    const hardAlerts = validationAlerts.filter(a => a.severity === 'HARD');
+    if (hardAlerts.length > 0) {
+       alert(`Não é possível salvar. Existem ${hardAlerts.length} violações de severidade HARD (Ex: Custo Estourado, Regras Rígidas ou Faltam Slots Obrigatórios). Por favor, corrija os alertas em vermelho primeiro.`);
+       setAlertsDialogOpen(true);
+       return;
+    }
+
     setSalvando(true);
     
     try {
@@ -457,9 +580,35 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
           </Button>
           <Button
             variant="contained"
+            color="secondary"
+            startIcon={isGenerating ? <Loader2 className="animate-spin" /> : <Wand2 />}
+            onClick={handleGenerateAutomagic}
+            disabled={salvando || sincronizando || isGenerating}
+            sx={{
+               background: isGenerating ? 'grey' : 'linear-gradient(45deg, #FE6B8B 30%, #FF8E53 90%)',
+               boxShadow: '0 3px 5px 2px rgba(255, 105, 135, .3)',
+            }}
+          >
+            {isGenerating ? 'Calculando CSP...' : 'Gerar Auto (Beta)'}
+          </Button>
+
+          <Badge badgeContent={validationAlerts.length} color={validationAlerts.some(a => a.severity === 'HARD') ? 'error' : 'warning'}>
+            <Button
+              variant={validationAlerts.length > 0 ? "contained" : "outlined"}
+              color={validationAlerts.some(a => a.severity === 'HARD') ? 'error' : 'warning'}
+              startIcon={validationAlerts.some(a => a.severity === 'HARD') ? <ShieldAlert /> : <AlertTriangle />}
+              onClick={() => setAlertsDialogOpen(true)}
+              sx={{ ml: 2, mr: 2 }}
+            >
+              Linter AQPC
+            </Button>
+          </Badge>
+
+          <Button 
+            variant="contained" 
             startIcon={salvando ? <Loader2 className="animate-spin" /> : <Save />}
             onClick={handleSalvarGrade}
-            disabled={salvando || sincronizando}
+            disabled={salvando || sincronizando || isGenerating}
           >
             {salvando ? 'Salvando...' : 'Salvar Alterações'}
           </Button>
@@ -568,11 +717,16 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
                     const hasItems = grade.some(g => g.data_consumo === dateStr && g.tipo_refeicao === ref);
                     return c > 0 || hasItems;
                   }).map(ref => {
+                    // ---------------- CARD DE REFEIÇÃO (INNER) ----------------
                     const mealItems = grade.filter(g => g.data_consumo === dateStr && g.tipo_refeicao === ref);
                     const hasItems = mealItems.length > 0;
                     const expKey = `${dateStr}_${ref}`;
                     const isExpanded = expandedMeals[expKey];
                     
+                    const mealAlerts = validationAlerts.filter(a => a.data_consumo === dateStr && (a.tipo_refeicao === ref || !a.tipo_refeicao));
+                    const hasError = mealAlerts.some(a => a.severity === 'HARD');
+                    const hasWarning = !hasError && mealAlerts.some(a => a.severity === 'SOFT');
+
                     // Agrupa por categoria (Deduplicando nomes na visualização também)
                     const grouped = mealItems.reduce((acc, curr) => {
                       const cat = (curr as any).fichas_tecnicas_uan?.categoria_uan || 'Outros';
@@ -593,12 +747,12 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
                           gap: 0.5,
                           transition: 'all 0.2s',
                           bgcolor: hasItems ? alpha(theme.palette.primary.main, 0.03) : 'action.hover',
-                          border: '1px solid',
-                          borderColor: hasItems ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+                          border: '2px solid',
+                          borderColor: hasError ? 'error.main' : hasWarning ? 'warning.main' : hasItems ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
                           position: 'relative',
                           '&:hover': { 
                             bgcolor: alpha(theme.palette.primary.main, 0.08),
-                            borderColor: alpha(theme.palette.primary.main, 0.2),
+                            borderColor: hasError ? 'error.light' : hasWarning ? 'warning.light' : alpha(theme.palette.primary.main, 0.2),
                             '& .action-btns': { opacity: 1 }
                           }
                         }}
@@ -847,6 +1001,36 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
         <DialogActions>
           <Button onClick={() => setDiagConfigOpen(false)}>Cancelar</Button>
           <Button variant="contained" onClick={handleSaveConfigDia}>Salvar Configuração</Button>
+        </DialogActions>
+      </Dialog>
+      {/* ALERTS DIALOG (LINTER) */}
+      <Dialog open={alertsDialogOpen} onClose={() => setAlertsDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ShieldAlert color="red" /> Linter AQPC & Nutricional ({validationAlerts.length} Alertas)
+        </DialogTitle>
+        <DialogContent dividers>
+          {validationAlerts.length === 0 ? (
+            <Typography>Tudo perfeito! Nenhuma regra violada até o momento.</Typography>
+          ) : (
+            <Grid container spacing={2}>
+              {validationAlerts.map((a, i) => (
+                <Grid item xs={12} key={i}>
+                  <Paper variant="outlined" sx={{ p: 2, borderColor: a.severity === 'HARD' ? 'error.main' : 'warning.main', bgcolor: a.severity === 'HARD' ? alpha('#f44336', 0.05) : alpha('#ff9800', 0.05) }}>
+                    <Typography variant="subtitle2" color={a.severity === 'HARD' ? 'error' : 'warning.dark'} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {a.severity === 'HARD' ? <ShieldAlert size={16} /> : <AlertTriangle size={16} />}
+                      [ {a.data_consumo.split('-').reverse().join('/')} {a.tipo_refeicao ? `- ${a.tipo_refeicao}` : ''} ] - Regra: {a.ruleType.replace(/_/g, ' ')}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                      {a.message}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAlertsDialogOpen(false)}>Fechar</Button>
         </DialogActions>
       </Dialog>
     </Box>

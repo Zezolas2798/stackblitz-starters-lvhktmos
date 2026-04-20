@@ -148,8 +148,8 @@ export default function EstoquePage() {
 
     // Busca os lotes que estão no estoque físico (Não rejeitados e não previstos)
     const { data: lotesData, error } = await (supabase as any)
-      .from('lotes_estoque')
-      .select('*, ingredientes(nome, grupo_estoque_id, ingredientes_grupos(nome)), materiais(nome, tipo_material), fornecedores(razao_social, nome_fantasia, cnpj), cliente_locais_estoque(nome)')
+      .from('estoque_lotes')
+      .select('*, ingredientes(nome, subgrupo_id, subgrupos_produto(nome)), materiais(nome, tipo_material), fornecedores(razao_social, nome_fantasia, cnpj), estoque_locais(nome)')
       .eq('unidade_id', unidadeId)
       .gt('quantidade_atual_g_ml', 0)
       .neq('status', 'REJEITADO')
@@ -164,14 +164,14 @@ export default function EstoquePage() {
       .eq('status', 'RESERVADO');
 
     // Busca todos os locais de estoque ativos da unidade para o filtro
-    const { data: locaisData } = await (supabase as any).from('cliente_locais_estoque')
-      .select('nome, categorias_permitidas')
+    const { data: locaisData } = await (supabase as any).from('estoque_locais')
+      .select('nome, grupos_permitidos_ids')
       .eq('unidade_id', unidadeId)
       .eq('ativo', true);
 
     // Busca todas as categorias de produto do cliente para o filtro
     const { data: catsData } = await (supabase as any)
-      .from('cliente_categorias_produto')
+      .from('grupos_produto')
       .select('id, nome, modalidade')
       .eq('cliente_id', activeClientId!);
 
@@ -208,7 +208,7 @@ export default function EstoquePage() {
       .from('estoque_movimentacoes')
       .select(`
         *,
-        lote:lotes_estoque!estoque_movimentacoes_lote_id_fkey!inner(
+        lote:estoque_lotes!estoque_movimentacoes_lote_id_fkey!inner(
           *,
           ingredientes(id, nome),
           materiais(id, nome, tipo_material),
@@ -230,7 +230,7 @@ export default function EstoquePage() {
 
       // Busca categorias para filtros
       const { data: catsData } = await (supabase as any)
-        .from('cliente_categorias_produto')
+        .from('grupos_produto')
         .select('nome')
         .eq('cliente_id', activeClientId!);
 
@@ -262,7 +262,7 @@ export default function EstoquePage() {
           qtd_separada_g,
           status,
           created_at,
-          ingredientes(nome, grupo_estoque_id),
+          ingredientes(nome, subgrupo_id),
           producao_ordens!inner(
             id,
             codigo,
@@ -271,7 +271,7 @@ export default function EstoquePage() {
             data_prevista,
             unidade_id,
             producao_ordens_itens(
-              cliente_setores_producao(nome)
+              setores_producao(nome)
             )
           ),
           producao_reservas_estoque(
@@ -279,11 +279,11 @@ export default function EstoquePage() {
             quantidade_reservada_g,
             status,
             estoque_lote_id,
-            lotes_estoque(
+            estoque_lotes(
               *,
               ingredientes(nome),
               fornecedores(razao_social, nome_fantasia, cnpj),
-              cliente_locais_estoque(nome)
+              estoque_locais(nome)
             )
           )
         `)
@@ -296,8 +296,8 @@ export default function EstoquePage() {
 
       // 2. Buscar Saldo de Estoque Atual para todos os ingredientes/grupos
       const { data: stockLevels } = await (supabase as any)
-        .from('lotes_estoque')
-        .select('quantidade_atual_g_ml, ingrediente_id, unidade_peso_embalagem, ingredientes(grupo_estoque_id)')
+        .from('estoque_lotes')
+        .select('quantidade_atual_g_ml, ingrediente_id, unidade_peso_embalagem, ingredientes(subgrupo_id)')
         .eq('unidade_id', unidadeId)
         .neq('status', 'REJEITADO')
         .neq('status', 'PREVISTO')
@@ -306,7 +306,7 @@ export default function EstoquePage() {
       // Agrupar saldo por Grupo ou Ingrediente (Fallback)
       const stockBalanceMap: { [key: string]: { total: number, unidade?: string } } = {};
       (stockLevels || []).forEach((s: any) => {
-        const key = s.ingredientes?.grupo_estoque_id || s.ingrediente_id;
+        const key = s.ingredientes?.subgrupo_id || s.ingrediente_id;
         if (!stockBalanceMap[key]) {
             stockBalanceMap[key] = { total: 0, unidade: s.unidade_peso_embalagem };
         }
@@ -320,7 +320,7 @@ export default function EstoquePage() {
 
       (reqData || []).forEach((req: any) => {
         // Vincula o saldo de estoque ao vivo na requisição
-        const key = req.ingredientes?.grupo_estoque_id || req.ingrediente_id;
+        const key = req.ingredientes?.subgrupo_id || req.ingrediente_id;
         const stockData = stockBalanceMap[key];
         req.saldo_estoque_live = stockData?.total || 0;
         req.unidade_estoque = stockData?.unidade;
@@ -331,8 +331,8 @@ export default function EstoquePage() {
         if (!ordensMap[ordem.id]) {
           const setoresSet = new Set<string>();
           ordem.producao_ordens_itens?.forEach((item: any) => {
-            if (item.cliente_setores_producao?.nome) {
-              setoresSet.add(item.cliente_setores_producao.nome);
+            if (item.setores_producao?.nome) {
+              setoresSet.add(item.setores_producao.nome);
             }
           });
 
@@ -374,7 +374,7 @@ export default function EstoquePage() {
       // 1. Verificar se o ingrediente requisitado pertence a um grupo
       const { data: itemBanco } = await (supabase as any)
         .from('ingredientes')
-        .select('id, grupo_estoque_id')
+        .select('id, subgrupo_id')
         .eq('id', req.ingrediente_id)
         .is('deleted_at', null)
         .single();
@@ -383,11 +383,11 @@ export default function EstoquePage() {
       let filterValue: any = req.ingrediente_id;
       
       // Se tiver grupo, vamos buscar todos os ingredientes desse grupo
-      if (itemBanco && itemBanco.grupo_estoque_id) {
+      if (itemBanco && itemBanco.subgrupo_id) {
         const { data: itensDoGrupo } = await (supabase as any)
           .from('ingredientes')
           .select('id')
-          .eq('grupo_estoque_id', itemBanco.grupo_estoque_id)
+          .eq('subgrupo_id', itemBanco.subgrupo_id)
           .is('deleted_at', null);
           
         if (itensDoGrupo && itensDoGrupo.length > 0) {
@@ -398,7 +398,7 @@ export default function EstoquePage() {
 
       // 2. Buscar lotes disponíveis (do ingrediente específico ou do grupo todo)
       let query = (supabase as any)
-        .from('lotes_estoque')
+        .from('estoque_lotes')
         .select('*, ingredientes(nome, id), fornecedores(razao_social, nome_fantasia, cnpj)')
         .gt('quantidade_atual_g_ml', 0)
         .in('status', ['APROVADO', 'QUARENTENA'])
@@ -566,7 +566,7 @@ export default function EstoquePage() {
       // 1. Baixar o estoque do lote
       const novaQtdGml = Math.max(0, lote.quantidade_atual_g_ml - reserva.quantidade_reservada_g);
       
-      const { error: errLote } = await (supabase as any).from('lotes_estoque')
+      const { error: errLote } = await (supabase as any).from('estoque_lotes')
         .update({ quantidade_atual_g_ml: novaQtdGml })
         .eq('id', lote.id);
       if (errLote) throw errLote;
@@ -593,7 +593,7 @@ export default function EstoquePage() {
       // Chama modal de etiqueta em vez de alert
       setEtiquetaModalData({
         open: true,
-        lote: reserva.lotes_estoque, // Usa o objeto completo da reserva
+        lote: reserva.estoque_lotes, // Usa o objeto completo da reserva
         qtdMovedGml: reserva.quantidade_reservada_g,
         opContext: `OP ${reserva.producao_requisicoes?.producao_ordens?.codigo || ''}`
       });
@@ -636,7 +636,7 @@ export default function EstoquePage() {
     const termo = filtroBusca.toLowerCase();
     
     // Check if it belongs to a group, otherwise use its own naming
-    const nomeInsumo = lote.ingredientes?.ingredientes_grupos?.nome 
+    const nomeInsumo = lote.ingredientes?.subgrupos_produto?.nome 
         || lote.ingredientes?.nome 
         || lote.materiais?.nome
         || '';
@@ -647,7 +647,7 @@ export default function EstoquePage() {
       (lote.fornecedores?.razao_social || '').toLowerCase().includes(termo) ||
       (lote.numero_lote_fabricante || '').toLowerCase().includes(termo);
 
-    const matchLocal = filtroLocal ? (lote.cliente_locais_estoque?.nome === filtroLocal) : true;
+    const matchLocal = filtroLocal ? (lote.estoque_locais?.nome === filtroLocal) : true;
     
     // Virtual category mapping for materiais vs ingredientes
     let loteCategoriaVirtual = lote.categoria_produto;
@@ -701,7 +701,7 @@ export default function EstoquePage() {
   });
 
   const descartesFiltrados = descartes.filter(desc => {
-    const rawLote = desc.lote || desc.lotes_estoque;
+    const rawLote = desc.lote || desc.estoque_lotes;
     const lote = Array.isArray(rawLote) ? rawLote[0] : rawLote;
     if (!lote) return false;
 
@@ -774,7 +774,7 @@ export default function EstoquePage() {
   });
 
   const usosFiltrados = usos.filter(uso => {
-    const rawLote = uso.lote || uso.lotes_estoque;
+    const rawLote = uso.lote || uso.estoque_lotes;
     const lote = Array.isArray(rawLote) ? rawLote[0] : rawLote;
     if (!lote) return false;
 
@@ -838,7 +838,7 @@ export default function EstoquePage() {
     
     lotesFiltrados.forEach(lote => {
       // Determina o nome do grupo agregador
-      const tituloGrupo = lote.ingredientes?.ingredientes_grupos?.nome || lote.ingredientes?.nome || lote.materiais?.nome || 'Produto Desconhecido';
+      const tituloGrupo = lote.ingredientes?.subgrupos_produto?.nome || lote.ingredientes?.nome || lote.materiais?.nome || 'Produto Desconhecido';
       
       if (!grupos[tituloGrupo]) {
         grupos[tituloGrupo] = { tituloGrupo, lotes: [], totalGml: 0, unidade: lote.unidade_peso_embalagem };
@@ -1007,7 +1007,7 @@ export default function EstoquePage() {
                 >
                   <MenuItem value="">Todos os Locais</MenuItem>
                   {locaisDisponiveis
-                    .filter(loc => !loc.categorias_permitidas || loc.categorias_permitidas.length === 0 || loc.categorias_permitidas.includes(categoriaPrincipal))
+                    .filter(loc => !loc.grupos_permitidos_ids || loc.grupos_permitidos_ids.length === 0 || loc.grupos_permitidos_ids.includes(categoriaPrincipal))
                     .map(loc => <MenuItem key={loc.nome} value={loc.nome}>{loc.nome}</MenuItem>)}
                 </TextField>
               </Grid>
@@ -1109,7 +1109,7 @@ export default function EstoquePage() {
                                     <Typography variant="body2" fontWeight="bold">
                                       {lote.ingredientes?.nome || lote.materiais?.nome || 'Produto Desconhecido'}
                                     </Typography>
-                                    {/* Assuming the data fetching query for lotes_estoque includes:
+                                    {/* Assuming the data fetching query for estoque_lotes includes:
                                         .select(`
                                             *,
                                             ingredientes(nome),
@@ -1131,7 +1131,7 @@ export default function EstoquePage() {
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
                                   <MapPin size={16} />
                                   <Typography variant="body2" fontWeight={500}>
-                                    {lote.cliente_locais_estoque?.nome || 'Local Não Definido'}
+                                    {lote.estoque_locais?.nome || 'Local Não Definido'}
                                   </Typography>
                                 </Box>
                               </TableCell>
@@ -1273,18 +1273,18 @@ export default function EstoquePage() {
                         </TableCell>
                         <TableCell>
                           <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.primary' }}>
-                            {desc.lotes_estoque?.ingredientes?.nome || 'Insumo Excluído'}
+                            {desc.estoque_lotes?.ingredientes?.nome || 'Insumo Excluído'}
                           </Typography>
                           <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-                            Lote: {desc.lotes_estoque?.numero_lote_fabricante || '-'}
+                            Lote: {desc.estoque_lotes?.numero_lote_fabricante || '-'}
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Chip label={desc.lotes_estoque?.categoria_produto || 'S/ Categoria'} size="small" variant="outlined" />
+                          <Chip label={desc.estoque_lotes?.categoria_produto || 'S/ Categoria'} size="small" variant="outlined" />
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" color="error.main" fontWeight={700}>
-                            {formatarQuantidade(desc.quantidade_movimentada, desc.lotes_estoque?.unidade_peso_embalagem)}
+                            {formatarQuantidade(desc.quantidade_movimentada, desc.estoque_lotes?.unidade_peso_embalagem)}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -1450,11 +1450,11 @@ export default function EstoquePage() {
                                           </Box>
                                         </TableCell>
                                         <TableCell>
-                                          <Typography variant="body2" fontFamily="monospace">{res.lotes_estoque?.numero_lote_fabricante || 'Lote N/A'}</Typography>
-                                          <Typography variant="caption" color="text.secondary">{res.lotes_estoque?.cliente_locais_estoque?.nome}</Typography>
+                                          <Typography variant="body2" fontFamily="monospace">{res.estoque_lotes?.numero_lote_fabricante || 'Lote N/A'}</Typography>
+                                          <Typography variant="caption" color="text.secondary">{res.estoque_lotes?.estoque_locais?.nome}</Typography>
                                         </TableCell>
                                         <TableCell align="right">
-                                          <Typography variant="body2" fontWeight="bold">{formatarQuantidade(res.quantidade_reservada_g, res.lotes_estoque?.unidade_peso_embalagem)}</Typography>
+                                          <Typography variant="body2" fontWeight="bold">{formatarQuantidade(res.quantidade_reservada_g, res.estoque_lotes?.unidade_peso_embalagem)}</Typography>
                                         </TableCell>
                                         <TableCell align="center">
                                           {res.status === 'RESERVADO' ? (
@@ -1462,7 +1462,7 @@ export default function EstoquePage() {
                                               variant="outlined"
                                               color="success"
                                               size="small"
-                                              onClick={() => handleConfirmarEntregaRaiz(res.lotes_estoque, { ...res, producao_requisicoes: { producao_ordens: ordem } })}
+                                              onClick={() => handleConfirmarEntregaRaiz(res.estoque_lotes, { ...res, producao_requisicoes: { producao_ordens: ordem } })}
                                               sx={{ textTransform: 'none' }}
                                             >
                                               Entregar
@@ -1566,7 +1566,7 @@ export default function EstoquePage() {
                             <TableCell>
                               <Typography variant="subtitle2" fontWeight="bold">
                                 {(() => {
-                                  const rawLote = uso.lote || uso.lotes_estoque;
+                                  const rawLote = uso.lote || uso.estoque_lotes;
                                   const lote = Array.isArray(rawLote) ? rawLote[0] : rawLote;
                                   const rawIngrediente = lote?.ingredientes;
                                   const rawMaterial = lote?.materiais;
@@ -1576,13 +1576,13 @@ export default function EstoquePage() {
                                 })()}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                Lote: {(uso.lote || (Array.isArray(uso.lotes_estoque) ? uso.lotes_estoque[0] : uso.lotes_estoque))?.numero_lote_fabricante || '-'}
+                                Lote: {(uso.lote || (Array.isArray(uso.estoque_lotes) ? uso.estoque_lotes[0] : uso.estoque_lotes))?.numero_lote_fabricante || '-'}
                               </Typography>
                             </TableCell>
                             <TableCell>
                               <Typography variant="body2" color="primary.main" fontWeight={700}>
                                 {(() => {
-                                  const rawLote = uso.lote || uso.lotes_estoque;
+                                  const rawLote = uso.lote || uso.estoque_lotes;
                                   const lote = Array.isArray(rawLote) ? rawLote[0] : rawLote;
                                   return formatarQuantidade(uso.quantidade_movimentada, lote?.unidade_peso_embalagem);
                                 })()}
@@ -1754,6 +1754,7 @@ export default function EstoquePage() {
     </Container>
   );
 }
+
 
 
 

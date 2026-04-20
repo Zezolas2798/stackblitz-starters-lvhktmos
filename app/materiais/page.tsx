@@ -71,7 +71,7 @@ export default function MateriaisPage() {
       
       const [matRes, catRes] = await Promise.all([
         (supabase as any).from('materiais').select('*').eq('cliente_id', unidadeSelecionada.cliente_id).order('nome'),
-        (supabase as any).from('cliente_categorias_produto').select('*').eq('cliente_id', unidadeSelecionada.cliente_id).order('nome')
+        (supabase as any).from('grupos_produto').select('*').eq('cliente_id', unidadeSelecionada.cliente_id).order('nome')
       ]);
 
       if (matRes.error) throw matRes.error;
@@ -101,7 +101,7 @@ export default function MateriaisPage() {
       
       // 1. Verificamos se há lotes associados no banco de dados
       const { data: lotes, error: errorLotes } = await (supabase as any)
-        .from('lotes_estoque')
+        .from('estoque_lotes')
         .select('id')
         .eq('material_id', id)
         .limit(1);
@@ -148,7 +148,7 @@ export default function MateriaisPage() {
     const isAtivo = m.ativo !== false; // Considerar null/undefined como ativo para compatibilidade
     const matchesTab = m.tipo_material === tabValue;
     const matchesSearch = m.nome.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || m.categoria_id === selectedCategory;
+    const matchesCategory = selectedCategory === 'all' || m.grupo_id === selectedCategory;
     return isAtivo && matchesTab && matchesSearch && matchesCategory;
   });
 
@@ -301,7 +301,7 @@ export default function MateriaisPage() {
               </TableRow>
             ) : (
               filteredMateriais.map((mat) => {
-                const catName = categorias.find(c => c.id === mat.categoria_id)?.nome || '-';
+                const catName = categorias.find(c => c.id === mat.grupo_id)?.nome || '-';
 
                 return (
                   <TableRow key={mat.id} hover>
@@ -358,3 +358,4 @@ export default function MateriaisPage() {
     </Box>
   );
 }
+

@@ -17,9 +17,9 @@ interface CapaRelatorioProps {
   };
 }
 
-export default function CapaRelatorio({ 
-  clientName, 
-  reportType, 
+export default function CapaRelatorio({
+  clientName,
+  reportType,
   date = new Date().toLocaleDateString('pt-BR'),
   logoUrl,
   showComplianceInfo = true,
@@ -76,62 +76,64 @@ export default function CapaRelatorio({
       />
 
       {/* Cabeçalho do Cliente */}
-      <Stack spacing={2} alignItems="center" sx={{ zIndex: 1, mb: 12 }}>
+      <Stack spacing={2} alignItems="center" sx={{ zIndex: 1, mb: 6, mt: -8 }}>
         <Box
           sx={{
-            width: '160px',
-            height: '160px',
-            border: '2px solid #E2E8F0',
-            borderRadius: '32px',
+            width: '140px',
+            height: '140px',
+            border: '1px solid #E2E8F0',
+            borderRadius: '28px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            mb: 2,
+            mb: 1.5,
             backgroundColor: '#F8FAFC',
             overflow: 'hidden',
-            padding: logoUrl ? 2 : 0
+            padding: logoUrl ? 1.5 : 0,
+            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
           }}
         >
           {logoUrl ? (
             <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
-              <Image 
-                src={logoUrl} 
-                alt={clientName} 
-                fill 
+              <Image
+                src={logoUrl}
+                alt={clientName}
+                fill
                 style={{ objectFit: 'contain' }}
               />
             </Box>
           ) : (
-            <Typography variant="h2" fontWeight="900" color="#E2E8F0">
+            <Typography variant="h2" fontWeight="900" color="#CBD5E1">
               {clientName.substring(0, 1).toUpperCase()}
             </Typography>
           )}
         </Box>
-        <Typography variant="h6" sx={{ letterSpacing: 4, fontWeight: 700, color: '#64748B' }}>
+        <Typography variant="subtitle1" sx={{ letterSpacing: 3, fontWeight: 700, color: '#64748B' }}>
           {clientName.toUpperCase()}
         </Typography>
       </Stack>
 
       {/* Título Principal */}
-      <Box sx={{ textAlign: 'center', zIndex: 1, maxWidth: '80%' }}>
+      <Box sx={{ textAlign: 'center', zIndex: 1, maxWidth: '85%', mt: 4 }}>
         <Typography
           variant="h2"
           fontWeight="900"
           sx={{
             lineHeight: 1.1,
-            mb: 2,
-            letterSpacing: '-0.04em',
-            fontSize: '3.5rem'
+            mb: 1.5,
+            letterSpacing: '-0.03em',
+            fontSize: '3.8rem',
+            color: '#0F172A'
           }}
         >
-          {reportType === 'LIVRO' ? 'Manual de Produção e Livro de Receitas' : 'Catálogo Nutricional e Identidade de Rotulagem'}
+          {reportType === 'LIVRO' ? 'Manual de Produção e Livro de Receitas' : 'Catálogo Nutricional'}
         </Typography>
-        <Box sx={{ width: '80px', height: '6px', backgroundColor: '#66c8c7', margin: '32px auto', borderRadius: 3 }} />
-        
+        <Box sx={{ width: '60px', height: '4px', backgroundColor: '#66c8c7', margin: '24px auto', borderRadius: 2 }} />
+
         {showComplianceInfo && reportType !== 'LIVRO' && (
-          <Typography variant="h5" color="text.secondary" fontWeight="500">
+          <Typography variant="h5" color="text.secondary" fontWeight="500" sx={{ lineHeight: 1.4 }}>
             Documentação Técnica em Conformidade com<br />
-            <strong>RDC 429/2020</strong> e <strong>RDC 727/2022</strong>
+            <strong>RDC 429/2020</strong>, <strong>IN 75/2020</strong> e <strong>RDC 727/2022</strong>
           </Typography>
         )}
       </Box>
@@ -145,8 +147,8 @@ export default function CapaRelatorio({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          borderTop: '1px solid #E2E8F0',
-          pt: 4,
+          borderTop: '1px solid #F1F5F9',
+          pt: 3,
           zIndex: 1
         }}
       >

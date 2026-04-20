@@ -84,15 +84,20 @@ O sistema ajusta a porção declarada automaticamente para evitar números quebr
 - Como 45g está dentro da tolerância de **70% a 130%** de 50g, o sistema ajusta a porção oficial para 45g.
 - Isso permite declarar "Porção de 45g (1 unidade)" em vez de "50g (1,1 unidades)".
 
-### 3.2. Transgênicos (Decreto 4.680/2003)
-Se um ingrediente é marcado como `is_transgenico`:
-- O sistema anexa automaticamente o símbolo `(transgênico*)` ao nome do ingrediente na lista.
-- Se houver `especie_doadora`, ela é listada entre parênteses (ex: "Milho transgênico* (doador: Bacillus thuringiensis)").
+### 3.2. Transgênicos (Decreto 4.680/2003 e Portaria MJ 2.658/2003)
+O sistema implementa o símbolo de transgênico de alta fidelidade:
+- **Ícone Técnico**: Triângulo equilátero amarelo com borda preta, contendo a letra "T" (Frutiger Bold) centralizada.
+- **Implementação Vetorial**: Utilização de `Path SVG` para garantir que o símbolo seja idêntico ao modelo oficial e não dependa de fontes do sistema.
+- **Regras de Nomeação**: O sistema anexa automaticamente o símbolo `(transgênico*)` ao nome do ingrediente na lista. Se houver `especie_doadora`, ela é listada entre parênteses.
 
 ### 3.3. Aditivos Alimentares (RDC 727)
 - Aditivos são agrupados por função tecnológica.
 - **Regra**: A função deve estar em CAIXA ALTA (ex: "CONSERVANTE: Sorbato de potássio (INS 202)").
 - **Exceção Tartrazina**: O nome "Tartrazina" deve ser explicitado, não apenas o INS.
+
+### 3.4. Atribuição de Marca (Livro de Receitas)
+- **Regra**: Todo insumo no Manual de Produção deve exibir sua respectiva marca para garantir a rastreabilidade lotérica e operacional.
+- **Implementação**: Uso de subscrito `Marca: [FONTE]` abaixo do nome do ingrediente.
 
 ---
 
@@ -105,6 +110,9 @@ Se um ingrediente é marcado como `is_transgenico`:
 | **Glúten** | A frase "CONTÉM GLÚTEN" está visível logo após os ingredientes? | Lei 10.674 |
 | **Lupa (FOP)** | O selo de "Alto em..." aparece se os limites da tabela `anvisa_limites_lupa` forem atingidos? | RDC 429, Art. 7 |
 | **Arredondamento** | Nutrientes como Sódio e Calorias seguem as casas decimais da `anvisa_regras_tabela`? | IN 75, Anexo IV |
+| **Hierarquia (RDC 727)** | A Denominação de Venda está no topo e o Peso Líquido ao final do bloco de declarações? | RDC 727/2022 |
+| **Ícone GMO** | O ícone 'T' está centralizado, sem texto 'Transgênico' abaixo e com geometria fiel ao oficial? | Portaria 2.658 |
+| **Marcas (Brand)** | Nos Manuais de Produção (Livro de Receitas), a marca do insumo (fonte) aparece como subscrito? | Rastreabilidade Interna |
 
 ---
 
@@ -116,4 +124,12 @@ Para atualizar o comportamento do sistema sem código:
 3.  **Configuração de Medida**: Ajuste `medida_caseira_peso_g` na receita para disparar a harmonização automática.
 
 ---
-*Este documento segue o padrão premium de documentação técnica do projeto NutriDev.*
+## 6. Backlog de Evolução Regulatória (Ideias para Validação)
+
+> [!IMPORTANT]
+> **Automação Inteligente de Glúten (Lei 10.674/2003)**
+> - **Objetivo**: Automatizar a advertência "CONTÉM GLÚTEN" baseada em dois fatores:
+>   1. **Composição Direta**: Se o ingrediente possuir 'Trigo', 'Centeio', 'Cevada' ou 'Aveia' na sua origem.
+>   2. **Contaminação Cruzada**: Se a receita ou o local de produção possuir risco de contato com glúten (mesmo que o produto em si não leve ingredientes com glúten).
+> - **Regra de Negócio a Validar**: O sistema deve herdar essa flag de forma recursiva (se uma sub-receita "contém", a receita final obrigatoriamente "contém").
+> - **Impacto**: Redução de erro humano em auditorias regulatórias.

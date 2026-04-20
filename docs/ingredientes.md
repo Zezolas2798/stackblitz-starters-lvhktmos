@@ -4,15 +4,19 @@ titulo: "Ingredientes e Matérias-Primas"
 tipo: domain
 modulo: ingredientes
 status: auditado
-ultima_revisao: 2026-04-15
+layer: application
+nature: hub
+veracidade: high
+convicção: high
+ultima_revisao: 2026-04-20
 tags:
   - dominio/ingredientes
   - entidade/ingrediente
   - entidade/alergenico
   - entidade/grupo-ingrediente
   - policy/multi-tenant
+  - policy/rls-hardened
   - policy/soft-delete
-  - policy/lactose-omissao
   - norma/rdc727
   - norma/decreto4680
 edges:
@@ -22,17 +26,12 @@ edges:
   - alimenta: "[[fichas_tecnicas_industrial]]"
   - alimenta: "[[fichas_tecnicas_uan]]"
   - processado_por: "supabase/functions/calcular-nutrientes/index.ts"
-codigo_relacionado:
-  - app/ingredientes/page.tsx
-  - app/ingredientes/[id]/editar/page.tsx
-  - app/ingredientes/novo/page.tsx
-  - supabase/functions/calcular-nutrientes/index.ts
-  - lib/types.ts
+  - integra: "[[modulo.estoque]]"
 ---
 
-# Ingredientes e Matérias-Primas
+# Cadastro de Ingredientes
 
-Este documento é a **Fonte Canônica** do módulo de Ingredientes. Unifica regras de negócio, modelo de dados, interface do usuário e implementação técnica em um único local de referência.
+Este documento define o "Master Data" dos insumos. Para informações sobre **Estoque (Saldos, Lotes e Validades)**, consulte o documento especializado **[[modulo.estoque]]**.
 
 ---
 
@@ -100,7 +99,12 @@ graph TD
 
 **A. Isolamento Sistêmico (Quem Vê O Quê):**
 1. **Ingrediente de Sistema**: Campo `cliente_id` é `NULL`. Visível para todos, porém *Read-Only*. Apenas Super Admins gerenciam.
-2. **Ingrediente Customizado (Tenant)**: Campo `cliente_id` atrelado ao Tenant. Apenas o próprio cliente vê e edita.
+2. **Ingrediente Customizado (Tenant)**: Campo `cliente_id` atrelado ao Tenant. Apenas o próprio cliente vê e edita. **Protegido por RLS.**
+
+> **Implementação Técnica (Supabase RLS):**
+> 
+> O isolamento é garantido por políticas que verificam o `cliente_id` do registro contra os memberships do usuário autenticado:
+> `USING (cliente_id IN (SELECT m.cliente_id FROM app_user_memberships m WHERE m.usuario_id = auth.uid()))`
 
 **B. Origem da Tabela Nutricional:**
 1. **Fontes Oficiais (TACO / TBCA)**: Insumo puro → dados de `referencias_nutricionais`. Imutável.

@@ -142,13 +142,13 @@ export default function EntradaEstoquePage() {
   // Helper para filtrar locais em todos os fluxos
   const getFilteredLocais = (categoriaId?: string) => {
     return locaisDisponiveis.filter(loc => {
-      if (!loc.categorias_permitidas || loc.categorias_permitidas.length === 0) return true;
-      if (loc.categorias_permitidas.includes(categoriaPrincipal)) return true;
-      if (categoriaId && loc.categorias_permitidas.includes(categoriaId)) return true;
+      if (!loc.grupos_permitidos_ids || loc.grupos_permitidos_ids.length === 0) return true;
+      if (loc.grupos_permitidos_ids.includes(categoriaPrincipal)) return true;
+      if (categoriaId && loc.grupos_permitidos_ids.includes(categoriaId)) return true;
       
       // Compatibilidade manual (Legado)
       const targetCat = categoriasDisponiveis.find(c => c.nome === (categoria || (ingredienteSelecionado?.nome)));
-      if (targetCat && loc.categorias_permitidas.includes(targetCat.id)) return true;
+      if (targetCat && loc.grupos_permitidos_ids.includes(targetCat.id)) return true;
       
       return false;
     });
@@ -165,8 +165,8 @@ export default function EntradaEstoquePage() {
     
     // Filtragem por categoria nas previsões
     let query = (supabase as any)
-      .from('lotes_estoque')
-      .select('*, ingredientes(nome, categoria_produto_id), materiais(nome, tipo_material, categoria_id), fornecedores(razao_social)')
+      .from('estoque_lotes')
+      .select('*, ingredientes(nome, grupo_id), materiais(nome, tipo_material, categoria_id), fornecedores(razao_social)')
       .eq('unidade_id', unidadeId!)
       .eq('status', 'PREVISTO')
       .is('deleted_at', null);
@@ -213,7 +213,7 @@ export default function EntradaEstoquePage() {
     const itensNf = previsoes.filter(p => (p.nota_fiscal || 'Sem NF') === nf);
     // Inicializa o estado de conferência com os dados que já temos, permitindo edição
     setItensConferencia(itensNf.map(item => {
-       const catId = item.ingredientes?.categoria_produto_id || item.materiais?.categoria_id;
+       const catId = item.ingredientes?.grupo_id || item.materiais?.categoria_id;
        const permitidos = getFilteredLocais(catId);
        const hasSpecificLocal = permitidos.length === 1;
  
@@ -267,7 +267,7 @@ export default function EntradaEstoquePage() {
 
       if (item.id.toString().startsWith('clone-')) {
         // INSERÇÃO (Clone)
-        const { error } = await (supabase as any).from('lotes_estoque').insert({
+        const { error } = await (supabase as any).from('estoque_lotes').insert({
           unidade_id: item.unidade_id,
           ingrediente_id: item.ingrediente_id || null,
           material_id: item.material_id || null,
@@ -290,7 +290,7 @@ export default function EntradaEstoquePage() {
         if (error) throw error;
       } else {
         // ATUALIZAÇÃO (Original)
-        const { error } = await (supabase as any).from('lotes_estoque').update({
+        const { error } = await (supabase as any).from('estoque_lotes').update({
           status: 'APROVADO',
           numero_lote_fabricante: item.loteEdit,
           registro_sif: item.sifEdit,
@@ -345,7 +345,7 @@ export default function EntradaEstoquePage() {
 
         if (item.id.toString().startsWith('clone-')) {
           // INSERÇÃO (Clone)
-          const { error } = await (supabase as any).from('lotes_estoque').insert({
+          const { error } = await (supabase as any).from('estoque_lotes').insert({
             unidade_id: item.unidade_id,
             ingrediente_id: item.ingrediente_id || null,
             material_id: item.material_id || null,
@@ -368,7 +368,7 @@ export default function EntradaEstoquePage() {
           if (error) throw error;
         } else {
           // ATUALIZAÇÃO (Original)
-          const { error } = await (supabase as any).from('lotes_estoque').update({
+          const { error } = await (supabase as any).from('estoque_lotes').update({
             status: 'APROVADO',
             numero_lote_fabricante: item.loteEdit,
             registro_sif: item.sifEdit,
@@ -402,7 +402,7 @@ export default function EntradaEstoquePage() {
   useEffect(() => {
     if (activeTab === 0 && ingredienteSelecionado) {
       const catId = categoriaPrincipal === 'ALIMENTOS' 
-        ? ingredienteSelecionado.categoria_produto_id 
+        ? ingredienteSelecionado.grupo_id 
         : ingredienteSelecionado.categoria_id;
       
       const permitidos = getFilteredLocais(catId);
@@ -426,7 +426,7 @@ export default function EntradaEstoquePage() {
         if (!item.local && (item.ingrediente_id || item.material_id)) {
           let catId;
           if (item.ingrediente_id) {
-            catId = ingredientes.find(ing => ing.id === item.ingrediente_id)?.categoria_produto_id;
+            catId = ingredientes.find(ing => ing.id === item.ingrediente_id)?.grupo_id;
           } else {
             catId = materiais.find(mat => mat.id === item.material_id)?.categoria_id;
           }
@@ -497,7 +497,7 @@ export default function EntradaEstoquePage() {
 
     const { data: ingData } = await (supabase as any)
       .from('ingredientes')
-      .select('id, nome, fonte, peso_unitario_g, categoria_produto_id')
+      .select('id, nome, fonte, peso_unitario_g, grupo_id')
       .eq('cliente_id', clienteId)
       .is('deleted_at', null)
       .order('nome');
@@ -511,14 +511,14 @@ export default function EntradaEstoquePage() {
     if (matData) setMateriais(matData);
 
     const { data: locaisData } = await (supabase as any)
-      .from('cliente_locais_estoque')
+      .from('estoque_locais')
       .select('*')
       .eq('unidade_id', unidadeId)
       .order('nome');
     if (locaisData) setLocaisDisponiveis(locaisData);
 
     const { data: catData } = await (supabase as any)
-      .from('cliente_categorias_produto')
+      .from('grupos_produto')
       .select('*')
       .eq('cliente_id', clienteId)
       .order('nome');
@@ -1062,7 +1062,7 @@ export default function EntradaEstoquePage() {
                     <Select value={local} label="Destino" onChange={e => setLocal(e.target.value)}>
                       {getFilteredLocais(
                         categoriaPrincipal === 'ALIMENTOS' 
-                          ? ingredienteSelecionado?.categoria_produto_id 
+                          ? ingredienteSelecionado?.grupo_id 
                           : ingredienteSelecionado?.categoria_id
                       ).map((loc) => (
                         <MenuItem key={loc.id} value={loc.id}>
@@ -1237,7 +1237,7 @@ export default function EntradaEstoquePage() {
                             <MenuItem value="" disabled>Local...</MenuItem>
                             {getFilteredLocais(
                               item.ingrediente_id 
-                                ? ingredientes.find(ing => ing.id === item.ingrediente_id)?.categoria_produto_id
+                                ? ingredientes.find(ing => ing.id === item.ingrediente_id)?.grupo_id
                                 : materiais.find(mat => mat.id === item.material_id)?.categoria_id
                             ).map(loc => (
                               <MenuItem key={loc.id} value={loc.id}>{loc.nome}</MenuItem>
@@ -1444,7 +1444,7 @@ export default function EntradaEstoquePage() {
                               }}
                             >
                                {getFilteredLocais(
-                                 item.ingredientes?.categoria_produto_id || item.materiais?.categoria_id
+                                 item.ingredientes?.grupo_id || item.materiais?.categoria_id
                                ).map(loc => (
                                  <MenuItem key={loc.id} value={loc.id}>{loc.nome}</MenuItem>
                                ))}
@@ -1592,5 +1592,6 @@ export default function EntradaEstoquePage() {
     </Container>
   );
 }
+
 
 

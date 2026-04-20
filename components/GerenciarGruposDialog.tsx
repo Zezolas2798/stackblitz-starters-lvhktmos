@@ -54,7 +54,7 @@ export default function GerenciarGruposDialog({ open, onClose, clienteId }: Gere
     try {
       // Fetch all groups for this client
       const { data: gruposData, error: gruposError } = await (supabase as any)
-        .from('ingredientes_grupos')
+        .from('subgrupos_produto')
         .select('id, nome')
         .eq('cliente_id', clienteId)
         .order('nome');
@@ -66,7 +66,7 @@ export default function GerenciarGruposDialog({ open, onClose, clienteId }: Gere
         const { count, error: countError } = await (supabase as any)
           .from('ingredientes')
           .select('*', { count: 'exact', head: true })
-          .eq('grupo_estoque_id', grupo.id);
+          .eq('subgrupo_id', grupo.id);
           
         if (countError) throw countError;
         
@@ -96,7 +96,7 @@ export default function GerenciarGruposDialog({ open, onClose, clienteId }: Gere
     if (!editName.trim()) return;
     try {
       const { error } = await (supabase as any)
-        .from('ingredientes_grupos')
+        .from('subgrupos_produto')
         .update({ nome: editName.trim() })
         .eq('id', id);
 
@@ -113,7 +113,7 @@ export default function GerenciarGruposDialog({ open, onClose, clienteId }: Gere
     if (!confirm('Tem certeza que deseja excluir este grupo?')) return;
     try {
       const { error } = await (supabase as any)
-        .from('ingredientes_grupos')
+        .from('subgrupos_produto')
         .delete()
         .eq('id', id);
 

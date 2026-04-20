@@ -88,8 +88,8 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
     }, [open, lote, activeClientId]);
 
     const fetchLocais = async (unidadeId: string) => {
-        const { data } = await (supabase as any).from('cliente_locais_estoque')
-            .select('id, nome, categorias_permitidas')
+        const { data } = await (supabase as any).from('estoque_locais')
+            .select('id, nome, grupos_permitidos_ids')
             .eq('unidade_id', unidadeId)
             .eq('ativo', true)
             .order('nome');
@@ -97,14 +97,14 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
     };
 
     const fetchCategorias = async (clienteId: string) => {
-        const { data } = await (supabase as any).from('cliente_categorias_produto')
+        const { data } = await (supabase as any).from('grupos_produto')
             .select('id, nome, modalidade')
             .eq('cliente_id', clienteId);
         if (data) setCategoriasDb(data || []);
     };
 
     const fetchSetores = async (clienteId: string) => {
-        const { data } = await (supabase as any).from('cliente_setores_producao')
+        const { data } = await (supabase as any).from('setores_producao')
             .select('id, nome')
             .eq('cliente_id', clienteId)
             .order('nome');
@@ -194,7 +194,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
 
             if (isTransferencia && destinoLocalId) {
                 // Tenta encontrar um lote identico no destino
-                const { data: lotesSimilares, error: errBusca } = await (supabase as any).from('lotes_estoque')
+                const { data: lotesSimilares, error: errBusca } = await (supabase as any).from('estoque_lotes')
                     .select('*')
                     .eq('unidade_id', lote.unidade_id)
                     .eq('ingrediente_id', lote.ingrediente_id)
@@ -219,7 +219,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                         updateDestinoPayload.qtd_embalagens = loteExistente.qtd_embalagens + embalagensParaAbater;
                     }
 
-                    const { error: erroUpdateDestino } = await (supabase as any).from('lotes_estoque')
+                    const { error: erroUpdateDestino } = await (supabase as any).from('estoque_lotes')
                         .update(updateDestinoPayload)
                         .eq('id', loteExistente.id);
 
@@ -237,7 +237,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                     }
 
                     // Retira do lote de origem
-                    const { error: erroLoteOrigem } = await (supabase as any).from('lotes_estoque')
+                    const { error: erroLoteOrigem } = await (supabase as any).from('estoque_lotes')
                         .update(updateOrigem)
                         .eq('id', lote.id);
 
@@ -255,14 +255,14 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                         updatePayload.qtd_embalagens = lote.qtd_embalagens;
                     }
 
-                    const { error: erroLote } = await (supabase as any).from('lotes_estoque')
+                    const { error: erroLote } = await (supabase as any).from('estoque_lotes')
                         .update(updatePayload)
                         .eq('id', lote.id);
                     if (erroLote) throw erroLote;
 
                 } else {
                     // Não é transferência total, então primeiro atualizamos (subtraímos) do lote base
-                    const { error: erroLote } = await (supabase as any).from('lotes_estoque')
+                    const { error: erroLote } = await (supabase as any).from('estoque_lotes')
                         .update(updatePayload)
                         .eq('id', lote.id);
                     if (erroLote) throw erroLote;
@@ -289,7 +289,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                             qtd_embalagens: modoMovimentacao === 'EMBALAGEM' ? embalagensParaAbater : null
                         };
 
-                        const { error: errorNovoLote } = await (supabase as any).from('lotes_estoque')
+                        const { error: errorNovoLote } = await (supabase as any).from('estoque_lotes')
                             .insert(novoLotePayload);
 
                         if (errorNovoLote) throw errorNovoLote;
@@ -402,7 +402,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                                 <List disablePadding>
                                     {locais.filter(l => {
                                         if (l.nome === lote?.local_armazenamento) return false;
-                                        if (!l.categorias_permitidas || l.categorias_permitidas.length === 0) return true;
+                                        if (!l.grupos_permitidos_ids || l.grupos_permitidos_ids.length === 0) return true;
 
                                         // Determinar modalidade do lote
                                         let mod = 'ALIMENTOS';
@@ -418,11 +418,11 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
                                         }
 
                                         // 1. Checar modalidade genérica
-                                        if (l.categorias_permitidas.includes(mod)) return true;
+                                        if (l.grupos_permitidos_ids.includes(mod)) return true;
 
                                         // 2. Checar categoria específica
                                         const catObj = categoriasDb.find(c => c.nome === lote.categoria_produto);
-                                        if (catObj && l.categorias_permitidas.includes(catObj.id)) return true;
+                                        if (catObj && l.grupos_permitidos_ids.includes(catObj.id)) return true;
 
                                         return false;
                                     }).map(local => {
@@ -626,6 +626,7 @@ export default function MovimentacaoEstoqueDialog({ open, onClose, lote, onSucce
         </Dialog>
     );
 }
+
 
 
 

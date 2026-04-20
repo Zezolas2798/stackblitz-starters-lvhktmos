@@ -59,7 +59,7 @@ export default function ControleProducaoPage() {
         try {
             // 1. Pegar TODOS os equipamentos do grupo Temperaturas do cliente
             const equipsPromise = (supabase as any)
-                .from('cliente_equipamentos_config')
+                .from('equipamentos_config')
                 .select(`
                     id, 
                     nome, 
@@ -69,10 +69,10 @@ export default function ControleProducaoPage() {
                     temp_ideal_min,
                     temp_ideal_max,
                     horarios_afericao,
-                    parent:cliente_equipamentos_config!parent_id(id, nome),
-                    locais:cliente_locais_estoque(id, nome)
+                    parent:equipamentos_config!parent_id(id, nome),
+                    locais:estoque_locais(id, nome)
                 `)
-                .eq('cliente_id', activeClientId)
+                .eq('unidade_id', ctxUnidadeId)
                 .eq('grupo', 'Temperaturas')
                 .not('parent_id', 'is', null);
 
@@ -90,7 +90,7 @@ export default function ControleProducaoPage() {
 
             // 3. Pegar registros já existentes no Banco para a data
             const logsPromise = (supabase as any)
-                .from('cliente_controle_temperatura')
+                .from('controle_temperatura')
                 .select('*')
                 .eq('data', dataFiltro)
                 .eq('unidade_id', ctxUnidadeId);
@@ -209,7 +209,7 @@ export default function ControleProducaoPage() {
             }
 
             const { error } = await (supabase as any)
-                .from('cliente_controle_temperatura')
+                .from('controle_temperatura')
                 .upsert(upsertData, { onConflict: 'equipamento_id, data, periodo' });
 
             if (error) throw error;
@@ -518,3 +518,4 @@ export default function ControleProducaoPage() {
         </Container>
     );
 }
+

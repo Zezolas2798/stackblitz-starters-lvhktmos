@@ -110,19 +110,19 @@ export default function EditarIngredientePage() {
         vitamina_b1_mg: null, vitamina_b2_mg: null, vitamina_b3_mg: null,
         vitamina_b5_mg: null, vitamina_b6_mg: null, vitamina_b7_mcg: null,
         vitamina_b9_mcg: null, vitamina_b12_mcg: null,
-        categoria_produto_id: null,
+        grupo_id: null,
 
         // Minerais Completos
         calcio_mg: null, ferro_mg: null,
         magnesio_mg: null, fosforo_mg: null, potassio_mg: null, zinco_mg: null,
         cobre_mcg: null, selenio_mcg: null, iodo_mcg: null, manganes_mg: null,
         fluor_mg: null, cromo_mcg: null, molibdenio_mcg: null, cloreto_mg: null,
-        grupo_estoque_id: null,
+        subgrupo_id: null,
         classificacao_nova: null
     });
 
     const [alergenosSelecionados, setAlergenosSelecionados] = useState<AlergenicoTag[]>([]);
-    const [todosGrupos, setTodosGrupos] = useState<{id: string, nome: string, categoria_id: string | null}[]>([]);
+    const [todosGrupos, setTodosGrupos] = useState<{id: string, nome: string, grupo_id: string | null}[]>([]);
     const [opcoesGrupos, setOpcoesGrupos] = useState<{id: string, nome: string}[]>([]);
 
     // Carrega Ingrediente + Dados Mestres
@@ -144,13 +144,13 @@ export default function EditarIngredientePage() {
 
             let categorias: any[] = [];
             if (activeClientId) {
-                const { data: catData } = await supabase.from('cliente_categorias_produto').select('id, nome').eq('cliente_id', activeClientId).eq('modalidade', 'ALIMENTOS').order('nome');
+                const { data: catData } = await supabase.from('grupos_produto').select('id, nome').eq('cliente_id', activeClientId).eq('modalidade', 'ALIMENTOS').order('nome');
                 if (catData) {
                     setCategoriasMestre(catData);
                     categorias = catData;
                 }
                 
-                const { data: grpData } = await (supabase as any).from('ingredientes_grupos').select('id, nome, categoria_id').eq('cliente_id', activeClientId).order('nome');
+                const { data: grpData } = await (supabase as any).from('subgrupos_produto').select('id, nome, grupo_id').eq('cliente_id', activeClientId).order('nome');
                 if (grpData) setTodosGrupos(grpData);
             }
 
@@ -169,11 +169,11 @@ export default function EditarIngredientePage() {
                         tipo_ingrediente: ing.tipo_ingrediente as TipoIngrediente,
                         contem_gluten: !!ing.contem_gluten,
                         is_transgenico: !!ing.is_transgenico,
-                        categoria_produto_id: ing.categoria_produto_id || null
+                        grupo_id: ing.grupo_id || null
                     } as Partial<Ingrediente>);
 
-                    if (ing.categoria_produto_id) {
-                        const cat = categorias.find(c => c.id === ing.categoria_produto_id);
+                    if (ing.grupo_id) {
+                        const cat = categorias.find(c => c.id === ing.grupo_id);
                         if (cat) setCategoriaValue(cat);
                     }
 
@@ -209,7 +209,7 @@ export default function EditarIngredientePage() {
     useEffect(() => {
         if (categoriaValue?.id) {
             // Filtragem estrita: apenas grupos vinculados a esta categoria
-            const filtrados = todosGrupos.filter(g => g.categoria_id === categoriaValue.id);
+            const filtrados = todosGrupos.filter(g => g.grupo_id === categoriaValue.id);
             setOpcoesGrupos(filtrados);
         } else {
             setOpcoesGrupos([]);
@@ -223,7 +223,7 @@ export default function EditarIngredientePage() {
         } else if (
             field !== 'nome' && field !== 'fonte' && field !== 'tipo_ingrediente' &&
             field !== 'funcao_aditivo' && field !== 'ins_code' && field !== 'declaracao_ingredientes_fornecedor' &&
-            field !== 'classificacao_nova' && field !== 'categoria_produto_id' && field !== 'grupo_estoque_id'
+            field !== 'classificacao_nova' && field !== 'grupo_id' && field !== 'subgrupo_id'
         ) {
             const num = Number(value);
             if (!isNaN(num)) finalValue = num;
@@ -290,9 +290,9 @@ export default function EditarIngredientePage() {
                 payload.transgenicos = [];
             }
 
-            // Garantir que categoria_produto_id esteja correto se categoriaValue foi selecionado
+            // Garantir que grupo_id esteja correto se categoriaValue foi selecionado
             if (categoriaValue?.id) {
-                payload.categoria_produto_id = categoriaValue.id;
+                payload.grupo_id = categoriaValue.id;
             }
 
             // Remover campos que não devem ser enviados ou que são objetos
@@ -468,7 +468,7 @@ export default function EditarIngredientePage() {
                                     value={categoriaValue}
                                     onChange={(_, val) => {
                                         setCategoriaValue(val);
-                                        handleChange('grupo_estoque_id', null);
+                                        handleChange('subgrupo_id', null);
                                     }}
                                     getOptionLabel={(option) => option.nome || ''}
                                     renderInput={(params) => <TextField {...params} label="Categoria de Produto" placeholder="Ex: Grãos, Proteínas, Temperos..." />}
@@ -484,7 +484,7 @@ export default function EditarIngredientePage() {
                                     freeSolo
                                     options={opcoesGrupos}
                                     getOptionLabel={(option: any) => typeof option === 'string' ? option : option.nome}
-                                    value={opcoesGrupos.find(g => g.id === formData.grupo_estoque_id) || null}
+                                    value={opcoesGrupos.find(g => g.id === formData.subgrupo_id) || null}
                                     onChange={async (_, newValue) => {
                                         if (typeof newValue === 'string') {
                                             // Handle free text (new group)
@@ -495,16 +495,16 @@ export default function EditarIngredientePage() {
                                             }
                                             try {
                                                 setLoading(true);
-                                                const { data, error } = await (supabase as any).from('ingredientes_grupos')
+                                                const { data, error } = await (supabase as any).from('subgrupos_produto')
                                                     .insert([{
                                                         cliente_id: activeClientId,
-                                                        categoria_id: categoriaValue.id,
+                                                        grupo_id: categoriaValue.id,
                                                         nome: newValue
                                                     }])
                                                     .select().single();
                                                 if (error) throw error;
                                                 setTodosGrupos(prev => [...prev, data]);
-                                                handleChange('grupo_estoque_id', data.id);
+                                                handleChange('subgrupo_id', data.id);
                                             } catch (err: any) {
                                                 console.error('Erro ao criar grupo:', err);
                                                 alert('Erro ao criar grupo de estoque.');
@@ -512,9 +512,9 @@ export default function EditarIngredientePage() {
                                                 setLoading(false);
                                             }
                                         } else if (newValue && newValue.id) {
-                                            handleChange('grupo_estoque_id', newValue.id);
+                                            handleChange('subgrupo_id', newValue.id);
                                         } else {
-                                            handleChange('grupo_estoque_id', null);
+                                            handleChange('subgrupo_id', null);
                                         }
                                     }}
                                     renderInput={(params) => <TextField {...params} label="Grupo de Estoque (Para Agrupar Marcas)" placeholder="Ex: Farinha de Trigo" helperText="Opcional. Agrupa produtos que compartilham o mesmo estoque." />}

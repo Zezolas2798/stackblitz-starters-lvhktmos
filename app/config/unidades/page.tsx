@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { 
   Building2, MapPin, Plus, Search, Edit2, Trash2, 
-  CheckCircle2, X, Save, ShieldCheck, Info
+  CheckCircle2, X, Save, ShieldCheck, Info, RefreshCcw
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -36,8 +36,71 @@ export default function UnidadesPage() {
     endereco_completo: '',
     responsavel_tecnico_nome: '',
     responsavel_tecnico_registro: '',
-    ativo: true
+    ativo: true,
+    cep: '',
+    cnaes: [] as any[]
   });
+
+  const [searchingCnpj, setSearchingCnpj] = useState(false);
+
+  const handleBuscarCnpj = async () => {
+    const rawCnpj = formData.cnpj_completo || '';
+    const cnpj = rawCnpj.trim().replace(/\D/g, '');
+    
+    if (cnpj.length !== 14) {
+      alert('Informe um CNPJ válido com 14 dígitos completos para a unidade.');
+      return;
+    }
+
+    const url = `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`;
+    console.log('[DEBUG] Brasil API - Iniciando busca:', url);
+
+    setSearchingCnpj(true);
+    try {
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[DEBUG] Brasil API - Resposta Erro:', response.status, errorText);
+        throw new Error(`Servidor retornou status ${response.status}. Certifique-se que o CNPJ existe.`);
+      }
+      
+      const data = await response.json();
+      console.log('[DEBUG] Brasil API - Sucesso:', data);
+      
+      // Formata endereço completo
+      const logradouro = data.logradouro || '';
+      const numero = data.numero || 'S/N';
+      const complemento = data.complemento ? `, ${data.complemento}` : '';
+      const bairro = data.bairro || '';
+      const cidade = data.municipio || '';
+      const uf = data.uf || '';
+      const cep = data.cep || '';
+
+      const endereco = `${logradouro}, ${numero}${complemento}, ${bairro}, ${cidade}/${uf} - CEP: ${cep}`;
+      const cnae = data.cnae_fiscal_descricao || '';
+
+      const listCnaes = [
+        { codigo: data.cnae_fiscal, descricao: data.cnae_fiscal_descricao, principal: true },
+        ...(data.cnaes_secundarios || []).map((s: any) => ({ ...s, principal: false }))
+      ];
+
+      setFormData(prev => ({
+        ...prev,
+        endereco_completo: endereco,
+        cnae_principal: cnae,
+        cep: cep,
+        cnaes: listCnaes,
+        nome_unidade: prev.nome_unidade || data.nome_fantasia || data.razao_social
+      }));
+
+    } catch (err: any) {
+      console.error('[DEBUG] Brasil API - Erro de Fetch:', err);
+      alert(`Erro na busca: ${err.message}\n\nIsso pode ser um problema de conexão ou bloqueio do navegador. Verifique o console (F12) para detalhes.`);
+    } finally {
+      setSearchingCnpj(false);
+    }
+  };
 
   useEffect(() => {
     if (activeClientId) loadUnidades();
@@ -70,7 +133,9 @@ export default function UnidadesPage() {
         endereco_completo: unidade.endereco_completo || '',
         responsavel_tecnico_nome: unidade.responsavel_tecnico_nome || '',
         responsavel_tecnico_registro: unidade.responsavel_tecnico_registro || '',
-        ativo: unidade.ativo
+        ativo: unidade.ativo ?? true,
+        cep: unidade.cep || '',
+        cnaes: unidade.cnaes || []
       });
     } else {
       setEditingId(null);
@@ -81,7 +146,9 @@ export default function UnidadesPage() {
         endereco_completo: '',
         responsavel_tecnico_nome: '',
         responsavel_tecnico_registro: '',
-        ativo: true
+        ativo: true,
+        cep: '',
+        cnaes: []
       });
     }
     setOpen(true);
@@ -311,6 +378,22 @@ export default function UnidadesPage() {
                     placeholder="00.000.000/0000-00"
                     value={formData.cnpj_completo}
                     onChange={(e) => setFormData({...formData, cnpj_completo: e.target.value})}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Tooltip title="Sincronizar com Brasil API">
+                            <IconButton 
+                              onClick={handleBuscarCnpj} 
+                              disabled={searchingCnpj}
+                              size="small"
+                              color="primary"
+                            >
+                              {searchingCnpj ? <CircularProgress size={16} /> : <RefreshCcw size={16} />}
+                            </IconButton>
+                          </Tooltip>
+                        </InputAdornment>
+                      )
+                    }}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>
@@ -321,6 +404,24 @@ export default function UnidadesPage() {
                     onChange={(e) => setFormData({...formData, cnae_principal: e.target.value})}
                   />
                 </Grid>
+
+                {formData.cnaes && formData.cnaes.length > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="text.secondary" fontWeight="bold">Outros CNAES:</Typography>
+                    <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {formData.cnaes.map((c: any, idx: number) => (
+                        <Tooltip key={idx} title={c.descricao}>
+                          <Chip 
+                            label={`${c.codigo}${c.principal ? ' (Principal)' : ''}`} 
+                            size="small" 
+                            variant={c.principal ? "filled" : "outlined"}
+                            color={c.principal ? "primary" : "default"}
+                          />
+                        </Tooltip>
+                      ))}
+                    </Box>
+                  </Grid>
+                )}
               </Grid>
             </Grid>
 

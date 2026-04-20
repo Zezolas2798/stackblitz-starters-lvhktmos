@@ -1,4 +1,4 @@
-﻿-- WARNING: This schema is for context only and is not meant to be run.
+-- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
 CREATE TABLE public.acoes_corretivas (
@@ -261,7 +261,7 @@ CREATE TABLE public.cliente_categorias_produto (
   CONSTRAINT cliente_categorias_produto_pkey PRIMARY KEY (id),
   CONSTRAINT cliente_categorias_produto_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id)
 );
-CREATE TABLE public.cliente_locais_estoque (
+CREATE TABLE public.cliente_estoque_locais (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   unidade_id uuid NOT NULL,
   nome text NOT NULL,
@@ -270,9 +270,9 @@ CREATE TABLE public.cliente_locais_estoque (
   temp_alvo_max numeric,
   ativo boolean DEFAULT true,
   cliente_id uuid,
-  CONSTRAINT cliente_locais_estoque_pkey PRIMARY KEY (id),
-  CONSTRAINT locais_estoque_unidade_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
-  CONSTRAINT cliente_locais_estoque_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id)
+  CONSTRAINT cliente_estoque_locais_pkey PRIMARY KEY (id),
+  CONSTRAINT estoque_locais_unidade_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
+  CONSTRAINT cliente_estoque_locais_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id)
 );
 CREATE TABLE public.cliente_setores_producao (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -422,7 +422,7 @@ CREATE TABLE public.estoque_lotes (
   valor_unitario numeric,
   CONSTRAINT estoque_lotes_pkey PRIMARY KEY (id),
   CONSTRAINT estoque_lotes_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
-  CONSTRAINT estoque_lotes_local_estoque_id_fkey FOREIGN KEY (local_estoque_id) REFERENCES public.cliente_locais_estoque(id),
+  CONSTRAINT estoque_lotes_local_estoque_id_fkey FOREIGN KEY (local_estoque_id) REFERENCES public.cliente_estoque_locais(id),
   CONSTRAINT estoque_lotes_ingrediente_id_fkey FOREIGN KEY (ingrediente_id) REFERENCES public.ingredientes(id),
   CONSTRAINT estoque_lotes_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id)
 );
@@ -554,7 +554,7 @@ CREATE TABLE public.iot_etiquetas_impressas (
   data_impressao timestamp with time zone DEFAULT now(),
   CONSTRAINT iot_etiquetas_impressas_pkey PRIMARY KEY (id),
   CONSTRAINT iot_etiquetas_impressas_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
-  CONSTRAINT iot_etiquetas_impressas_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.ordens_producao(id)
+  CONSTRAINT iot_etiquetas_impressas_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.producao_ordens(id)
 );
 CREATE TABLE public.normas_sanitarias_parametros (
   id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -613,7 +613,7 @@ CREATE TABLE public.operacao_tarefas (
   CONSTRAINT operacao_tarefas_criado_por_fkey FOREIGN KEY (criado_por) REFERENCES auth.users(id),
   CONSTRAINT operacao_tarefas_assinatura_obrigatoria_id_fkey FOREIGN KEY (assinatura_obrigatoria_id) REFERENCES public.app_roles(id)
 );
-CREATE TABLE public.ordens_producao (
+CREATE TABLE public.producao_ordens (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   unidade_id uuid NOT NULL,
   receita_versao_id uuid NOT NULL,
@@ -625,7 +625,7 @@ CREATE TABLE public.ordens_producao (
   responsavel_producao_id uuid,
   status text DEFAULT 'EM_ANDAMENTO'::text,
   cliente_id uuid,
-  CONSTRAINT ordens_producao_pkey PRIMARY KEY (id),
+  CONSTRAINT producao_ordens_pkey PRIMARY KEY (id),
   CONSTRAINT producao_registros_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
   CONSTRAINT producao_registros_receita_versao_id_fkey FOREIGN KEY (receita_versao_id) REFERENCES public.receitas_versoes(id),
   CONSTRAINT producao_registros_responsavel_producao_id_fkey FOREIGN KEY (responsavel_producao_id) REFERENCES auth.users(id),
@@ -646,7 +646,7 @@ CREATE TABLE public.producao_consumos (
   quantidade_utilizada numeric NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT producao_consumos_pkey PRIMARY KEY (id),
-  CONSTRAINT producao_consumos_producao_id_fkey FOREIGN KEY (producao_id) REFERENCES public.ordens_producao(id),
+  CONSTRAINT producao_consumos_producao_id_fkey FOREIGN KEY (producao_id) REFERENCES public.producao_ordens(id),
   CONSTRAINT producao_consumos_estoque_lote_id_fkey FOREIGN KEY (estoque_lote_id) REFERENCES public.estoque_lotes(id)
 );
 CREATE TABLE public.producao_perdas (
@@ -662,7 +662,7 @@ CREATE TABLE public.producao_perdas (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT producao_perdas_pkey PRIMARY KEY (id),
   CONSTRAINT producao_perdas_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
-  CONSTRAINT producao_perdas_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.ordens_producao(id),
+  CONSTRAINT producao_perdas_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.producao_ordens(id),
   CONSTRAINT producao_perdas_estoque_lote_id_fkey FOREIGN KEY (estoque_lote_id) REFERENCES public.estoque_lotes(id)
 );
 CREATE TABLE public.profiles (
@@ -759,21 +759,21 @@ CREATE TABLE public.user_units (
   CONSTRAINT user_units_unit_id_fkey FOREIGN KEY (unit_id) REFERENCES public.units(id)
 );
 
--- ADICIONADO PELA FASE 2: WMS, ESTOQUE E CHÃO DE FÁBRICA
+-- ADICIONADO PELA FASE 2: WMS, ESTOQUE E CH�O DE F�BRICA
 
 
 -- ==========================================
--- FASE 2: WMS, ESTOQUE E CHÃƒO DE FÃBRICA
+-- FASE 2: WMS, ESTOQUE E CHÃO DE FÁBRICA
 -- Sistema: NutriDev Manager GxP
 -- Objetivo: Conformidade RDC 216 e RDC 429
 -- ==========================================
 
--- 1. CriaÃ§Ã£o de Enums de Status
+-- 1. Criação de Enums de Status
 CREATE TYPE status_lote_estoque AS ENUM ('PREVISTO', 'QUARENTENA', 'APROVADO', 'REJEITADO', 'VENCIDO');
 CREATE TYPE status_ordem_producao AS ENUM ('PENDENTE', 'EM_PREPARO', 'FINALIZADA', 'CANCELADA');
 
 -- ==========================================
--- MÃ“DULO 2: WMS E ESTOQUE
+-- MÓDULO 2: WMS E ESTOQUE
 -- ==========================================
 
 -- Tabela: Fornecedores
@@ -789,7 +789,7 @@ CREATE TABLE IF NOT EXISTS public.fornecedores (
 );
 
 -- Tabela: Lotes de Estoque (Recebimento)
-CREATE TABLE IF NOT EXISTS public.lotes_estoque (
+CREATE TABLE IF NOT EXISTS public.estoque_lotes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     unidade_id UUID NOT NULL REFERENCES public.cliente_unidades(id) ON DELETE CASCADE,
     ingrediente_id UUID NOT NULL REFERENCES public.ingredientes(id) ON DELETE RESTRICT,
@@ -798,13 +798,13 @@ CREATE TABLE IF NOT EXISTS public.lotes_estoque (
     nota_fiscal TEXT,
     data_fabricacao DATE NOT NULL,
     data_validade_rotulo DATE NOT NULL,
-    data_validade_interna DATE, -- Calculada/Ajustada pela Qualidade (Predição)
+    data_validade_interna DATE, -- Calculada/Ajustada pela Qualidade (Predi��o)
     quantidade_inicial_g_ml NUMERIC NOT NULL CHECK (quantidade_inicial_g_ml > 0),
     quantidade_atual_g_ml NUMERIC NOT NULL CHECK (quantidade_atual_g_ml >= 0),
     status status_lote_estoque DEFAULT 'QUARENTENA',
     
     -- Colunas WMS (Fase 2+)
-    local_estoque_id UUID REFERENCES public.cliente_locais_estoque(id),
+    local_estoque_id UUID REFERENCES public.cliente_estoque_locais(id),
     categoria_produto TEXT,
     registro_sif TEXT,
     temperatura_recebimento NUMERIC,
@@ -814,11 +814,11 @@ CREATE TABLE IF NOT EXISTS public.lotes_estoque (
 );
 
 -- ==========================================
--- MÃ“DULO 3: PRODUÃ‡ÃƒO / CHÃƒO DE FÃBRICA
+-- MÓDULO 3: PRODUÇÃO / CHÃO DE FÁBRICA
 -- ==========================================
 
--- Tabela: Ordens de ProduÃ§Ã£o (OP)
-CREATE TABLE IF NOT EXISTS public.ordens_producao (
+-- Tabela: Ordens de Produção (OP)
+CREATE TABLE IF NOT EXISTS public.producao_ordens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     unidade_id UUID NOT NULL REFERENCES public.cliente_unidades(id) ON DELETE CASCADE,
     receita_id UUID NOT NULL REFERENCES public.receitas(id) ON DELETE RESTRICT,
@@ -832,23 +832,23 @@ CREATE TABLE IF NOT EXISTS public.ordens_producao (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Tabela: Apontamentos de ProduÃ§Ã£o (Baixa de MÃºltiplos Lotes)
-CREATE TABLE IF NOT EXISTS public.apontamentos_producao (
+-- Tabela: Apontamentos de Produção (Baixa de Múltiplos Lotes)
+CREATE TABLE IF NOT EXISTS public.producao_apontamentos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ordem_producao_id UUID NOT NULL REFERENCES public.ordens_producao(id) ON DELETE CASCADE,
-    lote_estoque_id UUID NOT NULL REFERENCES public.lotes_estoque(id) ON DELETE RESTRICT,
+    ordem_producao_id UUID NOT NULL REFERENCES public.producao_ordens(id) ON DELETE CASCADE,
+    lote_estoque_id UUID NOT NULL REFERENCES public.estoque_lotes(id) ON DELETE RESTRICT,
     quantidade_utilizada_g_ml NUMERIC NOT NULL CHECK (quantidade_utilizada_g_ml > 0),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Tabela: Lotes Internos (Rastreabilidade e NutriPrint)
-CREATE TABLE IF NOT EXISTS public.lotes_internos (
+CREATE TABLE IF NOT EXISTS public.producao_lotes_internos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     unidade_id UUID NOT NULL REFERENCES public.cliente_unidades(id) ON DELETE CASCADE,
-    ordem_producao_id UUID NOT NULL UNIQUE REFERENCES public.ordens_producao(id) ON DELETE RESTRICT,
+    ordem_producao_id UUID NOT NULL UNIQUE REFERENCES public.producao_ordens(id) ON DELETE RESTRICT,
     codigo_lote_interno TEXT UNIQUE NOT NULL,
     data_fabricacao TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    data_validade TIMESTAMPTZ NOT NULL, -- O menor vencimento entre os insumos ou regra prÃ³pria
+    data_validade TIMESTAMPTZ NOT NULL, -- O menor vencimento entre os insumos ou regra própria
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -857,10 +857,10 @@ CREATE TABLE IF NOT EXISTS public.lotes_internos (
 -- ==========================================
 
 ALTER TABLE public.fornecedores ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.lotes_estoque ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.ordens_producao ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.apontamentos_producao ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.lotes_internos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.estoque_lotes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.producao_ordens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.producao_apontamentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.producao_lotes_internos ENABLE ROW LEVEL SECURITY;
 
 -- Exemplo RLS: Fornecedor (Baseado em Cliente)
 CREATE POLICY "Fornecedores Isolados por Cliente" ON public.fornecedores
@@ -872,28 +872,29 @@ CREATE POLICY "Fornecedores Isolados por Cliente" ON public.fornecedores
     ));
 
 -- Exemplo RLS: Lotes e Estoque (Baseado em Unidade)
-CREATE POLICY "Estoque Isolado por Unidade" ON public.lotes_estoque
+CREATE POLICY "Estoque Isolado por Unidade" ON public.estoque_lotes
     FOR ALL
     USING (unidade_id IN (
         SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
     ));
 
-CREATE POLICY "ProduÃ§Ã£o Isolada por Unidade" ON public.ordens_producao
+CREATE POLICY "Produção Isolada por Unidade" ON public.producao_ordens
     FOR ALL
     USING (unidade_id IN (
         SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
     ));
 
-CREATE POLICY "Apontamentos da ProduÃ§Ã£o Local" ON public.apontamentos_producao
+CREATE POLICY "Apontamentos da Produção Local" ON public.producao_apontamentos
     FOR ALL
     USING (ordem_producao_id IN (
-        SELECT id FROM public.ordens_producao WHERE unidade_id IN (
+        SELECT id FROM public.producao_ordens WHERE unidade_id IN (
             SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
         )
     ));
 
-CREATE POLICY "Lotes Internos da Unidade" ON public.lotes_internos
+CREATE POLICY "Lotes Internos da Unidade" ON public.producao_lotes_internos
     FOR ALL
     USING (unidade_id IN (
         SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
     ));
+

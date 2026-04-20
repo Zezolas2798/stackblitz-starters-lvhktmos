@@ -21,7 +21,9 @@ import {
   useTheme,
   alpha,
   ListItemAvatar,
-  InputAdornment
+  InputAdornment,
+  Tooltip,
+  Chip
 } from '@mui/material';
 
 // Ícones Modernos (Lucide)
@@ -33,7 +35,8 @@ import {
   Edit2, 
   Trash2, 
   X, 
-  Search 
+  Search,
+  RefreshCcw
 } from 'lucide-react';
 
 import { Cliente } from '@/lib/types';
@@ -45,7 +48,10 @@ const clienteInicial: FormCliente = {
   razao_social: '',
   nome_fantasia: '',
   cnpj_raiz: '',
-  ativo: true
+  ativo: true,
+  endereco_completo: '',
+  cep: '',
+  cnaes: []
 };
 
 export default function ClientesPage() {
@@ -58,6 +64,69 @@ export default function ClientesPage() {
   const [formData, setFormData] = useState<FormCliente>(clienteInicial);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchingCnpj, setSearchingCnpj] = useState(false);
+
+  const handleBuscarCnpj = async () => {
+    const rawCnpj = formData.cnpj_raiz || '';
+    const cnpj = rawCnpj.trim().replace(/\D/g, '');
+    
+    if (cnpj.length < 8) {
+      alert('Informe ao menos os 8 dígitos iniciais do CNPJ (CNPJ Raiz).');
+      return;
+    }
+
+    let cnpjBusca = cnpj;
+    if (cnpj.length === 8) {
+      cnpjBusca = cnpj + '000191';
+    }
+
+    const url = `https://brasilapi.com.br/api/cnpj/v1/${cnpjBusca}`;
+    console.log('[DEBUG] Brasil API Clientes - Iniciando busca:', url);
+
+    setSearchingCnpj(true);
+    try {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[DEBUG] Brasil API Clientes - Resposta Erro:', response.status, errorText);
+        throw new Error(`Servidor retornou status ${response.status}. Certifique-se que o CNPJ existe.`);
+      }
+      
+      const data = await response.json();
+      console.log('[DEBUG] Brasil API Clientes - Sucesso:', data);
+      
+      // Formata endereço completo
+      const logradouro = data.logradouro || '';
+      const numero = data.numero || 'S/N';
+      const complemento = data.complemento ? `, ${data.complemento}` : '';
+      const bairro = data.bairro || '';
+      const cidade = data.municipio || '';
+      const uf = data.uf || '';
+      const cep = data.cep || '';
+
+      const endereco = `${logradouro}, ${numero}${complemento}, ${bairro}, ${cidade}/${uf} - CEP: ${cep}`;
+      const listCnaes = [
+        { codigo: data.cnae_fiscal, descricao: data.cnae_fiscal_descricao, principal: true },
+        ...(data.cnaes_secundarios || []).map((s: any) => ({ ...s, principal: false }))
+      ];
+
+      setFormData(prev => ({
+        ...prev,
+        razao_social: data.razao_social || prev.razao_social,
+        nome_fantasia: data.nome_fantasia || prev.nome_fantasia || data.razao_social,
+        endereco_completo: endereco,
+        cep: cep,
+        cnaes: listCnaes
+      }));
+
+    } catch (err: any) {
+      console.error('[DEBUG] Brasil API Clientes - Erro de Fetch:', err);
+      alert(`Erro na busca: ${err.message}\n\nVerifique o console (F12) para detalhes técnicos.`);
+    } finally {
+      setSearchingCnpj(false);
+    }
+  };
 
   // Busca inicial
   async function fetchClientes() {
@@ -301,7 +370,21 @@ export default function ClientesPage() {
                   required
                   fullWidth
                   InputProps={{
-                    startAdornment: <InputAdornment position="start"><Building2 size={18} color="gray"/></InputAdornment>
+                    startAdornment: <InputAdornment position="start"><Building2 size={18} color="gray"/></InputAdornment>,
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Tooltip title="Sincronizar com Brasil API">
+                          <IconButton 
+                            onClick={handleBuscarCnpj} 
+                            disabled={searchingCnpj}
+                            size="small"
+                            color="primary"
+                          >
+                            {searchingCnpj ? <CircularProgress size={16} /> : <RefreshCcw size={16} />}
+                          </IconButton>
+                        </Tooltip>
+                      </InputAdornment>
+                    )
                   }}
                 />
 

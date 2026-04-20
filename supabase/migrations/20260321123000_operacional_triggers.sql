@@ -59,7 +59,7 @@ BEGIN
     -- Checa se é 'SAIDA' motivada por Descarte/Vencimento
     IF NEW.tipo_movimento = 'SAIDA' AND NEW.justificativa ILIKE '%DESCARTADO%' THEN
         SELECT le.unidade_id, le.valor_unitario INTO v_unidade_id, v_custo
-        FROM public.lotes_estoque le WHERE le.id = NEW.lote_id;
+        FROM public.estoque_lotes le WHERE le.id = NEW.lote_id;
 
         v_custo := COALESCE(v_custo, 0) * NEW.quantidade_movimentada;
 
@@ -126,3 +126,4 @@ DROP TRIGGER IF EXISTS estoque_compra_to_ledger_trigger ON public.estoque_lotes;
 CREATE TRIGGER estoque_compra_to_ledger_trigger
 AFTER INSERT ON public.estoque_lotes
 FOR EACH ROW EXECUTE FUNCTION trigger_estoque_compra_to_ledger();
+

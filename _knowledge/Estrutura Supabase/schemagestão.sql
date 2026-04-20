@@ -90,15 +90,15 @@ CREATE TABLE public.anvisa_vdr (
   CONSTRAINT anvisa_vdr_pkey PRIMARY KEY (id),
   CONSTRAINT anvisa_vdr_grupo_id_fkey FOREIGN KEY (grupo_id) REFERENCES public.anvisa_grupos_populacionais(id)
 );
-CREATE TABLE public.apontamentos_producao (
+CREATE TABLE public.producao_apontamentos (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   ordem_producao_id uuid NOT NULL,
   lote_estoque_id uuid NOT NULL,
   quantidade_utilizada_g_ml numeric NOT NULL CHECK (quantidade_utilizada_g_ml > 0::numeric),
   created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT apontamentos_producao_pkey PRIMARY KEY (id),
-  CONSTRAINT apontamentos_producao_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.ordens_producao(id),
-  CONSTRAINT apontamentos_producao_lote_estoque_id_fkey FOREIGN KEY (lote_estoque_id) REFERENCES public.lotes_estoque(id)
+  CONSTRAINT producao_apontamentos_pkey PRIMARY KEY (id),
+  CONSTRAINT producao_apontamentos_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.producao_ordens(id),
+  CONSTRAINT producao_apontamentos_lote_estoque_id_fkey FOREIGN KEY (lote_estoque_id) REFERENCES public.estoque_lotes(id)
 );
 CREATE TABLE public.app_notificacoes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -335,7 +335,7 @@ CREATE TABLE public.cliente_controle_temperatura (
   receita_id uuid,
   CONSTRAINT cliente_controle_temperatura_pkey PRIMARY KEY (id),
   CONSTRAINT cliente_controle_temperatura_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
-  CONSTRAINT cliente_controle_temperatura_local_id_fkey FOREIGN KEY (local_id) REFERENCES public.cliente_locais_estoque(id),
+  CONSTRAINT cliente_controle_temperatura_local_id_fkey FOREIGN KEY (local_id) REFERENCES public.cliente_estoque_locais(id),
   CONSTRAINT cliente_controle_temperatura_equipamento_id_fkey FOREIGN KEY (equipamento_id) REFERENCES public.cliente_equipamentos_config(id),
   CONSTRAINT cliente_controle_temperatura_produto_id_fkey FOREIGN KEY (produto_id) REFERENCES public.ingredientes(id),
   CONSTRAINT cliente_controle_temperatura_receita_id_fkey FOREIGN KEY (receita_id) REFERENCES public.receitas(id)
@@ -353,7 +353,7 @@ CREATE TABLE public.cliente_equipamentos_config (
   CONSTRAINT cliente_equipamentos_config_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
   CONSTRAINT cliente_equipamentos_config_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.cliente_equipamentos_config(id)
 );
-CREATE TABLE public.cliente_locais_estoque (
+CREATE TABLE public.cliente_estoque_locais (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   unidade_id uuid NOT NULL,
   nome text NOT NULL,
@@ -364,10 +364,10 @@ CREATE TABLE public.cliente_locais_estoque (
   cliente_id uuid,
   categorias_permitidas ARRAY DEFAULT '{}'::text[],
   equipamento_config_id uuid,
-  CONSTRAINT cliente_locais_estoque_pkey PRIMARY KEY (id),
-  CONSTRAINT locais_estoque_unidade_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
-  CONSTRAINT cliente_locais_estoque_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
-  CONSTRAINT cliente_locais_estoque_equipamento_config_id_fkey FOREIGN KEY (equipamento_config_id) REFERENCES public.cliente_equipamentos_config(id)
+  CONSTRAINT cliente_estoque_locais_pkey PRIMARY KEY (id),
+  CONSTRAINT estoque_locais_unidade_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
+  CONSTRAINT cliente_estoque_locais_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
+  CONSTRAINT cliente_estoque_locais_equipamento_config_id_fkey FOREIGN KEY (equipamento_config_id) REFERENCES public.cliente_equipamentos_config(id)
 );
 CREATE TABLE public.cliente_setores_producao (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -552,7 +552,7 @@ CREATE TABLE public.estoque_inventario_itens (
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT estoque_inventario_itens_pkey PRIMARY KEY (id),
   CONSTRAINT estoque_inventario_itens_inventario_id_fkey FOREIGN KEY (inventario_id) REFERENCES public.estoque_inventarios(id),
-  CONSTRAINT estoque_inventario_itens_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.lotes_estoque(id),
+  CONSTRAINT estoque_inventario_itens_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.estoque_lotes(id),
   CONSTRAINT estoque_inventario_itens_conferido_por_fkey FOREIGN KEY (conferido_por) REFERENCES auth.users(id)
 );
 CREATE TABLE public.estoque_inventarios (
@@ -573,7 +573,7 @@ CREATE TABLE public.estoque_inventarios (
   CONSTRAINT estoque_inventarios_pkey PRIMARY KEY (id),
   CONSTRAINT estoque_inventarios_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
   CONSTRAINT estoque_inventarios_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
-  CONSTRAINT estoque_inventarios_local_estoque_id_fkey FOREIGN KEY (local_estoque_id) REFERENCES public.cliente_locais_estoque(id),
+  CONSTRAINT estoque_inventarios_local_estoque_id_fkey FOREIGN KEY (local_estoque_id) REFERENCES public.cliente_estoque_locais(id),
   CONSTRAINT estoque_inventarios_responsavel_id_fkey FOREIGN KEY (responsavel_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.estoque_movimentacoes (
@@ -588,8 +588,8 @@ CREATE TABLE public.estoque_movimentacoes (
   fornecedor_id uuid,
   CONSTRAINT estoque_movimentacoes_pkey PRIMARY KEY (id),
   CONSTRAINT estoque_movimentacoes_fornecedor_id_fkey FOREIGN KEY (fornecedor_id) REFERENCES public.fornecedores(id),
-  CONSTRAINT estoque_movimentacoes_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.lotes_estoque(id),
-  CONSTRAINT estoque_movimentacoes_lotes_estoque_fk FOREIGN KEY (lote_id) REFERENCES public.lotes_estoque(id)
+  CONSTRAINT estoque_movimentacoes_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.estoque_lotes(id),
+  CONSTRAINT estoque_movimentacoes_estoque_lotes_fk FOREIGN KEY (lote_id) REFERENCES public.estoque_lotes(id)
 );
 CREATE TABLE public.fichas_tecnicas_uan (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -881,7 +881,7 @@ CREATE TABLE public.iot_etiquetas_impressas (
   data_impressao timestamp with time zone DEFAULT now(),
   CONSTRAINT iot_etiquetas_impressas_pkey PRIMARY KEY (id),
   CONSTRAINT iot_etiquetas_impressas_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
-  CONSTRAINT iot_etiquetas_impressas_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.ordens_producao(id)
+  CONSTRAINT iot_etiquetas_impressas_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.producao_ordens(id)
 );
 CREATE TABLE public.listas_compras_uan (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -892,7 +892,7 @@ CREATE TABLE public.listas_compras_uan (
   CONSTRAINT listas_compras_uan_pkey PRIMARY KEY (id),
   CONSTRAINT listas_compras_uan_cardapio_id_fkey FOREIGN KEY (cardapio_id) REFERENCES public.cardapios_uan(id)
 );
-CREATE TABLE public.lotes_estoque (
+CREATE TABLE public.estoque_lotes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   unidade_id uuid NOT NULL,
   ingrediente_id uuid,
@@ -922,15 +922,15 @@ CREATE TABLE public.lotes_estoque (
   material_id uuid,
   financeiro_processado boolean DEFAULT false,
   data_vencimento_financeiro date,
-  CONSTRAINT lotes_estoque_pkey PRIMARY KEY (id),
-  CONSTRAINT lotes_estoque_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
-  CONSTRAINT lotes_estoque_ingrediente_id_fkey FOREIGN KEY (ingrediente_id) REFERENCES public.ingredientes(id),
-  CONSTRAINT lotes_estoque_fornecedor_id_fkey FOREIGN KEY (fornecedor_id) REFERENCES public.fornecedores(id),
-  CONSTRAINT lotes_estoque_local_estoque_id_fkey FOREIGN KEY (local_estoque_id) REFERENCES public.cliente_locais_estoque(id),
-  CONSTRAINT lotes_estoque_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
-  CONSTRAINT lotes_estoque_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materiais(id)
+  CONSTRAINT estoque_lotes_pkey PRIMARY KEY (id),
+  CONSTRAINT estoque_lotes_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
+  CONSTRAINT estoque_lotes_ingrediente_id_fkey FOREIGN KEY (ingrediente_id) REFERENCES public.ingredientes(id),
+  CONSTRAINT estoque_lotes_fornecedor_id_fkey FOREIGN KEY (fornecedor_id) REFERENCES public.fornecedores(id),
+  CONSTRAINT estoque_lotes_local_estoque_id_fkey FOREIGN KEY (local_estoque_id) REFERENCES public.cliente_estoque_locais(id),
+  CONSTRAINT estoque_lotes_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
+  CONSTRAINT estoque_lotes_material_id_fkey FOREIGN KEY (material_id) REFERENCES public.materiais(id)
 );
-CREATE TABLE public.lotes_internos (
+CREATE TABLE public.producao_lotes_internos (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   unidade_id uuid NOT NULL,
   ordem_producao_id uuid NOT NULL UNIQUE,
@@ -938,9 +938,9 @@ CREATE TABLE public.lotes_internos (
   data_fabricacao timestamp with time zone NOT NULL DEFAULT now(),
   data_validade timestamp with time zone NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT lotes_internos_pkey PRIMARY KEY (id),
-  CONSTRAINT lotes_internos_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
-  CONSTRAINT lotes_internos_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.ordens_producao(id)
+  CONSTRAINT producao_lotes_internos_pkey PRIMARY KEY (id),
+  CONSTRAINT producao_lotes_internos_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
+  CONSTRAINT producao_lotes_internos_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.producao_ordens(id)
 );
 CREATE TABLE public.materiais (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -1026,7 +1026,7 @@ CREATE TABLE public.operacao_tarefas (
   CONSTRAINT operacao_tarefas_criado_por_fkey FOREIGN KEY (criado_por) REFERENCES auth.users(id),
   CONSTRAINT operacao_tarefas_assinatura_obrigatoria_id_fkey FOREIGN KEY (assinatura_obrigatoria_id) REFERENCES public.app_roles(id)
 );
-CREATE TABLE public.ordens_producao (
+CREATE TABLE public.producao_ordens (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   unidade_id uuid NOT NULL,
   receita_versao_id uuid NOT NULL,
@@ -1043,13 +1043,13 @@ CREATE TABLE public.ordens_producao (
   updated_by uuid,
   updated_at timestamp with time zone DEFAULT now(),
   deleted_at timestamp with time zone,
-  CONSTRAINT ordens_producao_pkey PRIMARY KEY (id),
+  CONSTRAINT producao_ordens_pkey PRIMARY KEY (id),
   CONSTRAINT producao_registros_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
   CONSTRAINT producao_registros_receita_versao_id_fkey FOREIGN KEY (receita_versao_id) REFERENCES public.receitas_versoes(id),
   CONSTRAINT producao_registros_responsavel_producao_id_fkey FOREIGN KEY (responsavel_producao_id) REFERENCES auth.users(id),
   CONSTRAINT fk_ordens_cliente FOREIGN KEY (cliente_id) REFERENCES public.clientes(id),
-  CONSTRAINT ordens_producao_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id),
-  CONSTRAINT ordens_producao_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
+  CONSTRAINT producao_ordens_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id),
+  CONSTRAINT producao_ordens_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id)
 );
 CREATE TABLE public.permissoes_usuario_unidade (
   usuario_id uuid NOT NULL,
@@ -1066,9 +1066,9 @@ CREATE TABLE public.producao_consumos (
   quantidade_utilizada numeric NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT producao_consumos_pkey PRIMARY KEY (id),
-  CONSTRAINT producao_consumos_producao_id_fkey FOREIGN KEY (producao_id) REFERENCES public.ordens_producao(id),
-  CONSTRAINT producao_consumos_estoque_lote_id_fkey FOREIGN KEY (estoque_lote_id) REFERENCES public.lotes_estoque(id),
-  CONSTRAINT producao_consumos_lotes_estoque_fk FOREIGN KEY (estoque_lote_id) REFERENCES public.lotes_estoque(id)
+  CONSTRAINT producao_consumos_producao_id_fkey FOREIGN KEY (producao_id) REFERENCES public.producao_ordens(id),
+  CONSTRAINT producao_consumos_estoque_lote_id_fkey FOREIGN KEY (estoque_lote_id) REFERENCES public.estoque_lotes(id),
+  CONSTRAINT producao_consumos_estoque_lotes_fk FOREIGN KEY (estoque_lote_id) REFERENCES public.estoque_lotes(id)
 );
 CREATE TABLE public.producao_ordens (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1115,11 +1115,11 @@ CREATE TABLE public.producao_perdas (
   tipo_perda character varying,
   CONSTRAINT producao_perdas_pkey PRIMARY KEY (id),
   CONSTRAINT producao_perdas_unidade_id_fkey FOREIGN KEY (unidade_id) REFERENCES public.cliente_unidades(id),
-  CONSTRAINT producao_perdas_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.ordens_producao(id),
-  CONSTRAINT producao_perdas_estoque_lote_id_fkey FOREIGN KEY (estoque_lote_id) REFERENCES public.lotes_estoque(id),
+  CONSTRAINT producao_perdas_ordem_producao_id_fkey FOREIGN KEY (ordem_producao_id) REFERENCES public.producao_ordens(id),
+  CONSTRAINT producao_perdas_estoque_lote_id_fkey FOREIGN KEY (estoque_lote_id) REFERENCES public.estoque_lotes(id),
   CONSTRAINT producao_perdas_ingrediente_id_fkey FOREIGN KEY (ingrediente_id) REFERENCES public.ingredientes(id),
   CONSTRAINT producao_perdas_item_ordem_id_fkey FOREIGN KEY (item_ordem_id) REFERENCES public.producao_ordens_itens(id),
-  CONSTRAINT producao_perdas_lotes_estoque_fk FOREIGN KEY (estoque_lote_id) REFERENCES public.lotes_estoque(id)
+  CONSTRAINT producao_perdas_estoque_lotes_fk FOREIGN KEY (estoque_lote_id) REFERENCES public.estoque_lotes(id)
 );
 CREATE TABLE public.producao_requisicoes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1147,7 +1147,7 @@ CREATE TABLE public.producao_reservas_estoque (
   CONSTRAINT producao_reservas_estoque_pkey PRIMARY KEY (id),
   CONSTRAINT producao_reservas_estoque_requisicao_id_fkey FOREIGN KEY (requisicao_id) REFERENCES public.producao_requisicoes(id),
   CONSTRAINT producao_reservas_estoque_reservado_por_fkey FOREIGN KEY (reservado_por) REFERENCES auth.users(id),
-  CONSTRAINT producao_reservas_estoque_lotes_estoque_fkey FOREIGN KEY (estoque_lote_id) REFERENCES public.lotes_estoque(id)
+  CONSTRAINT producao_reservas_estoque_estoque_lotes_fkey FOREIGN KEY (estoque_lote_id) REFERENCES public.estoque_lotes(id)
 );
 CREATE TABLE public.produtos_bombeiros (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

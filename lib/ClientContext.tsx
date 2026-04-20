@@ -104,12 +104,17 @@ export function ClientProvider({ children }: { children: ReactNode }) {
             ativo,
             cnae_principal,
             cnpj_completo,
+            endereco_completo,
+            cep,
             cliente_id,
             cliente:clientes (
               id,
               razao_social,
               nome_fantasia,
-              logo_url
+              logo_url,
+              endereco_completo,
+              cnpj_raiz,
+              cep
             )
           `);
         

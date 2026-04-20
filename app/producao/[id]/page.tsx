@@ -32,20 +32,20 @@ interface OrdemItem {
   setor_producao_id: string | null;
   receitas: { nome: string } | null;
   fichas_tecnicas_uan: { nome: string } | null;
-  cliente_setores_producao?: { id: string; nome: string } | null;
+  setores_producao?: { id: string; nome: string } | null;
 }
 
 interface Requisicao {
   id: string;
   ingrediente_id: string | null;
-  grupo_estoque_id: string | null;
+  subgrupo_id: string | null;
   qtd_necessaria_g: number;
   qtd_separada_g: number;
   status: string;
   ingredientes: {
     nome: string;
   } | null;
-  ingredientes_grupos: {
+  subgrupos_produto: {
     nome: string;
   } | null;
 }
@@ -132,7 +132,7 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
           setor_producao_id,
           receitas ( nome ),
           fichas_tecnicas_uan ( nome ),
-          cliente_setores_producao ( id, nome )
+          setores_producao ( id, nome )
         `)
         .eq('ordem_id', params.id);
         
@@ -144,12 +144,12 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
         .select(`
           id,
           ingrediente_id,
-          grupo_estoque_id,
+          subgrupo_id,
           qtd_necessaria_g,
           qtd_separada_g,
           status,
           ingredientes ( nome ),
-          ingredientes_grupos ( nome )
+          subgrupos_produto ( nome )
         `)
         .eq('ordem_id', params.id)
         .order('id');
@@ -178,7 +178,7 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
   async function loadSetoresOpts() {
     if (!activeClientId) return;
     const { data } = await supabase
-      .from('cliente_setores_producao')
+      .from('setores_producao')
       .select('id, nome')
       .eq('cliente_id', activeClientId)
       .eq('ativo', true)
@@ -229,7 +229,7 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
           status, 
           quantidade_reservada_g, 
           estoque_lote_id,
-          lotes_estoque ( id, quantidade_atual_g_ml, numero_lote_fabricante )
+          estoque_lotes ( id, quantidade_atual_g_ml, numero_lote_fabricante )
         `)
         .in('requisicao_id', idsRequisicoes);
 
@@ -239,11 +239,11 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
       const userId = userData.user?.id || null;
 
       for (const res of (reservas as any[])) {
-        if (res.status === 'CONSUMIDO' && res.lotes_estoque) {
+        if (res.status === 'CONSUMIDO' && res.estoque_lotes) {
           // Devolver ao estoque
-          const novaQtdGml = res.lotes_estoque.quantidade_atual_g_ml + res.quantidade_reservada_g;
+          const novaQtdGml = res.estoque_lotes.quantidade_atual_g_ml + res.quantidade_reservada_g;
           
-          await (supabase as any).from('lotes_estoque')
+          await (supabase as any).from('estoque_lotes')
             .update({ quantidade_atual_g_ml: novaQtdGml })
             .eq('id', res.estoque_lote_id);
 
@@ -537,7 +537,7 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" color="text.secondary">
-                          {item.cliente_setores_producao?.nome || '—'}
+                          {item.setores_producao?.nome || '—'}
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
@@ -592,15 +592,15 @@ export default function DetalhesOrdemPage({ params }: { params: { id: string } }
                       <TableRow key={req.id} hover>
                         <TableCell>
                           <Typography variant="body2" fontWeight="bold">
-                            {req.grupo_estoque_id ? req.ingredientes_grupos?.nome : req.ingredientes?.nome}
+                            {req.subgrupo_id ? req.subgrupos_produto?.nome : req.ingredientes?.nome}
                           </Typography>
                         </TableCell>
                         <TableCell align="center">
                           <Chip 
-                            label={req.grupo_estoque_id ? 'Grupo' : 'Específico'} 
+                            label={req.subgrupo_id ? 'Grupo' : 'Específico'} 
                             size="small" 
                             variant="outlined"
-                            color={req.grupo_estoque_id ? 'primary' : 'default'}
+                            color={req.subgrupo_id ? 'primary' : 'default'}
                           />
                         </TableCell>
                         <TableCell align="right">

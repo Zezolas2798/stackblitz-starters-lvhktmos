@@ -68,9 +68,9 @@ export default function NovaOrdemProducaoPage() {
 
   async function loadSetores() {
     if (!activeClientId) return;
-    const { data } = await (supabase as any).from('cliente_setores_producao')
+    const { data } = await (supabase as any).from('setores_producao')
       .select('id, nome')
-      .eq('cliente_id', activeClientId)
+      .eq('unidade_id', unidadeId)
       .eq('ativo', true)
       .order('nome');
     if (data) setSetores(data);

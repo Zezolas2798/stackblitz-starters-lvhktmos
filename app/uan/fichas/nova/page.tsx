@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
-import { FichaTecnicaUAN, ComposicaoFichaUAN, Ingrediente, CategoriaUAN } from '@/lib/types';
+import { FichaTecnicaUAN, ComposicaoFichaUAN, Ingrediente, CategoriaUAN, CorPredominante, TexturaPrincipal, MetodoCoccao } from '@/lib/types';
 import {
   Box, Typography, Button, Paper, TextField, MenuItem,
   Grid, Divider, Autocomplete, IconButton, Chip, Table, TableHead,
   TableRow, TableCell, TableBody, InputAdornment,
-  Dialog, DialogTitle, DialogContent, DialogActions
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  FormControlLabel, Checkbox
 } from '@mui/material';
 import { Save, ArrowLeft, Trash2, PlusCircle, Calculator, ActivitySquare } from 'lucide-react';
 
@@ -57,7 +58,12 @@ export default function NovaFichaUANPage() {
     peso_porcao_g: 150,
     modo_preparo: '',
     tempo_preparo_min: 30,
-    refeicoes: []
+    refeicoes: [],
+    // Atributos Sensoriais (AQPC)
+    cor_predominante: null,
+    textura_principal: null,
+    metodo_coccao: null,
+    rico_em_enxofre: false
   });
 
   // Linhas da Composição
@@ -146,7 +152,12 @@ export default function NovaFichaUANPage() {
         modo_preparo: ficha.modo_preparo || '',
         tempo_preparo_min: Number(ficha.tempo_preparo_min || 0),
         refeicoes: ficha.refeicoes || [],
-        cliente_id: activeClientId
+        cliente_id: activeClientId,
+        // Atributos Sensoriais (AQPC)
+        cor_predominante: ficha.cor_predominante || null,
+        textura_principal: ficha.textura_principal || null,
+        metodo_coccao: ficha.metodo_coccao || null,
+        rico_em_enxofre: ficha.rico_em_enxofre || false
       };
 
       const { data: resFicha, error: errFicha } = await supabase
@@ -284,6 +295,100 @@ export default function NovaFichaUANPage() {
         </Grid>
       </Paper>
 
+      {/* SEÇÃO: CARACTERÍSTICAS SENSORIAIS (AQPC) */}
+      <Paper sx={{ p: 4, mb: 4 }}>
+        <Typography variant="h6" color="secondary" mb={1} display="flex" alignItems="center" gap={1}>
+          🎨 Características Sensoriais (AQPC)
+        </Typography>
+        <Typography variant="caption" color="text.secondary" display="block" mb={3}>
+          Estes atributos alimentam o motor de validação AQPC e o gerador automático de cardápios, garantindo contraste de cores, texturas e métodos de cocção.
+        </Typography>
+
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={3}>
+            <TextField
+              select fullWidth label="Cor Predominante"
+              value={ficha.cor_predominante || ''}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, cor_predominante: (e.target.value || null) as CorPredominante | null })}
+              helperText="Cor visual do prato servido"
+            >
+              <MenuItem value=""><em>Não definido</em></MenuItem>
+              {(['Branco','Marrom','Verde','Vermelho','Amarelo','Laranja','Misto'] as CorPredominante[]).map(c => (
+                <MenuItem key={c} value={c}>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Box sx={{ width: 14, height: 14, borderRadius: '50%', border: '1px solid #ccc',
+                      bgcolor: c === 'Branco' ? '#f5f5f5' : c === 'Marrom' ? '#8D6E63' : c === 'Verde' ? '#66BB6A' :
+                        c === 'Vermelho' ? '#EF5350' : c === 'Amarelo' ? '#FFEE58' : c === 'Laranja' ? '#FFA726' : 'linear-gradient(135deg, #EF5350, #66BB6A, #FFEE58)'
+                    }} />
+                    {c}
+                  </Box>
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          <Grid item xs={12} md={3}>
+            <TextField
+              select fullWidth label="Textura Principal"
+              value={ficha.textura_principal || ''}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, textura_principal: (e.target.value || null) as TexturaPrincipal | null })}
+              helperText="Textura dominante ao paladar"
+            >
+              <MenuItem value=""><em>Não definido</em></MenuItem>
+              {(['Crocante','Macio','Cremoso','Firme','Gelatinoso','Líquido'] as TexturaPrincipal[]).map(t => (
+                <MenuItem key={t} value={t}>{t}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          <Grid item xs={12} md={3}>
+            <TextField
+              select fullWidth label="Método de Cocção"
+              value={ficha.metodo_coccao || ''}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, metodo_coccao: (e.target.value || null) as MetodoCoccao | null })}
+              helperText="Técnica primária de preparo"
+            >
+              <MenuItem value=""><em>Não definido</em></MenuItem>
+              {[
+                { value: 'Cru', label: 'Cru (sem cocção)' },
+                { value: 'Cozido_Agua', label: 'Cozido em água' },
+                { value: 'Cozido_Vapor', label: 'Cozido a vapor' },
+                { value: 'Assado', label: 'Assado (forno)' },
+                { value: 'Grelhado', label: 'Grelhado' },
+                { value: 'Frito_Imersao', label: '🔴 Frito (imersão)' },
+                { value: 'Salteado', label: 'Salteado (saltear)' },
+                { value: 'Refogado', label: 'Refogado' },
+                { value: 'Brasado', label: 'Brasado' }
+              ].map(m => (
+                <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          <Grid item xs={12} md={3}>
+            <Box sx={{ p: 2, bgcolor: ficha.rico_em_enxofre ? 'info.light' : 'action.hover', borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!ficha.rico_em_enxofre}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, rico_em_enxofre: e.target.checked })}
+                    color="info"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight="bold">Rico em Enxofre</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Brócolis, couve-flor, repolho, cebola crua, etc.
+                    </Typography>
+                  </Box>
+                }
+              />
+            </Box>
+          </Grid>
+        </Grid>
+      </Paper>
+
       <Paper sx={{ p: 4, mb: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
           <Box display="flex" gap={2} alignItems="center">
@@ -393,6 +498,63 @@ export default function NovaFichaUANPage() {
             </TableBody>
           </Table>
         </Box>
+      </Paper>
+
+      <Paper sx={{ p: 4, mb: 4 }}>
+        <Typography variant="h6" mb={2}>Dados para UAN (Sensores e Planejamento Assistido)</Typography>
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={3}>
+            <TextField
+              select fullWidth
+              label="Cor Predominante"
+              value={ficha.cor_predominante || ''}
+              onChange={(e) => setFicha({...ficha, cor_predominante: e.target.value as CorPredominante})}
+            >
+              <MenuItem value="">Nenhuma</MenuItem>
+              {['Branca/Pálida', 'Amarela/Laranja', 'Vermelha', 'Verde', 'Marrom/Escura'].map(o => (
+                <MenuItem key={o} value={o}>{o}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={3}>
+            <TextField
+              select fullWidth
+              label="Textura Principal"
+              value={ficha.textura_principal || ''}
+              onChange={(e) => setFicha({...ficha, textura_principal: e.target.value as TexturaPrincipal})}
+            >
+              <MenuItem value="">Nenhuma</MenuItem>
+              {['Cremosa', 'Crocante', 'Líquida', 'Macio/Cozida', 'Sólida/Firme'].map(o => (
+                <MenuItem key={o} value={o}>{o}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={3}>
+            <TextField
+              select fullWidth
+              label="Método de Cocção"
+              value={ficha.metodo_coccao || ''}
+              onChange={(e) => setFicha({...ficha, metodo_coccao: e.target.value as MetodoCoccao})}
+            >
+              <MenuItem value="">Nenhum</MenuItem>
+              {['Assado', 'Cozido', 'Cru', 'Frito', 'Grelhado', 'Refogado'].map(o => (
+                <MenuItem key={o} value={o}>{o}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={3} display="flex" alignItems="center">
+            <FormControlLabel
+              control={
+                <Checkbox 
+                  checked={ficha.rico_em_enxofre || false}
+                  onChange={(e) => setFicha({...ficha, rico_em_enxofre: e.target.checked})}
+                  color="primary"
+                />
+              }
+              label="Rico em Enxofre?"
+            />
+          </Grid>
+        </Grid>
       </Paper>
 
       <Paper sx={{ p: 4 }}>

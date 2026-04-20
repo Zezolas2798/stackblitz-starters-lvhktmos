@@ -68,13 +68,13 @@ export async function POST(request: Request) {
             );
         }
 
-        // Preparando Payload Autorizado (tabela "lotes_estoque")
+        // Preparando Payload Autorizado (tabela "estoque_lotes")
         const payload = {
             ...parsedData.data,
             quantidade_atual_g_ml: parsedData.data.quantidade_inicial_g_ml, // O lote nasce cheio
         };
 
-        const { data: record, error: dbError } = await (supabase as any).from('lotes_estoque')
+        const { data: record, error: dbError } = await (supabase as any).from('estoque_lotes')
             .insert([payload])
             .select()
             .single();
@@ -97,6 +97,7 @@ export async function POST(request: Request) {
         );
     }
 }
+
 
 
 

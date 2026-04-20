@@ -60,14 +60,14 @@ interface ItemProducao {
 interface RequisicaoItem {
   id: string;
   ingrediente_id: string;
-  grupo_estoque_id: string | null;
+  subgrupo_id: string | null;
   qtd_necessaria_g: number;
   qtd_separada_g: number;
   nome?: string;
   ingredientes: {
     nome: string;
   } | null;
-  ingredientes_grupos: {
+  subgrupos_produto: {
     nome: string;
   } | null;
 }
@@ -148,7 +148,7 @@ export default function SetorExecucaoPage() {
       // 1. Buscar info do setor
       if (setorId !== 'unassigned') {
         const { data: sData, error: sErr } = await supabase
-          .from('cliente_setores_producao')
+          .from('setores_producao')
           .select('id, nome')
           .eq('id', setorId)
           .single();
@@ -375,8 +375,8 @@ export default function SetorExecucaoPage() {
         .from('producao_requisicoes')
         .select(`
           *,
-          ingredientes ( id, nome, grupo_estoque_id ),
-          ingredientes_grupos ( id, nome )
+          ingredientes ( id, nome, subgrupo_id ),
+          subgrupos_produto ( id, nome )
         `)
         .eq('ordem_id', op.id);
       
@@ -384,8 +384,8 @@ export default function SetorExecucaoPage() {
 
       // 2. Buscar Saldo de Estoque Atual (Live) para cada item/grupo
       const { data: stockLevels } = await supabase
-        .from('lotes_estoque')
-        .select('quantidade_atual_g_ml, ingrediente_id, unidade_peso_embalagem, ingredientes(grupo_estoque_id)')
+        .from('estoque_lotes')
+        .select('quantidade_atual_g_ml, ingrediente_id, unidade_peso_embalagem, ingredientes(subgrupo_id)')
         .eq('unidade_id', unidadeId as string)
         .neq('status', 'REJEITADO')
         .neq('status', 'PREVISTO')
@@ -393,14 +393,14 @@ export default function SetorExecucaoPage() {
 
       const stockBalanceMap: Record<string, number> = {};
       (stockLevels || []).forEach((s: any) => {
-        const key = s.ingredientes?.grupo_estoque_id || s.ingrediente_id;
+        const key = s.ingredientes?.subgrupo_id || s.ingrediente_id;
         if (key) {
           stockBalanceMap[key] = (stockBalanceMap[key] || 0) + Number(s.quantidade_atual_g_ml || 0);
         }
       });
 
       const formattedReqs = (reqs || []).map(r => {
-        const key = (r.ingredientes?.grupo_estoque_id || r.ingrediente_id) as string;
+        const key = (r.ingredientes?.subgrupo_id || r.ingrediente_id) as string;
         return {
           ...r,
           saldo_estoque_live: key ? (stockBalanceMap[key] || 0) : 0
@@ -421,23 +421,23 @@ export default function SetorExecucaoPage() {
     try {
       const { data: itemBanco } = await supabase
         .from('ingredientes')
-        .select('id, grupo_estoque_id')
+        .select('id, subgrupo_id')
         .eq('id', req.ingrediente_id)
         .single();
         
       let filterValue: any = req.ingrediente_id;
-      if (itemBanco?.grupo_estoque_id) {
+      if (itemBanco?.subgrupo_id) {
         const { data: itensDoGrupo } = await supabase
           .from('ingredientes')
           .select('id')
-          .eq('grupo_estoque_id', itemBanco.grupo_estoque_id);
+          .eq('subgrupo_id', itemBanco.subgrupo_id);
         if (itensDoGrupo && itensDoGrupo.length > 0) {
           filterValue = itensDoGrupo.map(i => i.id);
         }
       }
 
       const { data: lotes, error } = await supabase
-        .from('lotes_estoque')
+        .from('estoque_lotes')
         .select('*, ingredientes(nome, id), fornecedores(razao_social)')
         .gt('quantidade_atual_g_ml', 0)
         .in('status', ['APROVADO', 'QUARENTENA'])
@@ -531,7 +531,7 @@ export default function SetorExecucaoPage() {
     try {
       const { data: reqs } = await supabase
         .from('producao_requisicoes')
-        .select(`*, ingredientes(id, nome, grupo_estoque_id)`)
+        .select(`*, ingredientes(id, nome, subgrupo_id)`)
         .eq('ordem_id', op.id);
       
       if (!reqs) return;
@@ -543,16 +543,16 @@ export default function SetorExecucaoPage() {
         if (faltaG <= 0.1) continue;
 
         let filterValue: any = req.ingrediente_id;
-        if (req.ingredientes?.grupo_estoque_id) {
+        if (req.ingredientes?.subgrupo_id) {
           const { data: members } = await supabase
             .from('ingredientes')
             .select('id')
-            .eq('grupo_estoque_id', req.ingredientes.grupo_estoque_id);
+            .eq('subgrupo_id', req.ingredientes.subgrupo_id);
           if (members && members.length > 0) filterValue = members.map(m => m.id);
         }
 
         const { data: availableLots } = await supabase
-          .from('lotes_estoque')
+          .from('estoque_lotes')
           .select('*, ingredientes(nome)')
           .gt('quantidade_atual_g_ml', 0)
           .in('status', ['APROVADO', 'QUARENTENA'])
@@ -694,7 +694,7 @@ export default function SetorExecucaoPage() {
       // 3. Buscar as requisições originais da OP para ter contexto de status do estoque
       const { data: reqs, error: reqsErr } = await supabase
         .from('producao_requisicoes')
-        .select('ingrediente_id, grupo_estoque_id, qtd_separada_g, qtd_necessaria_g')
+        .select('ingrediente_id, subgrupo_id, qtd_separada_g, qtd_necessaria_g')
         .eq('ordem_id', item.ordem_id);
 
       if (reqsErr) throw reqsErr;
@@ -702,7 +702,7 @@ export default function SetorExecucaoPage() {
       // 4. Montar a lista de insumos específicos
       const computedReqs = (comp || []).map(c => {
         const itemIdStr = c.item_id?.toString();
-        const reqMatch = reqs?.find(r => r.ingrediente_id?.toString() === itemIdStr || r.grupo_estoque_id?.toString() === itemIdStr);
+        const reqMatch = reqs?.find(r => r.ingrediente_id?.toString() === itemIdStr || r.subgrupo_id?.toString() === itemIdStr);
         
         return {
           id: c.id,
@@ -796,8 +796,8 @@ export default function SetorExecucaoPage() {
         .from('producao_requisicoes')
         .select(`
           *,
-          ingredientes ( id, nome, grupo_estoque_id ),
-          ingredientes_grupos ( id, nome )
+          ingredientes ( id, nome, subgrupo_id ),
+          subgrupos_produto ( id, nome )
         `)
         .eq('ordem_id', op.id);
       
@@ -812,8 +812,8 @@ export default function SetorExecucaoPage() {
       setExistingPerdas(perdas || []);
 
       // 3. Buscar Locais e Setores para destinos
-      const { data: locaisData } = await (supabase as any).from('cliente_locais_estoque').select('id, nome').eq('unidade_id', unidadeId).eq('ativo', true);
-      const { data: setoresData } = await (supabase as any).from('cliente_setores_producao').select('id, nome').eq('cliente_id', activeClientId).eq('ativo', true);
+      const { data: locaisData } = await (supabase as any).from('estoque_locais').select('id, nome').eq('unidade_id', unidadeId).eq('ativo', true);
+      const { data: setoresData } = await (supabase as any).from('setores_producao').select('id, nome').eq('unidade_id', unidadeId).eq('ativo', true);
       
       setLocais(locaisData || []);
       setSetores(setoresData || []);
@@ -867,12 +867,12 @@ export default function SetorExecucaoPage() {
 
         if (error) throw error;
         
-        const reqItem = opRequisicoes.find(r => (r.ingrediente_id || r.grupo_estoque_id) === ingredienteId);
+        const reqItem = opRequisicoes.find(r => (r.ingrediente_id || r.subgrupo_id) === ingredienteId);
         recordsToLabel.push({
           ...inserted,
-          nome: reqItem?.ingredientes?.nome || reqItem?.ingredientes_grupos?.nome,
+          nome: reqItem?.ingredientes?.nome || reqItem?.subgrupos_produto?.nome,
           type: 'INSUMO',
-          item: reqItem?.ingredientes || reqItem?.ingredientes_grupos
+          item: reqItem?.ingredientes || reqItem?.subgrupos_produto
         });
       }
 
@@ -1404,14 +1404,14 @@ export default function SetorExecucaoPage() {
                         </TableHead>
                         <TableBody>
                           {opRequisicoes.map((req) => {
-                            const ingId = req.ingrediente_id || req.grupo_estoque_id;
+                            const ingId = req.ingrediente_id || req.subgrupo_id;
                             const isReg = existingPerdas.some(p => p.ingrediente_id === ingId && p.tipo_perda === 'SOBRA');
                             
                             return (
                               <TableRow key={req.id} sx={{ opacity: isReg ? 0.6 : 1, bgcolor: isReg ? 'action.hover' : 'inherit' }}>
                                 <TableCell>
                                   <Box>
-                                    <Typography variant="body2">{req.ingredientes?.nome || req.ingredientes_grupos?.nome}</Typography>
+                                    <Typography variant="body2">{req.ingredientes?.nome || req.subgrupos_produto?.nome}</Typography>
                                     {isReg && <Chip label="Já registrado" size="small" color="success" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />}
                                   </Box>
                                 </TableCell>
@@ -1689,8 +1689,8 @@ export default function SetorExecucaoPage() {
                     return (
                       <TableRow key={req.id}>
                         <TableCell>
-                          <Typography variant="body2" fontWeight="600">{req.ingredientes?.nome || req.ingredientes_grupos?.nome}</Typography>
-                          {req.ingredientes_grupos && <Typography variant="caption" color="text.secondary">Grupo: {req.ingredientes_grupos.nome}</Typography>}
+                          <Typography variant="body2" fontWeight="600">{req.ingredientes?.nome || req.subgrupos_produto?.nome}</Typography>
+                          {req.subgrupos_produto && <Typography variant="caption" color="text.secondary">Grupo: {req.subgrupos_produto.nome}</Typography>}
                         </TableCell>
                         <TableCell align="right">{formatarQuantidade(req.qtd_necessaria_g)}</TableCell>
                         <TableCell align="right" sx={{ color: isOk ? 'success.main' : 'warning.main', fontWeight: 'bold' }}>
@@ -1723,7 +1723,7 @@ export default function SetorExecucaoPage() {
       <Dialog open={!!alocacaoManualReq} onClose={() => setAlocacaoManualReq(null)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Package size={24} color={theme.palette.secondary.main} />
-          Alocar Lotes: {alocacaoManualReq?.ingredientes?.nome || alocacaoManualReq?.ingredientes_grupos?.nome}
+          Alocar Lotes: {alocacaoManualReq?.ingredientes?.nome || alocacaoManualReq?.subgrupos_produto?.nome}
         </DialogTitle>
         <DialogContent dividers>
           <Box sx={{ mb: 3, p: 2, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 2 }}>
@@ -1989,11 +1989,11 @@ function SetorLabelGenerator({ open, onClose, unidadeInfo, userName, activeClien
     try {
       // 1. Locais de Estoque (apenas categoria ALIMENTOS)
       const { data: locs } = await supabase
-        .from('cliente_locais_estoque')
-        .select('id, nome, categorias_permitidas')
+        .from('estoque_locais')
+        .select('id, nome, grupos_permitidos_ids')
         .eq('unidade_id', unidadeInfo?.id)
         .eq('ativo', true)
-        .contains('categorias_permitidas', ['ALIMENTOS']);
+        .contains('grupos_permitidos_ids', ['ALIMENTOS']);
       
       const combined = [
         ...(locs || []).map(l => ({ id: l.id, nome: `[ESTOQUE] ${l.nome}`, tipo: 'LOCAL' }))
@@ -2143,7 +2143,7 @@ function SetorLabelGenerator({ open, onClose, unidadeInfo, userName, activeClien
       }
 
       // 1. Inserir todos no banco via RPC ou insert normal (loop por segurança se lote for grande, mas aqui é pequeno)
-      const { error: insErr } = await supabase.from('lotes_estoque').insert(recordsToInsert as any[]);
+      const { error: insErr } = await supabase.from('estoque_lotes').insert(recordsToInsert as any[]);
       if (insErr) throw insErr;
 
       setLabelsProntas(labelsToPrint);

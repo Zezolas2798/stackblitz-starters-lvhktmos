@@ -22,7 +22,7 @@ const REFEICOES = ['Desjejum', 'Lanche da Manhã', 'Almoço', 'Lanche da Tarde',
 
 export default function EditarCardapioUANPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const { activeClientId } = useClient();
+  const { activeClientId, unidadeId } = useClient();
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
@@ -64,7 +64,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
           setor_producao_id: cardapio.setor_producao_id || '',
         });
       } catch (e: any) {
-        alert("Erro ao carregar cardápio: " + e.message);
+        window.alert("Erro ao carregar cardápio: " + e.message);
         router.push('/uan/cardapios');
       } finally {
         setLoading(false);
@@ -75,11 +75,11 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
 
   useEffect(() => {
     async function fetchSetores() {
-      if (!activeClientId) return;
+      if (!activeClientId || !unidadeId) return;
       const { data } = await supabase
-        .from('cliente_setores_producao')
+        .from('setores_producao')
         .select('id, nome')
-        .eq('cliente_id', activeClientId)
+        .eq('unidade_id', unidadeId)
         .eq('ativo', true)
         .order('nome');
       if (data) setSetores(data);
@@ -88,12 +88,12 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
   }, [activeClientId]);
 
   const handleSalvar = async () => {
-    if (!activeClientId) return alert('Selecione um cliente.');
+    if (!activeClientId) return window.alert('Selecione um cliente.');
     if (!form.nome_ciclo || !form.mes_referencia) {
-      return alert('Preencha o nome do ciclo e o mês de referência.');
+      return window.alert('Preencha o nome do ciclo e o mês de referência.');
     }
     if (form.dias_funcionamento.length === 0 || form.refeicoes_oferecidas.length === 0) {
-      return alert('Selecione pelo menos um dia de funcionamento e uma refeição.');
+      return window.alert('Selecione pelo menos um dia de funcionamento e uma refeição.');
     }
 
     setSalvando(true);
@@ -123,11 +123,11 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
         
       if (error) throw error;
 
-      alert('Cardápio atualizado com sucesso!');
+      window.alert('Cardápio atualizado com sucesso!');
       router.push('/uan/cardapios');
     } catch (e: any) {
       console.error(e);
-      alert('Erro ao atualizar: ' + e.message);
+      window.alert('Erro ao atualizar: ' + e.message);
     } finally {
       setSalvando(false);
     }
@@ -159,7 +159,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
               fullWidth
               label="Nome do Ciclo"
               value={form.nome_ciclo}
-              onChange={e => setForm({ ...form, nome_ciclo: e.target.value })}
+              onChange={e => setForm({ ...form, nome_ciclo: (e.target as HTMLInputElement).value })}
               required
             />
           </Grid>
@@ -171,7 +171,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
               label="Mês de Referência"
               InputLabelProps={{ shrink: true }}
               value={form.mes_referencia}
-              onChange={e => setForm({ ...form, mes_referencia: e.target.value })}
+              onChange={e => setForm({ ...form, mes_referencia: (e.target as HTMLInputElement).value })}
               required
             />
           </Grid>
@@ -182,7 +182,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
               type="number"
               label="Comensais"
               value={form.comensais_estimados_dia}
-              onChange={e => setForm({ ...form, comensais_estimados_dia: Number(e.target.value) || 0 })}
+              onChange={e => setForm({ ...form, comensais_estimados_dia: Number((e.target as HTMLInputElement).value) || 0 })}
             />
           </Grid>
 
@@ -192,7 +192,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
               fullWidth
               label="Setor de Produção Padrão"
               value={form.setor_producao_id}
-              onChange={e => setForm({ ...form, setor_producao_id: e.target.value })}
+              onChange={e => setForm({ ...form, setor_producao_id: (e.target as HTMLInputElement).value })}
               helperText="Defina qual setor receberá as produções deste cardápio"
             >
               <MenuItem value=""><em>Nenhum (Vincular individualmente na OP)</em></MenuItem>
@@ -213,7 +213,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
                        <Checkbox 
                          checked={form.dias_funcionamento.includes(dia.id)} 
                          onChange={(e) => {
-                           if (e.target.checked) setForm(p => ({...p, dias_funcionamento: [...p.dias_funcionamento, dia.id]}));
+                           if ((e.target as HTMLInputElement).checked) setForm(p => ({...p, dias_funcionamento: [...p.dias_funcionamento, dia.id]}));
                            else setForm(p => ({...p, dias_funcionamento: p.dias_funcionamento.filter(d => d !== dia.id)}));
                          }}
                        />
@@ -236,7 +236,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
                        <Checkbox 
                          checked={form.refeicoes_oferecidas.includes(ref)} 
                          onChange={(e) => {
-                           if (e.target.checked) setForm(p => ({...p, refeicoes_oferecidas: [...p.refeicoes_oferecidas, ref]}));
+                           if ((e.target as HTMLInputElement).checked) setForm(p => ({...p, refeicoes_oferecidas: [...p.refeicoes_oferecidas, ref]}));
                            else setForm(p => ({...p, refeicoes_oferecidas: p.refeicoes_oferecidas.filter(r => r !== ref)}));
                          }}
                        />

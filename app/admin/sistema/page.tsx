@@ -58,7 +58,8 @@ import {
   Save,
   Image as ImageIcon,
   UploadCloud,
-  Loader2
+  Loader2,
+  RefreshCcw
 } from 'lucide-react';
 import { useClient } from '@/lib/ClientContext';
 import { usePermission } from '@/hooks/usePermission';
@@ -89,8 +90,75 @@ export default function SuperAdminPage() {
     nome_fantasia: '',
     cnpj_raiz: '',
     logo_url: '',
-    ativo: true
+    ativo: true,
+    endereco_completo: '',
+    cep: '',
+    cnaes: [] as any[]
   });
+
+  const [searchingCnpj, setSearchingCnpj] = useState(false);
+
+  const handleBuscarCnpj = async () => {
+    const rawCnpj = formData.cnpj_raiz || '';
+    const cnpj = rawCnpj.trim().replace(/\D/g, '');
+    
+    if (cnpj.length < 8) {
+      alert('Informe ao menos os 8 dígitos iniciais do CNPJ (CNPJ Raiz).');
+      return;
+    }
+
+    let cnpjBusca = cnpj;
+    if (cnpj.length === 8) {
+      cnpjBusca = cnpj + '000191';
+    }
+
+    const url = `https://brasilapi.com.br/api/cnpj/v1/${cnpjBusca}`;
+    console.log('[DEBUG] Brasil API Admin - Iniciando busca:', url);
+
+    setSearchingCnpj(true);
+    try {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[DEBUG] Brasil API Admin - Resposta Erro:', response.status, errorText);
+        throw new Error(`Servidor retornou status ${response.status}. Certifique-se que o CNPJ existe.`);
+      }
+      
+      const data = await response.json();
+      console.log('[DEBUG] Brasil API Admin - Sucesso:', data);
+      
+      // Formata endereço completo
+      const logradouro = data.logradouro || '';
+      const numero = data.numero || 'S/N';
+      const complemento = data.complemento ? `, ${data.complemento}` : '';
+      const bairro = data.bairro || '';
+      const cidade = data.municipio || '';
+      const uf = data.uf || '';
+      const cep = data.cep || '';
+
+      const endereco = `${logradouro}, ${numero}${complemento}, ${bairro}, ${cidade}/${uf} - CEP: ${cep}`;
+      const listCnaes = [
+        { codigo: data.cnae_fiscal, descricao: data.cnae_fiscal_descricao, principal: true },
+        ...(data.cnaes_secundarios || []).map((s: any) => ({ ...s, principal: false }))
+      ];
+
+      setFormData(prev => ({
+        ...prev,
+        razao_social: data.razao_social || prev.razao_social,
+        nome_fantasia: data.nome_fantasia || prev.nome_fantasia || data.razao_social,
+        endereco_completo: endereco,
+        cep: cep,
+        cnaes: listCnaes
+      }));
+
+    } catch (err: any) {
+      console.error('[DEBUG] Brasil API Admin - Erro de Fetch:', err);
+      alert(`Erro na busca: ${err.message}\n\nVerifique o console (F12) para detalhes técnicos.`);
+    } finally {
+      setSearchingCnpj(false);
+    }
+  };
 
   const [clientModules, setClientModules] = useState<Record<string, boolean>>({});
   const [clientUnits, setClientUnits] = useState<any[]>([]);
@@ -138,11 +206,23 @@ export default function SuperAdminPage() {
         nome_fantasia: client.nome_fantasia || '',
         cnpj_raiz: client.cnpj_raiz,
         logo_url: client.logo_url || '',
-        ativo: client.ativo ?? true
+        ativo: client.ativo ?? true,
+        endereco_completo: client.endereco_completo || '',
+        cep: client.cep || '',
+        cnaes: client.cnaes || []
       });
     } else {
       setSelectedClient(null);
-      setFormData({ razao_social: '', nome_fantasia: '', cnpj_raiz: '', logo_url: '', ativo: true });
+      setFormData({ 
+        razao_social: '', 
+        nome_fantasia: '', 
+        cnpj_raiz: '', 
+        logo_url: '', 
+        ativo: true,
+        endereco_completo: '',
+        cep: '',
+        cnaes: []
+      });
     }
     setOpenClientDialog(true);
   };
@@ -281,7 +361,10 @@ export default function SuperAdminPage() {
       nome_fantasia: client.nome_fantasia || '',
       cnpj_raiz: client.cnpj_raiz,
       logo_url: client.logo_url || '',
-      ativo: client.ativo ?? true
+      ativo: client.ativo ?? true,
+      endereco_completo: client.endereco_completo || '',
+      cep: client.cep || '',
+      cnaes: client.cnaes || []
     });
     setOpenConfigMenu(true);
   };
@@ -524,6 +607,22 @@ export default function SuperAdminPage() {
                 placeholder="00.000.000"
                 value={formData.cnpj_raiz} 
                 onChange={(e) => setFormData({...formData, cnpj_raiz: e.target.value})}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="Sincronizar com Brasil API">
+                        <IconButton 
+                          onClick={handleBuscarCnpj} 
+                          disabled={searchingCnpj}
+                          size="small"
+                          color="primary"
+                        >
+                          {searchingCnpj ? <CircularProgress size={16} /> : <RefreshCcw size={16} />}
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  )
+                }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -533,6 +632,37 @@ export default function SuperAdminPage() {
                 sx={{ ml: 1 }}
               />
             </Grid>
+
+            {/* NOVOS CAMPOS: ENDEREÇO E CNAE */}
+            <Grid item xs={12}>
+              <TextField 
+                label="Endereço Completo" 
+                fullWidth 
+                multiline
+                rows={2}
+                placeholder="Sincronize com o CNPJ para preencher automaticamente"
+                value={formData.endereco_completo} 
+                onChange={(e) => setFormData({...formData, endereco_completo: e.target.value})}
+              />
+            </Grid>
+
+            {formData.cnaes && formData.cnaes.length > 0 && (
+              <Grid item xs={12}>
+                <Typography variant="caption" color="text.secondary" fontWeight="bold">CNAES Identificados:</Typography>
+                <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {formData.cnaes.map((c: any, idx: number) => (
+                    <Tooltip key={idx} title={c.descricao}>
+                      <Chip 
+                        label={`${c.codigo}${c.principal ? ' (Principal)' : ''}`} 
+                        size="small" 
+                        variant={c.principal ? "filled" : "outlined"}
+                        color={c.principal ? "primary" : "default"}
+                      />
+                    </Tooltip>
+                  ))}
+                </Box>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <Typography variant="subtitle2" gutterBottom>Logo da Empresa</Typography>
               <Box 

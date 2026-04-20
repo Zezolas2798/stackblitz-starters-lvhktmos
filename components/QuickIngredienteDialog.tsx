@@ -83,7 +83,7 @@ export default function QuickIngredienteDialog({
     const { data: alergData } = await (supabase as any).from('anvisa_alergenicos').select('*').order('nome');
     if (alergData) setAlergenicosMestre(alergData);
 
-    const { data: catData } = await (supabase as any).from('cliente_categorias_produto')
+    const { data: catData } = await (supabase as any).from('grupos_produto')
       .select('id, nome')
       .eq('cliente_id', activeClientId!)
       .order('nome');
@@ -151,7 +151,7 @@ export default function QuickIngredienteDialog({
         if (nomeCategoriaFinal) {
           const categoriaExistente = categoriasMestre.find(c => c.nome.toLowerCase() === nomeCategoriaFinal.toLowerCase());
           if (!categoriaExistente) {
-            const { data: catNova, error } = await (supabase as any).from('cliente_categorias_produto').insert({ cliente_id: activeClientId, nome: nomeCategoriaFinal }).select('id').single();
+            const { data: catNova, error } = await (supabase as any).from('grupos_produto').insert({ cliente_id: activeClientId, nome: nomeCategoriaFinal }).select('id').single();
             if (!error && catNova) idCategoriaFinal = catNova.id;
           } else {
             idCategoriaFinal = categoriaExistente.id;
@@ -169,7 +169,7 @@ export default function QuickIngredienteDialog({
         tipo_ingrediente: 'COMPOSTO',
         declaracao_ingredientes_fornecedor: listaIngredientes,
         contem_gluten: contemGluten,
-        categoria_produto_id: idCategoriaFinal,
+        grupo_id: idCategoriaFinal,
         classificacao_nova: classificacaoNova,
         // contem_lactose: contemLactose, // Campo calculado ou explícito dependendo do schema
 

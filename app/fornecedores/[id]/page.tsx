@@ -163,9 +163,9 @@ export default function EditFornecedorPage() {
     try {
       setCarregandoPortfolio(true);
       
-      // 1. Buscar Grupos (registros de cliente_categorias_produto com modalidades selecionadas)
+      // 1. Buscar Grupos (registros de grupos_produto com modalidades selecionadas)
       const { data: grupos } = await (supabase as any)
-        .from('cliente_categorias_produto')
+        .from('grupos_produto')
         .select('*')
         .eq('cliente_id', activeClientId)
         .in('modalidade', categorias)
@@ -176,7 +176,7 @@ export default function EditFornecedorPage() {
 
       // 2. Buscar Grupos de Estoque para mapeamento
       const { data: stockGroups } = await (supabase as any)
-        .from('ingredientes_grupos')
+        .from('subgrupos_produto')
         .select('id, categoria_id')
         .eq('cliente_id', activeClientId);
       
@@ -188,7 +188,7 @@ export default function EditFornecedorPage() {
       // 3. Buscar Subgrupos (registros de ingredientes)
       const { data: ingredientes } = await (supabase as any)
         .from('ingredientes')
-        .select('id, nome, grupo_estoque_id, categoria_produto_id')
+        .select('id, nome, subgrupo_id, grupo_id')
         .eq('cliente_id', activeClientId)
         .is('deleted_at', null)
         .order('nome');
@@ -196,16 +196,16 @@ export default function EditFornecedorPage() {
       // Mapear modalidades
       const catMap: Record<string, string> = {};
       const { data: allCats } = await (supabase as any)
-        .from('cliente_categorias_produto')
+        .from('grupos_produto')
         .select('id, modalidade')
         .eq('cliente_id', activeClientId);
       (allCats || []).forEach((c: any) => { catMap[c.id] = c.modalidade; });
 
       const mappedItens = (ingredientes || []).map((i: any) => {
         // Encontrar a categoria comercial (ex: 'Leite e Derivados')
-        const catId = i.categoria_produto_id || stockGroupToCat[i.grupo_estoque_id];
+        const catId = i.grupo_id || stockGroupToCat[i.subgrupo_id];
         // Encontrar a modalidade (ex: 'ALIMENTOS')
-        const mod = catId ? catMap[catId] : (i.grupo_estoque_id ? catMap[i.grupo_estoque_id] : null);
+        const mod = catId ? catMap[catId] : (i.subgrupo_id ? catMap[i.subgrupo_id] : null);
         
         return {
           id: i.id,

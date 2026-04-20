@@ -62,13 +62,13 @@ export default function AnaliseFinanceiraEstoquePage() {
     try {
       const [lotesRes, catRes] = await Promise.all([
         (supabase as any)
-          .from('lotes_estoque')
+          .from('estoque_lotes')
           .select(`
             id, categoria_produto, quantidade_atual_g_ml, quantidade_inicial_g_ml,
             valor_unitario, valor_total, unidade_peso_embalagem,
-            ingredientes(nome, preco_ultima_compra, ingredientes_grupos(nome)),
+            ingredientes(nome, preco_ultima_compra, subgrupos_produto(nome)),
             materiais(nome, tipo_material, marca, categoria_id),
-            cliente_locais_estoque(nome)
+            estoque_locais(nome)
           `)
           .eq('unidade_id', unidadeId)
           .is('deleted_at', null)
@@ -76,7 +76,7 @@ export default function AnaliseFinanceiraEstoquePage() {
           .neq('status', 'PREVISTO')
           .gt('quantidade_atual_g_ml', 0),
         (supabase as any)
-          .from('cliente_categorias_produto')
+          .from('grupos_produto')
           .select('id, nome')
           .eq('cliente_id', activeClientId)
       ]);
@@ -132,7 +132,7 @@ export default function AnaliseFinanceiraEstoquePage() {
         // Determinar grupo (subcategoria)
         let grupoNome = 'Outros';
         if (ingrediente) {
-          grupoNome = ingrediente.ingredientes_grupos?.nome || 'Outros';
+          grupoNome = ingrediente.subgrupos_produto?.nome || 'Outros';
         } else if (material) {
           const subcat = catRes.data?.find((c: any) => c.id === material.categoria_id);
           grupoNome = subcat?.nome || material.marca || 'Geral';
@@ -143,7 +143,7 @@ export default function AnaliseFinanceiraEstoquePage() {
           nome: ingrediente?.nome || material?.nome || 'Desconhecido',
           categoria,
           grupo: grupoNome || 'Outros',
-          local: l.cliente_locais_estoque?.nome || 'Geral',
+          local: l.estoque_locais?.nome || 'Geral',
           qtd_atual_g: qtdAtual,
           qtd_inicial_g: qtdInicial,
           valor_total_lote: valorTotal,
@@ -179,7 +179,7 @@ export default function AnaliseFinanceiraEstoquePage() {
         .from('estoque_movimentacoes')
         .select(`
           *,
-          lotes_estoque(
+          estoque_lotes(
             id, valor_unitario, valor_total, quantidade_inicial_g_ml,
             ingredientes(nome), materiais(nome)
           )
@@ -205,7 +205,7 @@ export default function AnaliseFinanceiraEstoquePage() {
 
   const totalPerdaEstoque = useMemo(() => {
     return movsDescarte.reduce((sum, m) => {
-      const lote = m.lotes_estoque;
+      const lote = m.estoque_lotes;
       if (!lote) return sum;
       const valorUnit = Number(lote.valor_unitario) || 0;
       const qtdMov = Math.abs(Number(m.quantidade_movimentada) || 0);
@@ -651,7 +651,7 @@ export default function AnaliseFinanceiraEstoquePage() {
                 </TableHead>
                 <TableBody>
                   {movsDescarte.map((m: any) => {
-                    const lote = m.lotes_estoque;
+                    const lote = m.estoque_lotes;
                     const prej = (Number(lote?.valor_unitario) || 0) * Math.abs(Number(m.quantidade_movimentada) || 0) / 1000;
                     return (
                       <TableRow key={m.id}>
@@ -695,3 +695,4 @@ export default function AnaliseFinanceiraEstoquePage() {
     </Container>
   );
 }
+

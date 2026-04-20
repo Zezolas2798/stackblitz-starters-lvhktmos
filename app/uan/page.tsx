@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Typography, Grid, Paper, CardActionArea } from '@mui/material';
-import { ChefHat, CalendarDays, ShoppingBasket, Calculator } from 'lucide-react';
+import { ChefHat, CalendarDays, ShoppingBasket, Calculator, Layers, Scale } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function UANMenuModule() {
@@ -13,6 +13,18 @@ export default function UANMenuModule() {
       description: 'Gestão de Fichas de Preparação (FTP), rendimento bruto vs limpo e custos operacionais reais.',
       icon: <ChefHat size={40} color="#1976d2" />,
       path: '/uan/fichas'
+    },
+    {
+      title: 'Perfis de Cardápio',
+      description: 'Crie templates estruturais (slots de saladas, proteínas) para padronizar os ciclos.',
+      icon: <Layers size={40} color="#0288d1" />,
+      path: '/uan/perfis'
+    },
+    {
+      title: 'Regras de Variedade',
+      description: 'Configure restrições de custo, monotonia e sensoriais (AQPC) para o gerador automático.',
+      icon: <Scale size={40} color="#ed6c02" />,
+      path: '/uan/regras'
     },
     {
       title: 'Planejamento Mensal',

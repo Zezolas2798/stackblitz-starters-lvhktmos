@@ -31,11 +31,11 @@ export default function AnaliseTemperaturasPage() {
 
   useEffect(() => {
     async function loadEquips() {
-      if (!activeClientId) return;
+      if (!unidadeId) return;
       const { data: res } = await supabase
-        .from('cliente_equipamentos_config')
+        .from('equipamentos_config')
         .select('id, nome, temp_ideal_min, temp_ideal_max')
-        .eq('cliente_id', activeClientId)
+        .eq('unidade_id', unidadeId)
         .eq('grupo', 'Temperaturas');
       setEquips(res || []);
     }
@@ -48,8 +48,8 @@ export default function AnaliseTemperaturasPage() {
       setLoading(true);
       try {
         let query = supabase
-          .from('cliente_controle_temperatura')
-          .select('*, equipamento:cliente_equipamentos_config(nome, temp_ideal_min, temp_ideal_max)')
+          .from('controle_temperatura')
+          .select('*, equipamento:equipamentos_config(nome, temp_ideal_min, temp_ideal_max)')
           .eq('cliente_id', activeClientId)
           .eq('unidade_id', unidadeId)
           .gte('data', dateRange.start)

@@ -102,11 +102,11 @@ export default function ConfiguracaoEstoquePage() {
         setLoading(true);
         try {
             const [localesRes, catRes, setoresRes, equipRes, gruposRes] = await Promise.all([
-                (supabase as any).from('cliente_locais_estoque').select('*').eq('unidade_id', ctxUnidadeId).order('nome'),
-                (supabase as any).from('cliente_categorias_produto').select('*').eq('cliente_id', activeClientId).order('nome'),
-                (supabase as any).from('cliente_setores_producao').select('*').eq('cliente_id', activeClientId).order('nome'),
-                (supabase as any).from('cliente_equipamentos_config').select('*').eq('cliente_id', activeClientId).order('grupo, nome'),
-                (supabase as any).from('ingredientes_grupos').select('*').eq('cliente_id', activeClientId).order('nome')
+                (supabase as any).from('estoque_locais').select('*').eq('unidade_id', ctxUnidadeId).order('nome'),
+                (supabase as any).from('grupos_produto').select('*').eq('cliente_id', activeClientId).order('nome'),
+                (supabase as any).from('setores_producao').select('*').eq('unidade_id', ctxUnidadeId).order('nome'),
+                (supabase as any).from('equipamentos_config').select('*').eq('unidade_id', ctxUnidadeId).order('grupo, nome'),
+                (supabase as any).from('subgrupos_produto').select('*').eq('cliente_id', activeClientId).order('nome')
             ]);
 
             setLocais(localesRes.data || []);
@@ -130,13 +130,13 @@ export default function ConfiguracaoEstoquePage() {
     const handleAddLocal = async () => {
         if (!novoLocal.trim() || !ctxUnidadeId) return;
         try {
-            const { error } = await (supabase as any).from('cliente_locais_estoque')
+            const { error } = await (supabase as any).from('estoque_locais')
                 .insert({
                     unidade_id: ctxUnidadeId,
                     cliente_id: activeClientId,
                     nome: novoLocal.trim(),
                     ativo: true,
-                    categorias_permitidas: categoriasSelecionadas,
+                    grupos_permitidos_ids: categoriasSelecionadas,
                     equipamento_config_id: null
                 });
             if (error) throw error;
@@ -152,7 +152,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleRemoveLocal = async (id: string) => {
         if (!confirm('Deseja excluir este local?')) return;
         try {
-            const { error } = await (supabase as any).from('cliente_locais_estoque').delete().eq('id', id);
+            const { error } = await (supabase as any).from('estoque_locais').delete().eq('id', id);
             if (error) throw error;
             loadDados();
         } catch (err: any) {
@@ -163,7 +163,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleOpenEdit = (local: any) => {
         setLocalParaEditar(local);
         setEditNome(local.nome);
-        setEditCategorias(local.categorias_permitidas || []);
+        setEditCategorias(local.grupos_permitidos_ids || []);
         setEditEquipamentoConfigId(local.equipamento_config_id || null);
         setOriginalEquipId(local.equipamento_config_id || null);
         setEditDialogOpen(true);
@@ -173,10 +173,10 @@ export default function ConfiguracaoEstoquePage() {
         if (!editNome.trim()) return;
         try {
             const { error } = await (supabase as any)
-                .from('cliente_locais_estoque')
+                .from('estoque_locais')
                 .update({ 
                     nome: editNome.trim(), 
-                    categorias_permitidas: editCategorias,
+                    grupos_permitidos_ids: editCategorias,
                     equipamento_config_id: editEquipamentoConfigId
                 })
                 .eq('id', localParaEditar.id);
@@ -193,7 +193,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleAddCategoria = async (modality: string) => {
         if (!novaCategoria.trim() || !activeClientId) return;
         try {
-            const { error } = await (supabase as any).from('cliente_categorias_produto')
+            const { error } = await (supabase as any).from('grupos_produto')
                 .insert({ 
                     cliente_id: activeClientId, 
                     nome: novaCategoria.trim(),
@@ -211,7 +211,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleRemoveCategoria = async (id: string) => {
         if (!confirm('Deseja excluir esta categoria?')) return;
         try {
-            const { error } = await (supabase as any).from('cliente_categorias_produto').delete().eq('id', id);
+            const { error } = await (supabase as any).from('grupos_produto').delete().eq('id', id);
             if (error) throw error;
             loadDados();
         } catch (err: any) {
@@ -222,10 +222,10 @@ export default function ConfiguracaoEstoquePage() {
     const handleAddSubCategoriaIngrediente = async (categoriaId: string) => {
         if (!novaSubCategoriaIngrediente.trim() || !activeClientId) return;
         try {
-            const { error } = await (supabase as any).from('ingredientes_grupos')
+            const { error } = await (supabase as any).from('subgrupos_produto')
                 .insert({ 
                     cliente_id: activeClientId, 
-                    categoria_id: categoriaId,
+                    grupo_id: categoriaId,
                     nome: novaSubCategoriaIngrediente.trim() 
                 });
             if (error) throw error;
@@ -241,7 +241,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleRemoveSubCategoriaIngrediente = async (id: string) => {
         if (!confirm('Deseja excluir esta subcategoria?')) return;
         try {
-            const { error } = await (supabase as any).from('ingredientes_grupos').delete().eq('id', id);
+            const { error } = await (supabase as any).from('subgrupos_produto').delete().eq('id', id);
             if (error) throw error;
             loadDados();
         } catch (err: any) {
@@ -253,8 +253,12 @@ export default function ConfiguracaoEstoquePage() {
     const handleAddSetor = async () => {
         if (!novoSetor.trim() || !activeClientId) return;
         try {
-            const { error } = await (supabase as any).from('cliente_setores_producao')
-                .insert({ cliente_id: activeClientId, nome: novoSetor.trim() });
+            const { error } = await (supabase as any).from('setores_producao')
+                .insert({ 
+                    cliente_id: activeClientId, 
+                    unidade_id: ctxUnidadeId,
+                    nome: novoSetor.trim() 
+                });
             if (error) throw error;
             setMsg({ open: true, text: 'Setor adicionado!', type: 'success' });
             setNovoSetor('');
@@ -267,7 +271,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleRemoveSetor = async (id: string) => {
         if (!confirm('Deseja excluir este setor?')) return;
         try {
-            const { error } = await (supabase as any).from('cliente_setores_producao').delete().eq('id', id);
+            const { error } = await (supabase as any).from('setores_producao').delete().eq('id', id);
             if (error) throw error;
             loadDados();
         } catch (err: any) {
@@ -285,9 +289,10 @@ export default function ConfiguracaoEstoquePage() {
         if (!grupo || !finalNome || !activeClientId) return;
         
         try {
-            const { error } = await (supabase as any).from('cliente_equipamentos_config')
+            const { error } = await (supabase as any).from('equipamentos_config')
                 .insert({ 
                     cliente_id: activeClientId, 
+                    unidade_id: ctxUnidadeId,
                     grupo, 
                     nome: finalNome,
                     parent_id: parentId || null
@@ -320,7 +325,7 @@ export default function ConfiguracaoEstoquePage() {
     const handleRemoveEquipamento = async (id: string) => {
         if (!confirm('Deseja excluir este item?')) return;
         try {
-            const { error } = await (supabase as any).from('cliente_equipamentos_config').delete().eq('id', id);
+            const { error } = await (supabase as any).from('equipamentos_config').delete().eq('id', id);
             if (error) throw error;
             loadDados();
         } catch (err: any) {
@@ -342,7 +347,7 @@ export default function ConfiguracaoEstoquePage() {
         if (!editNome.trim() || !equipamentoParaEditar) return;
         try {
             const { error } = await (supabase as any)
-                .from('cliente_equipamentos_config')
+                .from('equipamentos_config')
                 .update({ 
                     nome: editNome.trim(),
                     frequencia_diaria: editEquipFrequencia,
@@ -369,9 +374,9 @@ export default function ConfiguracaoEstoquePage() {
             let paiId = qaCategoriaPaiId;
             if (!paiId) {
                 const { data: catExistente } = await (supabase as any)
-                    .from('cliente_equipamentos_config')
+                    .from('equipamentos_config')
                     .select('id')
-                    .eq('cliente_id', activeClientId)
+                    .eq('unidade_id', ctxUnidadeId)
                     .eq('grupo', qaGrupo)
                     .eq('nome', qaCategoria)
                     .is('parent_id', null)
@@ -381,8 +386,13 @@ export default function ConfiguracaoEstoquePage() {
                     paiId = catExistente.id;
                 } else {
                     const { data: novaCat, error: errCat } = await (supabase as any)
-                        .from('cliente_equipamentos_config')
-                        .insert({ cliente_id: activeClientId, grupo: qaGrupo, nome: qaCategoria })
+                        .from('equipamentos_config')
+                        .insert({ 
+                            cliente_id: activeClientId, 
+                            unidade_id: ctxUnidadeId,
+                            grupo: qaGrupo, 
+                            nome: qaCategoria 
+                        })
                         .select()
                         .single();
                     if (errCat) throw errCat;
@@ -393,9 +403,10 @@ export default function ConfiguracaoEstoquePage() {
             // 2. Inserir a sub-categoria se houver nome
             if (qaSub.trim()) {
                 const { data: novaSub, error: errSub } = await (supabase as any)
-                    .from('cliente_equipamentos_config')
+                    .from('equipamentos_config')
                     .insert({ 
                         cliente_id: activeClientId, 
+                        unidade_id: ctxUnidadeId,
                         grupo: qaGrupo, 
                         nome: qaSub.trim(),
                         parent_id: paiId
@@ -573,8 +584,8 @@ export default function ConfiguracaoEstoquePage() {
                                             secondary={
                                                 <Box>
                                                     <Typography variant="caption" display="block">
-                                                        {local.categorias_permitidas?.length > 0 
-                                                            ? local.categorias_permitidas.map((id: string) => 
+                                                        {local.grupos_permitidos_ids?.length > 0 
+                                                            ? local.grupos_permitidos_ids.map((id: string) => 
                                                                 CATEGORIAS_COMPRAS.find(c => c.id === id)?.nome || 
                                                                 categorias.find(c => c.id === id)?.nome || 
                                                                 id
@@ -667,7 +678,7 @@ export default function ConfiguracaoEstoquePage() {
                                                             <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
                                                                 <Typography variant="caption" fontWeight="bold" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>Subcategorias (Nível 3)</Typography>
                                                                 <List dense>
-                                                                    {gruposIngredientes.filter(g => g.categoria_id === cat.id).map(grp => (
+                                                                    {gruposIngredientes.filter(g => g.grupo_id === cat.id).map(grp => (
                                                                         <ListItem key={grp.id} sx={{ py: 0, px: 1 }}>
                                                                             <ListItemIcon sx={{ minWidth: 20 }}>
                                                                                 <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: 'primary.main' }} />
@@ -1175,3 +1186,4 @@ export default function ConfiguracaoEstoquePage() {
         </Container>
     );
 }
+

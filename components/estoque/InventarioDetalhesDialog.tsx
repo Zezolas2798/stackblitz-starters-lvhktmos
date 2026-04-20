@@ -45,7 +45,7 @@ export default function InventarioDetalhesDialog({ open, onClose, inventarioId }
         .from('estoque_inventarios')
         .select(`
           *,
-          cliente_locais_estoque(nome)
+          estoque_locais(nome)
         `)
         .eq('id', inventarioId)
         .single();
@@ -57,7 +57,7 @@ export default function InventarioDetalhesDialog({ open, onClose, inventarioId }
         .from('estoque_inventario_itens')
         .select(`
           *,
-          lotes_estoque(
+          estoque_lotes(
             numero_lote_fabricante,
             unidade_peso_embalagem,
             ingredientes(nome),
@@ -69,9 +69,9 @@ export default function InventarioDetalhesDialog({ open, onClose, inventarioId }
 
       const mapped = (itensData || []).map((it: any) => ({
         ...it,
-        nome: it.lotes_estoque?.ingredientes?.nome || it.lotes_estoque?.materiais?.nome || 'Desconhecido',
-        lote_fabricante: it.lotes_estoque?.numero_lote_fabricante,
-        unidade: it.lotes_estoque?.unidade_peso_embalagem
+        nome: it.estoque_lotes?.ingredientes?.nome || it.estoque_lotes?.materiais?.nome || 'Desconhecido',
+        lote_fabricante: it.estoque_lotes?.numero_lote_fabricante,
+        unidade: it.estoque_lotes?.unidade_peso_embalagem
       }));
 
       setItens(mapped);
@@ -128,7 +128,7 @@ export default function InventarioDetalhesDialog({ open, onClose, inventarioId }
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', mb: 0.5 }}>
                     <MapPin size={14} /> <Typography variant="caption" fontWeight="bold">LOCAL</Typography>
                   </Box>
-                  <Typography variant="body2">{inv.cliente_locais_estoque?.nome || 'Geral'}</Typography>
+                  <Typography variant="body2">{inv.estoque_locais?.nome || 'Geral'}</Typography>
                 </Grid>
                 <Grid item xs={12} md={3}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', mb: 0.5 }}>
@@ -241,3 +241,4 @@ export default function InventarioDetalhesDialog({ open, onClose, inventarioId }
     </Dialog>
   );
 }
+

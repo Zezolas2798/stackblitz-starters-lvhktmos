@@ -10,7 +10,8 @@ O sistema utiliza um padrão **BaaS-First (Backend as a Service)** baseado no **
 
 ### Princípios da Camada de Dados
 *   **Controle Centralizado**: A lógica de segurança e isolamento de dados reside no banco de dados via **RLS (Row Level Security)**.
-*   **Comunicação Direta**: O Frontend consome o banco de dados diretamente através do `supabaseClient`, reduzindo a necessidade de APIs intermediárias (BFF) para operações CRUD simples.
+*   **Isolamento Granular**: O sistema garante isolamento tanto em nível de Cliente (Tenant) quanto em nível de **Unidade (Filial)** para dados operacionais (Estoque, Equipamentos, Produção).
+*   **Comunicação Direta**: O Frontend consome o banco de dados diretamente através do `supabaseClient`.
 *   **Server Actions**: Para lógicas complexas que exigem processamento no servidor ou segredos de API, utilizamos Next.js Server Actions.
 
 ---

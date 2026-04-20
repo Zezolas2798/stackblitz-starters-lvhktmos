@@ -15,6 +15,9 @@ export interface Cliente {
   cnpj_raiz: string;
   logo_url?: string | null;
   ativo: boolean | null;
+  endereco_completo?: string | null;
+  cep?: string | null;
+  cnaes?: any[] | null;
   created_at?: string | null;
 }
 
@@ -51,6 +54,10 @@ export interface Profile {
 
 export type CategoriaUAN = 'Prato Base' | 'Prato Principal' | 'Alternativa' | 'Opção Vegetariana' | 'Guarnição' | 'Saladas' | 'Bebidas' | 'Complemento' | 'Sopa' | 'Bebida Quente' | 'Bebida Fria' | 'Base' | 'Recheio' | 'Sobremesa';
 
+export type CorPredominante = 'Branco' | 'Marrom' | 'Verde' | 'Vermelho' | 'Amarelo' | 'Laranja' | 'Misto';
+export type TexturaPrincipal = 'Crocante' | 'Macio' | 'Cremoso' | 'Firme' | 'Gelatinoso' | 'Líquido';
+export type MetodoCoccao = 'Cru' | 'Cozido_Agua' | 'Cozido_Vapor' | 'Assado' | 'Grelhado' | 'Frito_Imersao' | 'Salteado' | 'Refogado' | 'Brasado';
+
 export interface FichaTecnicaUAN {
   id: string;
   cliente_id: string;
@@ -63,6 +70,12 @@ export interface FichaTecnicaUAN {
   refeicoes?: string[];
   created_at?: string;
   updated_at?: string;
+  
+  // Atributos Sensoriais (Motor AQPC / Anti-Monotonia)
+  cor_predominante?: CorPredominante | null;
+  textura_principal?: TexturaPrincipal | null;
+  metodo_coccao?: MetodoCoccao | null;
+  rico_em_enxofre?: boolean;
   
   // Relacionamentos Injetados via JOIN
   composicao?: ComposicaoFichaUAN[];
@@ -121,6 +134,78 @@ export interface ListaCompraUAN {
   itens_json: any; // Armazena a lista plana calculada (JSON)
 }
 
+// ==============================================================================
+// 8.1 PERFIS DE CARDÁPIO (Templates Multi-Opção por Refeição)
+// ==============================================================================
+
+export interface PerfilCardapio {
+  id: string;
+  cliente_id: string;
+  nome: string;
+  descricao?: string | null;
+  refeicao_grupo: 'ALMOCO_JANTAR' | 'CAFE_LANCHES';
+  ativo: boolean;
+  created_at?: string;
+  updated_at?: string;
+  
+  // Relacionamento
+  slots?: PerfilCardapioSlot[];
+}
+
+export interface PerfilCardapioSlot {
+  id: string;
+  perfil_id: string;
+  categoria_uan: CategoriaUAN | string;
+  quantidade_min: number;
+  quantidade_max: number;
+  obrigatorio: boolean;
+  rotulo_display?: string | null;
+  ordem_exibicao: number;
+}
+
+export interface CardapioPerfilRefeicao {
+  id: string;
+  cardapio_id: string;
+  refeicao: string;
+  perfil_id: string;
+  
+  // Relacionamento
+  perfil?: PerfilCardapio;
+}
+
+// ==============================================================================
+// 8.2 REGRAS DE VARIEDADE (Restrições Configuráveis pelo Nutricionista)
+// ==============================================================================
+
+export type TipoRegraVariedade = 
+  | 'MAX_SEMANAL_FAMILIA'
+  | 'DISTANCIA_MINIMA_DIAS'
+  | 'MAX_DIARIO_COR'
+  | 'MAX_DIARIO_TEXTURA'
+  | 'MAX_DIARIO_METODO_COCCAO'
+  | 'MAX_DIARIO_ENXOFRE'
+  | 'INCOMPATIBILIDADE_DIARIA'
+  | 'SIMILARIDADE_ENTRE_DIAS'
+  | 'CUSTO_MAX_REFEICAO'
+  | 'CUSTO_MAX_DIARIO';
+
+export type SeveridadeRegra = 'SOFT' | 'HARD';
+
+export interface CardapioRegraVariedade {
+  id: string;
+  cliente_id: string;
+  tipo_regra: TipoRegraVariedade;
+  descricao?: string | null;
+  parametro_alvo?: string | null;
+  valor_limite?: number | null;
+  dias_janela?: number | null;
+  limiar_similaridade?: number | null;
+  severidade: SeveridadeRegra;
+  ativo: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ClienteUnidade {
   id: string;
   cliente_id: string;
@@ -131,6 +216,8 @@ export interface ClienteUnidade {
   responsavel_tecnico_nome?: string | null;
   responsavel_tecnico_registro?: string | null;
   ativo: boolean | null;
+  cep?: string | null;
+  cnaes?: any[] | null;
   
   // Relação Virtual (Frontend Join)
   cliente?: Cliente;
@@ -186,7 +273,7 @@ export interface Fornecedor {
   frequencia_entrega?: string | null;
   
   // Portfólio Granular (Matriz de Kraljic)
-  grupos_fornecidos?: string[]; // IDs de ingredientes_grupos
+  grupos_fornecidos?: string[]; // IDs de subgrupos_produto
   itens_fornecidos?: string[];  // IDs de ingredientes
 
   created_at?: string;
@@ -300,7 +387,7 @@ export interface Ingrediente {
   vitamina_b7_mcg: number | null;
   vitamina_b9_mcg: number | null;
   vitamina_b12_mcg: number | null;
-  categoria_produto_id: string | null;
+  grupo_id: string | null;
 
   calcio_mg: number | null;
   cloreto_mg: number | null;
@@ -319,7 +406,7 @@ export interface Ingrediente {
 
   classificacao_nova: number | null; // NOVA: 1=In Natura, 2=Culinário, 3=Processado, 4=Ultraprocessado
 
-  grupo_estoque_id?: string | null;
+  subgrupo_id?: string | null;
   grupo_estoque?: {
     id: string;
     nome: string;

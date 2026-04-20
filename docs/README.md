@@ -45,7 +45,7 @@ Nossa missão é transformar a gestão técnica do Food Service através de inte
 
 ### Backend & Core Services
 *   **Database & Auth**: [Supabase](https://supabase.com/) (PostgreSQL)
-*   **Segurança**: RLS (Row Level Security) Multi-tenant
+*   **Segurança**: RLS (Row Level Security) Multi-tenant & Unit-Level Isolation
 *   **Storage**: Supabase Storage para evidências e documentos
 
 ### Engenharia & Inteligência

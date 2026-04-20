@@ -65,7 +65,7 @@ export default function InventarioDialog({ open, onClose, onFinished }: Props) {
 
   async function loadLocais() {
     const { data } = await (supabase as any)
-      .from('cliente_locais_estoque')
+      .from('estoque_locais')
       .select('id, nome')
       .eq('unidade_id', unidadeId)
       .eq('ativo', true)
@@ -102,7 +102,7 @@ export default function InventarioDialog({ open, onClose, onFinished }: Props) {
 
       // 2. Load all lots in this location
       const { data: lotesData, error: lotesErr } = await (supabase as any)
-        .from('lotes_estoque')
+        .from('estoque_lotes')
         .select('id, numero_lote_fabricante, quantidade_atual_g_ml, unidade_peso_embalagem, ingredientes(nome), materiais(nome)')
         .eq('unidade_id', unidadeId)
         .eq('local_estoque_id', selectedLocal)
@@ -316,7 +316,7 @@ export default function InventarioDialog({ open, onClose, onFinished }: Props) {
 
         // Update the lot quantity
         await (supabase as any)
-          .from('lotes_estoque')
+          .from('estoque_lotes')
           .update({ quantidade_atual_g_ml: item.qtd_conferida_g })
           .eq('id', item.lote_id);
 
@@ -726,3 +726,4 @@ export default function InventarioDialog({ open, onClose, onFinished }: Props) {
     </Dialog>
   );
 }
+

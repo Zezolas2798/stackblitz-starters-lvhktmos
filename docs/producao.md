@@ -37,7 +37,7 @@ tags:
 |----------|-----------|-----------|
 | **Ordem de Produção (`producao_ordens`)** | `Entity` | Documento mestre que agrupa um conjunto de itens a serem produzidos. |
 | **Item de Produção (`producao_ordens_itens`)** | `Entity` | Linha individual vinculando receita a um setor com quantidades. |
-| **Setor de Produção (`cliente_setores_producao`)** | `Entity` | Divisão física/lógica da fábrica (ex: Confeitaria). |
+| **Setor de Produção ([[setores_producao]])** | `Entity` | Divisão física/lógica da fábrica (ex: Confeitaria). |
 | **Requisição de Material** | `Value Object` | Lista de insumos gerada automaticamente para execução. |
 | **StatusOP** | `Enum` | Estados possíveis da ordem: PENDENTE, EM_PREPARO, FINALIZADA, CANCELADA. |
 
@@ -98,13 +98,14 @@ stateDiagram-v2
 ### 5.1. Organização por Setor (`enforces` Dashboard)
 - Cada item da OP é vinculado a um `setor_producao_id`.
 - Dashboard agrupa itens por setor, mostrando progresso consolidado.
+- Os setores são isolados por `unidade_id` (ver [[setores_producao]]).
 
 ### 5.2. Cálculo de Requisição (`calculates` Requisicao)
 A partir da composição da [[fichas_tecnicas_industrial]], o sistema calcula:
 `Quantidade Necessária = Peso Líquido na Ficha × Quantidade Planejada`
 
 ### 5.3. Multi-Tenant (`applies` Policy)
-- Filtro obrigatório por `cliente_id` e `unidade_id` em todas as queries.
+- Filtro obrigatório por `cliente_id` e `unidade_id` em todas as queries (incluindo Ordens e Setores).
 
 ---
 

@@ -42,7 +42,7 @@ export default function EditarMaterialPage() {
     tipo_material: 'EMBALAGEM' as TipoMaterial,
     unidade_medida: 'un',
     custo_medio: 0,
-    categoria_id: '',
+    grupo_id: '',
     descricao_tecnica: '',
     material_base: '',
     dimensoes: '',
@@ -71,7 +71,7 @@ export default function EditarMaterialPage() {
     const modalidade = modalityMapping[type] || type;
     
     const { data, error } = await supabase
-      .from('cliente_categorias_produto')
+      .from('grupos_produto')
       .select('id, nome')
       .eq('cliente_id', activeClientId)
       .eq('modalidade', modalidade)
@@ -105,7 +105,7 @@ export default function EditarMaterialPage() {
             tipo_material: (m.tipo_material as TipoMaterial) || 'EMBALAGEM',
             unidade_medida: m.unidade_medida || 'un',
             custo_medio: m.custo_medio || 0,
-            categoria_id: m.categoria_id || '',
+            grupo_id: m.grupo_id || '',
             descricao_tecnica: m.descricao_tecnica || '',
             material_base: m.material_base || '',
             dimensoes: m.dimensoes || '',
@@ -134,7 +134,7 @@ export default function EditarMaterialPage() {
 
   const handleTipoChange = (e: any) => {
     const newType = e.target.value as TipoMaterial;
-    setFormData(prev => ({ ...prev, tipo_material: newType, categoria_id: '' }));
+    setFormData(prev => ({ ...prev, tipo_material: newType, grupo_id: '' }));
     fetchCategorias(newType);
   };
 
@@ -154,7 +154,7 @@ export default function EditarMaterialPage() {
           tipo_material: formData.tipo_material,
           unidade_medida: formData.unidade_medida,
           custo_medio: Number(formData.custo_medio),
-          categoria_id: formData.categoria_id || null,
+          grupo_id: formData.grupo_id || null,
           descricao_tecnica: formData.descricao_tecnica,
           material_base: formData.material_base,
           dimensoes: formData.dimensoes,
@@ -242,8 +242,8 @@ export default function EditarMaterialPage() {
                 select
                 fullWidth
                 label="Categoria"
-                name="categoria_id"
-                value={formData.categoria_id}
+                name="grupo_id"
+                value={formData.grupo_id}
                 onChange={handleChange}
                 disabled={categorias.length === 0}
               >

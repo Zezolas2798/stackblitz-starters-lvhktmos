@@ -81,7 +81,8 @@ Regras aplicadas:
 - **Arredondamento Matemático**: Anexo IV da RDC 429.
 - **Harmonização de Porção**: Art. 10 (§2º) tolerância de +/- 30%.
 - **Selo de Lupa (FOP)**: Alertas automáticos.
-- **Alegações Nutricionais (Claims)**: "Fonte de...", "Alto teor de..." com resolução de conflitos.
+- **Alegações Nutricional (Claims)**: "Fonte de...", "Alto teor de..." com resolução de conflitos.
+- **Hierarquia de Blocos**: "Denominação de Venda" ancorada no topo das declarações, seguida pela tabela e fechando com "Peso Líquido".
 
 ---
 
@@ -108,6 +109,39 @@ O motor de cálculo (`calcular-nutrientes`) realiza as seguintes operações cr�
 3.  **Harmonização de Porção**: Aplica o Art. 10 (§2º) para ajustar a porção declarada.
 4.  **Lupa Frontal (FOP)**: Calcula automaticamente os alertas de "Alto em..."
 
+### Arquitetura de Impressão e Layout (A4)
+Para garantir a fidelidade visual na geração de PDFs, o sistema utiliza:
+- **Display Flexbox**: O container principal utiliza `flexDirection: 'column'` com `minHeight: '297mm'` (padrão A4).
+- **Ancoragem de Rodapé**: O bloco de dados de fabricação (Endereço, CNPJ, SAC) utiliza `mt: 'auto'`. Isso força as informações para a base da página, independentemente do volume de conteúdo acima.
+- **Margens Padrão**: Configuração via CSS `@page { size: A4; margin: 15mm; }` para evitar cortes de conteúdo.
+- **Prevenção de Quebra**: Uso de `break-inside: 'avoid'` em componentes críticos como a Tabela Nutricional e o Bloco de Declarações.
+
+### Mapeamento de Peso Líquido (Fallback)
+A declaração de Peso Líquido segue a precedência:
+1. `conteudo_liquido`: Valor manual inserido na ficha técnica.
+2. `peso_embalagem_g`: Valor extraído do campo "Peso do Produto (g)" na tabela `receitas` (mapeamento automatizado caso o manual seja nulo).
+
+---
+
+## 4. Controle de Versões e Históricos
+
+Para garantir a rastreabilidade (GxP), o sistema permite a seleção de versões específicas de cada receita.
+
+### Mecanismo de Snapshots (`receitas_versoes`)
+Ao selecionar uma versão diferente da "Atual":
+- **Fonte de Dados**: O sistema ignora a tabela mestre (`receitas`) e a árvore atual (`composicao_receitas`).
+- **Composição**: Os ingredientes são carregados do `composicao_snapshot`.
+- **Nutrientes**: A tabela nutricional é lida do `tabela_nutricional_snapshot` (gerado no momento da aprovação), garantindo que o relatório reflita exatamente o que foi aprovado, mitigando o drift de dados por alteração posterior de insumos.
+
+---
+
+## 5. Atribuição de Marca (Brand Attribution)
+
+Conforme requisitos operacionais, os insumos no **Livro de Receitas** exibem a marca correspondente.
+- **Origem**: Coluna `fonte` da tabela `ingredientes`.
+- **Exibição**: Subscrito discreto abaixo do nome do ingrediente.
+- **Escopo**: Exclusivo para Fichas Técnicas (Livro de Receitas). No Catálogo Nutricional, as marcas são omitidas para manter a conformidade com o padrão de rotulagem ANVISA.
+
 ---
 
 ## 4. Matriz de Tabelas Relacionadas
@@ -115,8 +149,9 @@ O motor de cálculo (`calcular-nutrientes`) realiza as seguintes operações cr�
 | Tabela | Função no Relatório |
 | :--- | :--- |
 | `receitas` | Tabela mestre (Nome, Foto, Rendimento, Instruções). |
-| `composicao_receitas` | Define a "árvore" da receita. |
-| `ingredientes` | Dados nutricionais base e flags de alérgenos. |
+| `receitas_versoes` | Armazena snapshots históricos (Composição e Tabela Nutricional). |
+| `composicao_receitas` | Define a "árvore" da receita (versão atual). |
+| `ingredientes` | Dados nutricionais base, flags de alérgenos e **Marcas (`fonte`)**. |
 
 ---
 *Este documento implementa a taxonomia definida em [[sistema.taxonomy]].*

@@ -41,7 +41,7 @@ export default function MovimentacaoGeralDialog({ open, onClose, clienteId, onLo
         setLoading(true);
 
         // Busca os lotes ativos do cliente com suas reservas
-        const { data, error } = await ((supabase as any).from('lotes_estoque')
+        const { data, error } = await ((supabase as any).from('estoque_lotes')
             .select(`
                 *,
                 ingredientes(nome),
@@ -55,7 +55,7 @@ export default function MovimentacaoGeralDialog({ open, onClose, clienteId, onLo
                             id,
                             codigo,
                             producao_ordens_itens(
-                                cliente_setores_producao(nome)
+                                setores_producao(nome)
                             )
                         )
                     )
@@ -133,7 +133,7 @@ export default function MovimentacaoGeralDialog({ open, onClose, clienteId, onLo
             // Se não, o sistema abate apenas o peso.
             let updatePayload: any = { quantidade_atual_g_ml: novaQtdGml };
 
-            const { error: errLote } = await (supabase as any).from('lotes_estoque')
+            const { error: errLote } = await (supabase as any).from('estoque_lotes')
                 .update(updatePayload)
                 .eq('id', lote.id);
             if (errLote) throw errLote;
@@ -258,7 +258,7 @@ export default function MovimentacaoGeralDialog({ open, onClose, clienteId, onLo
                                                     </Typography>
                                                     {lote.producao_reservas_estoque.filter((r: any) => r.status === 'RESERVADO').map((res: any) => {
                                                         const op = res.producao_requisicoes?.producao_ordens;
-                                                        const setores = op?.producao_ordens_itens?.map((i: any) => i.cliente_setores_producao?.nome).filter(Boolean);
+                                                        const setores = op?.producao_ordens_itens?.map((i: any) => i.setores_producao?.nome).filter(Boolean);
                                                         const setoresUnicos = Array.from(new Set(setores)).join(', ');
                                                         
                                                         return (
@@ -308,6 +308,7 @@ export default function MovimentacaoGeralDialog({ open, onClose, clienteId, onLo
         </Dialog>
     );
 }
+
 
 
 

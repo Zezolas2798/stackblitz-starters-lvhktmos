@@ -19,14 +19,14 @@ interface RequisicaoFalta {
   id: string;
   ordem_id: string;
   ingrediente_id: string | null;
-  grupo_estoque_id: string | null;
+  subgrupo_id: string | null;
   qtd_necessaria_g: number;
   qtd_separada_g: number;
   status: string;
   status_compras: string;
   created_at: string;
   ingredientes: { id: string; nome: string; estoque_minimo_kg: number | null } | null;
-  ingredientes_grupos: { id: string; nome: string } | null;
+  subgrupos_produto: { id: string; nome: string } | null;
   producao_ordens: { id: string; codigo: string; titulo: string | null; data_prevista: string | null; margem_erro_compras: number } | null;
 }
 
@@ -71,9 +71,9 @@ export default function ComprasPage() {
       const { data, error: err } = await (supabase as any)
         .from('producao_requisicoes')
         .select(`
-          id, ordem_id, ingrediente_id, grupo_estoque_id, qtd_necessaria_g, qtd_separada_g, status, status_compras, created_at,
+          id, ordem_id, ingrediente_id, subgrupo_id, qtd_necessaria_g, qtd_separada_g, status, status_compras, created_at,
           ingredientes ( id, nome, estoque_minimo_kg ),
-          ingredientes_grupos ( id, nome ),
+          subgrupos_produto ( id, nome ),
           producao_ordens!inner ( id, codigo, titulo, data_prevista, unidade_id, margem_erro_compras, status )
         `)
         .eq('producao_ordens.unidade_id', unidadeId)
@@ -185,7 +185,7 @@ export default function ComprasPage() {
     if (!unidadeId) return;
     try {
       const { data } = await (supabase as any)
-        .from('lotes_estoque')
+        .from('estoque_lotes')
         .select('ingrediente_id, qtd_atual_g')
         .eq('unidade_id', unidadeId)
         .gt('qtd_atual_g', 0);
@@ -253,19 +253,19 @@ export default function ComprasPage() {
 
     // Group OP
     requisicoes.forEach(req => {
-      const key = req.ingrediente_id || req.grupo_estoque_id || '';
+      const key = req.ingrediente_id || req.subgrupo_id || '';
       if (!key) return;
       const margin = req.producao_ordens?.margem_erro_compras || 0;
       const faltaG = (req.qtd_necessaria_g - req.qtd_separada_g) * (1 + margin / 100);
       const estMinKg = req.ingredientes?.estoque_minimo_kg || 0;
       
       if (!map[key]) map[key] = { 
-        nome: (req.ingredientes?.nome || req.ingredientes_grupos?.nome || ''), 
+        nome: (req.ingredientes?.nome || req.subgrupos_produto?.nome || ''), 
         totalOp: 0, totalUan: 0, demandaTotal: 0, 
         estoqueMinimo: estMinKg, 
         estoqueFisico: (estoqueFisicoTotais[key] || 0) / 1000, 
         sugestaoCompra: 0, 
-        isGrupo: !!req.grupo_estoque_id 
+        isGrupo: !!req.subgrupo_id 
       };
       map[key].totalOp += faltaG / 1000;
     });
@@ -380,7 +380,7 @@ export default function ComprasPage() {
                                     else setSelectedOpItems(prev => prev.filter(id => id !== req.id));
                                   }} />
                                 </TableCell>
-                                <TableCell>{req.ingredientes?.nome || req.ingredientes_grupos?.nome}</TableCell>
+                                <TableCell>{req.ingredientes?.nome || req.subgrupos_produto?.nome}</TableCell>
                                 <TableCell align="right">{original.toFixed(3)} kg</TableCell>
                                 <TableCell align="right" sx={{ fontWeight: 'bold', color: 'primary.main' }}>{comMargem.toFixed(3)} kg</TableCell>
                               </TableRow>
@@ -517,3 +517,4 @@ export default function ComprasPage() {
     </Container>
   );
 }
+

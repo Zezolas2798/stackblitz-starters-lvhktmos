@@ -107,7 +107,7 @@ export default function ListaComprasUANPage() {
         const ingredIds = Array.from(new Set(compData?.map(c => c.ingrediente_id) || []));
         const { data: ingData, error: ingErr } = await supabase
           .from('ingredientes')
-          .select('id, nome, preco_ultima_compra, estoque_minimo_kg, categoria_produto_id, cliente_categorias_produto(nome)')
+          .select('id, nome, preco_ultima_compra, estoque_minimo_kg, grupo_id, grupos_produto(nome)')
           .in('id', ingredIds);
 
         if (ingErr) throw ingErr;
@@ -134,7 +134,7 @@ export default function ListaComprasUANPage() {
                   preco_ultima_compra: ing?.preco_ultima_compra || 0,
                   quantidade_comprar_kg: 0,
                   categoria: (() => {
-                    const catObj = ing?.cliente_categorias_produto;
+                    const catObj = ing?.grupos_produto;
                     if (Array.isArray(catObj)) return catObj[0]?.nome || 'Outros';
                     return (catObj as any)?.nome || 'Outros';
                   })()

@@ -10,7 +10,7 @@ export async function GET() {
   }
   return NextResponse.json({
     message: 'Please run this SQL manually in your Supabase SQL Editor:',
-    sql: 'ALTER TABLE public.ingredientes ADD COLUMN IF NOT EXISTS categoria_produto_id UUID REFERENCES public.cliente_categorias_produto(id) ON DELETE SET NULL; CREATE INDEX IF NOT EXISTS idx_ingredientes_categoria_id ON public.ingredientes(categoria_produto_id);',
+    sql: 'ALTER TABLE public.ingredientes ADD COLUMN IF NOT EXISTS grupo_id UUID REFERENCES public.grupos_produto(id) ON DELETE SET NULL; CREATE INDEX IF NOT EXISTS idx_ingredientes_categoria_id ON public.ingredientes(grupo_id);',
   });
 }
 

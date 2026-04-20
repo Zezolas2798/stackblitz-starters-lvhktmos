@@ -62,16 +62,16 @@ export default function OrcamentosPage() {
         (supabase as any).from('compras_orcamentos').select(`
           *,
           fornecedor:fornecedores(id, razao_social, lead_time_dias),
-          ingrediente:ingredientes(id, nome, grupo_estoque_id)
+          ingrediente:ingredientes(id, nome, subgrupo_id)
         `).eq('unidade_id', unidadeId).order('data_orcamento', { ascending: false }),
         
         (supabase as any).from('fornecedores').select('id, razao_social, lead_time_dias, grupos_fornecidos, itens_fornecidos, categorias_compras').eq('cliente_id', activeClientId).is('deleted_at', null),
         
-        (supabase as any).from('ingredientes').select('id, nome, grupo_estoque_id, categoria_produto_id').eq('cliente_id', activeClientId).is('deleted_at', null),
+        (supabase as any).from('ingredientes').select('id, nome, subgrupo_id, grupo_id').eq('cliente_id', activeClientId).is('deleted_at', null),
         
-        (supabase as any).from('ingredientes_grupos').select('id, nome, categoria_id').eq('cliente_id', activeClientId),
+        (supabase as any).from('subgrupos_produto').select('id, nome, categoria_id').eq('cliente_id', activeClientId),
         
-        (supabase as any).from('cliente_categorias_produto').select('id, nome, modalidade').eq('cliente_id', activeClientId)
+        (supabase as any).from('grupos_produto').select('id, nome, modalidade').eq('cliente_id', activeClientId)
       ]);
 
       setOrcamentos(resOrcamentos.data || []);
@@ -224,19 +224,19 @@ export default function OrcamentosPage() {
     // 2. Filtrar INSUMOS que pertencem a esta modalidade
     const itensFiltrados = ingredientes.filter((i: any) => {
       // Prioridade 1: Categoria do Insumo
-      const modInsumo = i.categoria_produto_id ? catMap[i.categoria_produto_id] : null;
+      const modInsumo = i.grupo_id ? catMap[i.grupo_id] : null;
       if (modInsumo === macroTab) return true;
 
       // Prioridade 2: Categoria do Grupo (se insumo não tem categoria direta)
       if (!modInsumo) {
-        const grupo = gruposInsumos.find((g: any) => g.id === i.grupo_estoque_id);
+        const grupo = gruposInsumos.find((g: any) => g.id === i.subgrupo_id);
         const modGrupo = grupo?.categoria_id ? catMap[grupo.categoria_id] : null;
         if (modGrupo === macroTab) return true;
       }
 
       // Fallback DIVERSOS: apenas se não tem nenhuma categoria (direta ou pai)
       if (macroTab === 'DIVERSOS') {
-        const hasCategory = i.categoria_produto_id || gruposInsumos.find((g: any) => g.id === i.grupo_estoque_id)?.categoria_id;
+        const hasCategory = i.grupo_id || gruposInsumos.find((g: any) => g.id === i.subgrupo_id)?.categoria_id;
         return !hasCategory;
       }
 
@@ -248,8 +248,8 @@ export default function OrcamentosPage() {
 
     // 3. Agrupar os itens filtrados por Categoria Comercial (Nível 1)
     const categoryIds = Array.from(new Set(itensFiltrados.map(i => {
-      if (i.categoria_produto_id) return i.categoria_produto_id;
-      const g = gruposInsumos.find((gi: any) => gi.id === i.grupo_estoque_id);
+      if (i.grupo_id) return i.grupo_id;
+      const g = gruposInsumos.find((gi: any) => gi.id === i.subgrupo_id);
       return g?.categoria_id || 'UNKNOWN';
     })));
 
@@ -257,13 +257,13 @@ export default function OrcamentosPage() {
       const category = categoriasMacro.find(c => c.id === catId) || { id: catId, nome: 'Diversos / Outros' };
       
       const itensDestaCat = itensFiltrados.filter(i => {
-        if (i.categoria_produto_id === catId) return true;
-        const g = gruposInsumos.find((gi: any) => gi.id === i.grupo_estoque_id);
+        if (i.grupo_id === catId) return true;
+        const g = gruposInsumos.find((gi: any) => gi.id === i.subgrupo_id);
         return g?.categoria_id === catId;
       });
 
       // 4. Dentro da categoria, agrupar por Subgrupo / Grupo de Estoque (Nível 2)
-      const stockGroupIds = Array.from(new Set(itensDestaCat.map(i => i.grupo_estoque_id || `orphan-${i.id}`)));
+      const stockGroupIds = Array.from(new Set(itensDestaCat.map(i => i.subgrupo_id || `orphan-${i.id}`)));
       
       const subGroups = stockGroupIds.map(sgId => {
         const isOrphan = sgId.startsWith('orphan-');
@@ -275,7 +275,7 @@ export default function OrcamentosPage() {
           nome: isOrphan ? (itemOrfao?.nome || 'ITEM') : 'GERAL'
         };
 
-        const itensDesteSubgrupo = isOrphan ? [itemOrfao] : itensDestaCat.filter(i => i.grupo_estoque_id === sgId);
+        const itensDesteSubgrupo = isOrphan ? [itemOrfao] : itensDestaCat.filter(i => i.subgrupo_id === sgId);
 
         // 5. Fornecedores que atendem este Subgrupo
         const fornecedoresDoSubgrupo = fornecedores.filter((f: any) => {
@@ -289,7 +289,7 @@ export default function OrcamentosPage() {
 
           const itensFornecidosNestaModalidade = (f.itens_fornecidos || []).filter((iid: string) => {
             const it = ingredientes.find(ing => ing.id === iid);
-            const itMod = it?.categoria_produto_id ? catMap[it.categoria_produto_id] : null;
+            const itMod = it?.grupo_id ? catMap[it.grupo_id] : null;
             return itMod === macroTab;
           });
 
@@ -298,7 +298,7 @@ export default function OrcamentosPage() {
           if (temFiltroGranularNestaModalidade) {
             const atendeCategoriaDoGrupo = !isOrphan && f.grupos_fornecidos?.includes(catId);
             const atendeCategoriaDoItem = itensDesteSubgrupo.some((it: any) => 
-               it?.categoria_produto_id && f.grupos_fornecidos?.includes(it.categoria_produto_id)
+               it?.grupo_id && f.grupos_fornecidos?.includes(it.grupo_id)
             );
             const atendeItensEspecificos = itensDesteSubgrupo.some((it: any) => f.itens_fornecidos?.includes(it?.id));
             return atendeCategoriaDoGrupo || atendeCategoriaDoItem || atendeItensEspecificos;

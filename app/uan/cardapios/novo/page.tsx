@@ -21,7 +21,7 @@ const REFEICOES = ['Desjejum', 'Lanche da Manhã', 'Almoço', 'Lanche da Tarde',
 
 export default function NovoCardapioUANPage() {
   const router = useRouter();
-  const { activeClientId } = useClient();
+  const { activeClientId, unidadeId } = useClient();
   const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
@@ -46,6 +46,9 @@ export default function NovoCardapioUANPage() {
     'Jantar': { inicio: '18:00', fim: '20:00' },
     'Ceia': { inicio: '21:30', fim: '22:30' }
   });
+
+  const [perfisDisponiveis, setPerfisDisponiveis] = useState<{ id: string, nome: string, refeicao_grupo: string }[]>([]);
+  const [perfisSelecionados, setPerfisSelecionados] = useState<Record<string, string>>({});
 
   // Sincroniza comensais_modelo quando refeicoes_oferecidas mudar
   useEffect(() => {
@@ -77,28 +80,35 @@ export default function NovoCardapioUANPage() {
   }, [form.refeicoes_oferecidas]);
 
   useEffect(() => {
-    async function fetchSetores() {
-      if (!activeClientId) return;
-      const { data } = await supabase
-        .from('cliente_setores_producao')
+    async function fetchData() {
+      if (!activeClientId || !unidadeId) return;
+      const { data: dataSetores } = await supabase
+        .from('setores_producao')
         .select('id, nome')
-        .eq('cliente_id', activeClientId)
+        .eq('unidade_id', unidadeId)
         .eq('ativo', true)
         .order('nome');
-      if (data) setSetores(data);
+      if (dataSetores) setSetores(dataSetores);
+
+      const { data: dataPerfis } = await supabase
+        .from('perfis_cardapio')
+        .select('id, nome, refeicao_grupo')
+        .eq('cliente_id', activeClientId)
+        .eq('ativo', true);
+      if (dataPerfis) setPerfisDisponiveis(dataPerfis);
     }
-    fetchSetores();
+    fetchData();
   }, [activeClientId]);
 
   const [feriados, setFeriados] = useState<any[]>([]);
 
   const handleSalvar = async () => {
-    if (!activeClientId) return alert('Selecione um cliente.');
+    if (!activeClientId) return window.alert('Selecione um cliente.');
     if (!form.nome_ciclo || !form.mes_referencia) {
-      return alert('Preencha o nome do ciclo e o mês de referência.');
+      return window.alert('Preencha o nome do ciclo e o mês de referência.');
     }
     if (form.dias_funcionamento.length === 0 || form.refeicoes_oferecidas.length === 0) {
-      return alert('Selecione pelo menos um dia de funcionamento e uma refeição.');
+      return window.alert('Selecione pelo menos um dia de funcionamento e uma refeição.');
     }
 
     setLoading(true);
@@ -132,11 +142,30 @@ export default function NovoCardapioUANPage() {
         
       if (error || !data) throw error;
 
-      alert('Cardápio criado com sucesso! Agora configure a grade.');
+      // Inserir relacionamentos de perfil por refeição
+      const perfisPayload = form.refeicoes_oferecidas.map(ref => {
+        const pId = perfisSelecionados[ref];
+        if (!pId) return null;
+        return {
+          cardapio_id: data.id,
+          refeicao: ref,
+          perfil_id: pId
+        };
+      }).filter(Boolean);
+
+      if (perfisPayload.length > 0) {
+        const { error: errPerfis } = await supabase.from('cardapio_perfis_refeicao').insert(perfisPayload as any);
+        if (errPerfis) {
+           console.error('Erro ao vincular perfis:', errPerfis);
+           window.alert('Aviso: O ciclo foi criado, mas houve um erro ao vincular os perfis de cardápio.');
+        }
+      }
+
+      window.alert('Cardápio criado com sucesso! Agora configure a grade.');
       router.push(`/uan/cardapios/${data.id}/grade`);
     } catch (e: any) {
       console.error(e);
-      alert('Erro ao criar cardápio: ' + e.message);
+      window.alert('Erro ao criar cardápio: ' + e.message);
     } finally {
       setLoading(false);
     }
@@ -160,7 +189,7 @@ export default function NovoCardapioUANPage() {
               fullWidth
               label="Nome do Ciclo (Ex: Maio 2026 - Lote 2)"
               value={form.nome_ciclo}
-              onChange={e => setForm({ ...form, nome_ciclo: e.target.value })}
+              onChange={e => setForm({ ...form, nome_ciclo: (e.target as HTMLInputElement).value })}
               required
             />
           </Grid>
@@ -170,7 +199,7 @@ export default function NovoCardapioUANPage() {
               label="Mês de Referência"
               type="month"
               value={form.mes_referencia}
-              onChange={e => setForm({ ...form, mes_referencia: e.target.value })}
+              onChange={e => setForm({ ...form, mes_referencia: (e.target as HTMLInputElement).value })}
               required
               InputLabelProps={{ shrink: true }}
             />
@@ -182,7 +211,7 @@ export default function NovoCardapioUANPage() {
               fullWidth
               label="Setor de Produção Padrão"
               value={form.setor_producao_id}
-              onChange={e => setForm({ ...form, setor_producao_id: e.target.value })}
+              onChange={e => setForm({ ...form, setor_producao_id: (e.target as HTMLInputElement).value })}
               helperText="Defina qual setor receberá as produções deste cardápio"
             >
               <MenuItem value=""><em>Nenhum (Vincular individualmente na OP)</em></MenuItem>
@@ -203,7 +232,7 @@ export default function NovoCardapioUANPage() {
                        <Checkbox 
                          checked={form.dias_funcionamento.includes(dia.id)} 
                          onChange={(e) => {
-                           if (e.target.checked) setForm(p => ({...p, dias_funcionamento: [...p.dias_funcionamento, dia.id]}));
+                           if ((e.target as HTMLInputElement).checked) setForm(p => ({...p, dias_funcionamento: [...p.dias_funcionamento, dia.id]}));
                            else setForm(p => ({...p, dias_funcionamento: p.dias_funcionamento.filter(d => d !== dia.id)}));
                          }}
                        />
@@ -226,7 +255,7 @@ export default function NovoCardapioUANPage() {
                        <Checkbox 
                          checked={form.refeicoes_oferecidas.includes(ref)} 
                          onChange={(e) => {
-                           if (e.target.checked) setForm(p => ({...p, refeicoes_oferecidas: [...p.refeicoes_oferecidas, ref]}));
+                           if ((e.target as HTMLInputElement).checked) setForm(p => ({...p, refeicoes_oferecidas: [...p.refeicoes_oferecidas, ref]}));
                            else setForm(p => ({...p, refeicoes_oferecidas: p.refeicoes_oferecidas.filter(r => r !== ref)}));
                          }}
                        />
@@ -237,6 +266,39 @@ export default function NovoCardapioUANPage() {
               </FormGroup>
             </FormControl>
           </Grid>
+
+          {form.refeicoes_oferecidas.length > 0 && (
+            <Grid item xs={12}>
+              <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
+                Atribuir Perfis de Cardápio por Refeição
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block" mb={2}>
+                Selecione qual template estrutural será usado para montar cada refeição neste ciclo.
+              </Typography>
+              <Grid container spacing={2}>
+                {form.refeicoes_oferecidas.map(ref => {
+                  // Opcional: Se quiser filtrar por grupo (ALMOCO_JANTAR vs CAFE_LANCHES), poderia fazer aqui.
+                  // Para simplificar, vou permitir selecionar qualquer perfil, ou você pode importar a constante REFEICAO_TO_GROUP.
+                  const isAmPm = ref === 'Almoço' || ref === 'Jantar' || ref === 'Ceia'; // simplistic check
+                  return (
+                    <Grid item xs={12} sm={6} md={4} key={ref}>
+                      <TextField
+                        select fullWidth size="small"
+                        label={`Perfil - ${ref}`}
+                        value={perfisSelecionados[ref] || ''}
+                        onChange={(e) => setPerfisSelecionados(p => ({ ...p, [ref]: (e.target as HTMLInputElement).value }))}
+                      >
+                        <MenuItem value=""><em>Sem Perfil / Flexível</em></MenuItem>
+                        {perfisDisponiveis.map(p => (
+                          <MenuItem key={p.id} value={p.id}>{p.nome}</MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                  )
+                })}
+              </Grid>
+            </Grid>
+          )}
           
           <Grid item xs={12}>
             <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
@@ -267,7 +329,7 @@ export default function NovoCardapioUANPage() {
                             sx={{ width: 80 }}
                             value={form.comensais_modelo[dia.id.toString()]?.[ref] || 0}
                             onChange={e => {
-                              const val = Number(e.target.value) || 0;
+                              const val = Number((e.target as HTMLInputElement).value) || 0;
                               setForm(prev => ({
                                 ...prev,
                                 comensais_modelo: {
@@ -303,7 +365,7 @@ export default function NovoCardapioUANPage() {
                         size="small"
                         fullWidth
                         value={horarios[ref]?.inicio || ''}
-                        onChange={e => setHorarios(p => ({ ...p, [ref]: { ...p[ref], inicio: e.target.value } }))}
+                        onChange={e => setHorarios(p => ({ ...p, [ref]: { ...p[ref], inicio: (e.target as HTMLInputElement).value } }))}
                         InputLabelProps={{ shrink: true }}
                       />
                       <TextField 
@@ -312,7 +374,7 @@ export default function NovoCardapioUANPage() {
                         size="small"
                         fullWidth
                         value={horarios[ref]?.fim || ''}
-                        onChange={e => setHorarios(p => ({ ...p, [ref]: { ...p[ref], fim: e.target.value } }))}
+                        onChange={e => setHorarios(p => ({ ...p, [ref]: { ...p[ref], fim: (e.target as HTMLInputElement).value } }))}
                         InputLabelProps={{ shrink: true }}
                       />
                     </Box>

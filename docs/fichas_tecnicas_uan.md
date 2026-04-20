@@ -1,105 +1,210 @@
 ---
-id: modulo.fichas_tecnicas_uan
-titulo: "Fichas Técnicas - UAN (Operacional e Hospitalar)"
-tipo: domain
-modulo: fichas_tecnicas
-status: em_desenvolvimento
-ultima_revisao: 2026-04-15
+id: fichas_tecnicas_uan
+titulo: "Fichas Técnicas UAN — Especificação de Domínio"
+node_type: spec
+layer: domain
+nature: reference, technical
+status: consolidated
+veracidade: high
+convicção: high
+modulo: uan
+version: 1.1.0
+last_updated: 2026-04-17
 tags:
-  - dominio/fichas-tecnicas
   - dominio/uan
-  - entidade/ficha-uan
-  - entidade/composicao-uan
-  - calculation/per-capita
-  - calculation/fator-correcao
-  - calculation/indice-coccao
+  - dominio/fichas-tecnicas
+  - dominio/custo
+  - dominio/nutricao-clinica
 edges:
-  - consome: "[[ingredientes]]"
-  - especifica: "app/fichas-tecnicas/page.tsx"
-  - paralelo: "fichas_tecnicas_industrial"
-codigo_relacionado:
-  - app/fichas-tecnicas/page.tsx
-  - lib/types.ts
+  - contains: "[[composicao_fichas_uan]]"
+  - queries: "[[ingredientes]]"
+  - contextualizes: "[[ARCHITECTURE]]"
+  - derives-from: "[[legislacao/RDC_216_2004]]"
+  - refines: "[[sistema.registry#uan.FichaTecnicaUAN]]"
 ---
 
-# Fichas Técnicas — UAN (Operacional e Hospitalar)
+# Fichas Técnicas UAN
 
-Este documento especifica a arquitetura e as regras de negócio do módulo de **Fichas Técnicas para UAN (Unidade de Alimentação e Nutrição)**. O foco é a gestão de custos operacionais, planejamento de cardápios e controle de desperdício em larga escala.
-
-> **Nota:** Este módulo é **paralelo** ao `fichas_tecnicas_industrial`, não dependente. Ambos consomem [[ingredientes]], mas servem propósitos distintos: UAN = operação interna; Industrial = rotulagem para consumidor.
+> **Contexto:** Receituário operacional para Unidades de Alimentação e Nutrição. Diferente da Ficha Técnica Industrial (que produz rótulos ANVISA), a FT-UAN visa o controle de custo per capita, padronização de preparações e cálculo de necessidade de compra.
+>
+> Legislação aplicável: **RDC 216/2004** (Boas Práticas para Serviços de Alimentação). **Não se aplica** RDC 429/2020 nem RDC 727/2022.
 
 ---
 
-## 1. Visão Geral (UAN vs. Indústria)
+## 1. Definição de Domínio
 
-| Característica | Propósito na UAN |
+Uma **Ficha Técnica UAN (FT-UAN)** é uma entidade que descreve:
+
+- A **composição** de uma preparação culinária (ingredientes com quantidades e índices técnicos)
+- O **dimensionamento** para servir em escala (rendimento em porções + peso por porção)
+- O **custo estimado** per capita (calculado a partir dos preços de última compra dos ingredientes)
+- A **análise nutricional clínica** voluntária (via referência TACO/TBCA por ingrediente)
+
+---
+
+## 2. Modelo de Dados
+
+### 2.1. Tabela `fichas_tecnicas_uan` (Master)
+
+| Coluna | Tipo | Obrig. | Descrição |
+|---|---|---|---|
+| `id` | uuid PK | ✅ | Chave primária (gerada automaticamente) |
+| `cliente_id` | uuid FK | ✅ | Multi-tenancy → `clientes(id)` |
+| `nome` | varchar | ✅ | Nome da preparação (ex: "Frango Grelhado ao Limão") |
+| `categoria_uan` | varchar | ✅ | Categoria da preparação (ver Enum §3.1) |
+| `rendimento_porcoes` | integer | ✅ | Qtd de porções que a receita produz (default: 1) |
+| `peso_porcao_g` | numeric | ✅ | Peso de cada porção em gramas |
+| `modo_preparo` | text | ❌ | Descrição textual da execução (higienização, cocção, armazenamento) |
+| `tempo_preparo_min` | integer | ❌ | Tempo total estimado em minutos |
+| `refeicoes` | varchar[] | ❌ | Refeições onde esta preparação pode ser servida |
+| `created_at` | timestamptz | auto | Timestamp de criação (UTC) |
+| `updated_at` | timestamptz | auto | Timestamp de atualização (UTC) |
+
+> [!WARNING]
+> O campo `refeicoes` está presente na tipagem TypeScript (`FichaTecnicaUAN.refeicoes?: string[]`) e no frontend, mas **não consta na DDL de referência do schema**. Deve ser verificado e adicionado via migração formal se ausente no banco.
+
+### 2.2. Tabela `composicao_fichas_uan` (Detalhe NxN)
+
+| Coluna | Tipo | Obrig. | Descrição |
+|---|---|---|---|
+| `id` | uuid PK | ✅ | Chave primária |
+| `ficha_uan_id` | uuid FK | ✅ | → `fichas_tecnicas_uan(id)` |
+| `ingrediente_id` | uuid FK | ✅ | → `ingredientes(id)` (base de compras) |
+| `referencia_id` | uuid FK | ❌ | → `referencias_nutricionais(id)` (TACO/TBCA — override clínico) |
+| `peso_bruto_g` | numeric | ✅ | Peso do ingrediente antes do preparo |
+| `peso_liquido_g` | numeric | ✅ | Peso após higienização/limpeza |
+| `fator_correcao` | numeric | ✅ | FC = PB / PL (auto-calculado, default: 1) |
+| `indice_coccao` | numeric | ✅ | IC — perda ou ganho de peso na cocção (default: 1) |
+
+#### Separação entre Base de Compras e Base Científica
+
+| Campo | Propósito | Tabela Fonte |
+|---|---|---|
+| `ingrediente_id` | Preço de compra, estoque, custo | `ingredientes` |
+| `referencia_id` | Dados nutricionais TACO/TBCA para cálculo clínico | `referencias_nutricionais` |
+
+Esta separação é intencional: o insumo comprado pode ser "Peito de Frango Resfriado (Fornecedor X)", enquanto a referência nutricional é "Frango, peito, sem pele, cru — TACO".
+
+---
+
+## 3. Enums e Constantes
+
+### 3.1. `CategoriaUAN` (Union Type TypeScript)
+
+Definida em `lib/types.ts` L55. Separação por grupo de refeição (em `lib/uan-constants.ts`):
+
+| Grupo | Refeições | Categorias Permitidas |
+|---|---|---|
+| `ALMOCO_JANTAR` | Almoço, Jantar | Prato Base, Prato Principal, Alternativa, Opção Vegetariana, Guarnição, Saladas, Bebidas, Complemento, Sopa |
+| `CAFE_LANCHES` | Desjejum, Colação, Lanche da Tarde, Ceia | Bebida Quente, Bebida Fria, Base, Recheio, Complemento, Sobremesa, Prato Principal |
+
+O frontend aplica o filtro dinâmico via `MEAL_CATEGORY_GROUPS` + `REFEICAO_TO_GROUP`: se a ficha for vinculada a refeições específicas, apenas as categorias daquele grupo ficam disponíveis no select.
+
+---
+
+## 4. Regras de Negócio e Cálculos
+
+### 4.1. `uan.CalculoFC` — Fator de Correção (Frontend)
+
+```
+FC = Peso Bruto (g) / Peso Líquido (g)
+```
+
+Auto-calculado no `onChange` do formulário quando PB e PL estão preenchidos. Reflete as perdas de higienização/descascamento. Armazenado na `composicao_fichas_uan.fator_correcao`.
+
+### 4.2. `uan.CalculoPesoFinal` — Peso Final da Preparação (Frontend)
+
+```
+Peso Final (g) = Peso Líquido (g) × Índice de Cocção (IC)
+```
+
+Calculado e exibido em tempo real na tabela de composição. **Não é persistido** — valor derivado e re-calculado no carregamento. Representa o peso do ingrediente **após a cocção** (pode ganhar ou perder massa dependendo do processo).
+
+### 4.3. `uan.CalculoPerCapita` — Custo Per Capita (Frontend)
+
+```
+Custo da Receita  = Σ [ (Peso Bruto_i (g) / 1000) × Preço/kg_i ]
+Custo Per Capita  = Custo da Receita / Rendimento (porções)
+```
+
+Exibido em tempo real no box dinâmico do formulário. Usa `ingredientes.preco_ultima_compra` como referência de preço.
+
+> [!NOTE]
+> O custo é uma **estimativa atual** baseada no preço de última compra. Não reflete contratos ou cotações futuras. Para rastreabilidade de custo histórico, será necessário o módulo de cotações (futuro).
+
+### 4.4. `uan.CalculoNutricionalClinico` — Análise TACO/TBCA (Frontend)
+
+```
+Peso Final_i (g) = Peso Líquido_i × IC_i
+Nutriente_total = Σ [ Peso Final_i / 100 × Valor_nutriente_por_100g_i ]
+Nutriente_porcao = Nutriente_total / Rendimento_porcoes
+```
+
+Disponível no botão "Análise Nutricional (TACO/TBCA)" — abre um modal que calcula e exibe os nutrientes por porção e por receita total. **Inclui apenas ingredientes que possuem `referencia_id` vinculada**; os demais são ignorados com aviso ao usuário.
+
+Nutrientes calculados: Energia (kcal), Carboidratos Totais (g), Carboidratos Disponíveis (g), Proteínas (g), Gorduras Totais (g), Fibras (g), Cálcio (mg), Sódio (mg).
+
+---
+
+## 5. Regras de Validação (Salvar)
+
+| Regra | Expressão |
 |---|---|
-| **Foco Principal** | Custo por refeição (Per Capita) e planejamento logístico. |
-| **Público Alvo** | Nutricionistas de produção e gestores de contrato (SLA). |
-| **Unidade Base** | Prato Pronto / Guarnição / Refeição Completa. |
-| **Principais Tabelas** | `fichas_tecnicas_uan` e `composicao_fichas_uan`. |
+| Nome obrigatório | `nome !== ''` |
+| Ao menos 1 ingrediente | `linhas.length > 0` |
+| Anti-fantasma | Linhas com todos os campos vazios são removidas antes de salvar |
+| Completude das linhas | Toda linha não-fantasma deve ter `ingrediente_id`, `peso_bruto_g` e `peso_liquido_g` |
+
+### 5.1. Estratégia de Persistência (Update)
+
+Na edição (`/uan/fichas/[id]`), a sincronização da composição é feita por **Delete + Insert**:
+
+1. `DELETE FROM composicao_fichas_uan WHERE ficha_uan_id = $id`
+2. `INSERT INTO composicao_fichas_uan (...)` com todas as linhas atuais
+
+> [!WARNING]
+> Esta estratégia é simples e eficaz, mas perde histórico de composição entre edições. Se o versionamento de fichas UAN for implementado no futuro, este ponto será o principal a refatorar.
 
 ---
 
-## 2. Mapa Estrutural do Domínio
+## 6. Rotas Frontend
 
-```mermaid
-graph TD
-    FICHA_UAN["Ficha Técnica UAN (fichas_tecnicas_uan)"]
-    COMP_UAN["Composição UAN (composicao_fichas_uan)"]
-    INGREDIENTE["Ingrediente (Estoque)"]
-    REF_NUTRI["Referência Nutricional (TACO/TBCA)"]
-    UNIDADE["Unidade de Serviço (Local)"]
-    PER_CAPITA["Cálculo de Per Capita"]
+| Rota | Arquivo | Função |
+|---|---|---|
+| `/uan/fichas` | `app/uan/fichas/page.tsx` | Listagem com busca por nome, exclusão |
+| `/uan/fichas/nova` | `app/uan/fichas/nova/page.tsx` | Formulário de criação (484 linhas) |
+| `/uan/fichas/[id]` | `app/uan/fichas/[id]/page.tsx` | Formulário de edição (529 linhas) |
 
-    FICHA_UAN --> COMP_UAN
-    COMP_UAN --> INGREDIENTE
-    COMP_UAN -.-> REF_NUTRI
-    FICHA_UAN --> UNIDADE
-    FICHA_UAN --> PER_CAPITA
+### Dependências de UI
 
-    classDef uan fill:#1565C0,stroke:#0D47A1,stroke-width:2px,color:#fff;
-    class FICHA_UAN,COMP_UAN,UNIDADE,PER_CAPITA uan;
+- `@mui/material` — TextField, Autocomplete, Table, Dialog, Chip
+- `lucide-react` — Ícones (Save, ArrowLeft, Trash2, PlusCircle, Calculator, ActivitySquare)
+- `lib/uan-constants.ts` — Mapeamento categorias/refeições
+- `lib/supabaseClient.ts` — Acesso direto ao banco (client-side)
+- `lib/ClientContext.tsx` — `activeClientId` para multi-tenancy
+
+---
+
+## 7. Débitos Técnicos e Evolução
+
+| Item | Tipo | Prioridade | Descrição |
+|---|---|---|---|
+| Refatorar Nova/Editar em componente único | DRY | Alta | ~90% do código duplicado entre `nova/` e `[id]/` |
+| Soft Delete | Compliance | Alta | Atualmente usa `DELETE` físico — violação da política ARCHITECTURE.md |
+| Audit Trail | Compliance | Alta | Nenhuma entrada em `audit_logs_gxp` para criação/edição/exclusão |
+| Tipagem de Referências | TypeSafety | Média | `referenciasDB` tipado como `any[]` em vez de `ReferenciaNutricional[]` |
+| Versionamento de Fichas | Feature | Baixa | FT-UAN não tem snapshot histórico (diferente de `receitas_versoes`) |
+| Migração formal `refeicoes` | Schema | Alta | Campo implementado no app mas ausente na DDL formal |
+
+---
+
+## 8. Conexões do Grafo
+
 ```
-
----
-
-## 3. Regras de Negócio
-
-### 3.1. Referências Nutricionais Locais (Override)
-
-Diferente da Indústria, onde o ingrediente é "estático" para o rótulo, na UAN o nutricionista pode alterar a referência nutricional diretamente na composição:
-
-> **Exemplo:** O ingrediente no estoque é "Arroz Polido Cru". Na ficha de "Arroz Cozido", vincula-se a referência TACO de "Arroz Polido Cozido" para refletir o estado final no prato do paciente.
-
-### 3.2. Fator de Correção (FC) e Índice de Cocção (IC)
-
-- **FC = Peso Bruto / Peso Líquido** — Calcula compra necessária considerando perdas (cascas, sementes, talos).
-- **IC = Peso Cozido / Peso Líquido** — Rendimento da panela, planejamento de porções servidas.
-
-### 3.3. Custo Per Capita
-
-```text
-Custo Porção = Custo do Ingrediente × Peso Bruto (Per Capita)
+uan.FichaTecnicaUAN  ──contains──►  uan.ComposicaoFichaUAN
+uan.FichaTecnicaUAN  ──queries───►  ingrediente.Ingrediente
+uan.FichaTecnicaUAN  ──queries───►  ingrediente.ReferenciaNutricional (opcional)
+uan.CardapioDiaUAN   ──queries───►  uan.FichaTecnicaUAN
+edge.calcularCardapioUAN ──queries──► uan.FichaTecnicaUAN
+RDC_216_2004         ──enforces──►  fichas_tecnicas_uan (Boas Práticas)
 ```
-
-Permite ao gestor saber exatamente quanto custa servir 100g de proteína no buffet.
-
----
-
-## 4. Integração com o Ecossistema
-
-- **Estoque:** Fichas UAN baixam estoque (via Ordem de Produção) baseadas no Peso Bruto.
-- **Cardápios:** O módulo de cardápio consome as Fichas UAN para montar a "Escala de Serviço" semanal.
-- **Ingredientes:** Consome a Master Data centralizada em [[ingredientes]].
-
----
-
-## 5. Legislação Aplicável
-
-A UAN **não gera rótulos** para o consumidor final, portanto a RDC 429/IN 75 (tabela nutricional obrigatória) **não se aplica** a este módulo.
-
-| Tema | Referência | Observação |
-|------|-----------|------------|
-| Boas Práticas de Manipulação | RDC 216/2004 | Controle de higiene e processos |
-| Rotulagem (apenas se comercializar) | RDC 429/2020 | Só se aplica se o alimento for vendido embalado ao consumidor |

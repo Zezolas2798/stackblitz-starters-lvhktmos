@@ -40,7 +40,7 @@ export default function NovoMaterialPage() {
     tipo_material: 'EMBALAGEM' as TipoMaterial,
     unidade_medida: 'un',
     custo_medio: 0,
-    categoria_id: '',
+    grupo_id: '',
     descricao_tecnica: '',
     material_base: '',
     dimensoes: '',
@@ -62,7 +62,7 @@ export default function NovoMaterialPage() {
       return;
     }
 
-    // Mapping from TipoMaterial to modalidade in cliente_categorias_produto
+    // Mapping from TipoMaterial to modalidade in grupos_produto
     const modalityMapping: Record<string, string> = {
       'EMBALAGEM': 'EMBALAGENS',
       'LIMPEZA': 'LIMPEZA',
@@ -78,7 +78,7 @@ export default function NovoMaterialPage() {
 
     try {
       const { data, error } = await supabase
-        .from('cliente_categorias_produto')
+        .from('grupos_produto')
         .select('id, nome, modalidade')
         .eq('cliente_id', unidadeSelecionada.cliente_id)
         .eq('modalidade', targetModality)
@@ -120,7 +120,7 @@ export default function NovoMaterialPage() {
           unidade_medida: formData.unidade_medida,
           custo_medio: Number(formData.custo_medio),
           preco_ultima_compra: Number(formData.custo_medio),
-          categoria_id: formData.categoria_id || null,
+          grupo_id: formData.grupo_id || null,
           descricao_tecnica: formData.descricao_tecnica,
           material_base: formData.material_base,
           dimensoes: formData.dimensoes,
@@ -200,7 +200,7 @@ export default function NovoMaterialPage() {
                 value={formData.tipo_material}
                 onChange={(e) => {
                     handleChange(e as any);
-                    setFormData(prev => ({ ...prev, categoria_id: '' })); // Resetar subcategoria ao mudar modalidade
+                    setFormData(prev => ({ ...prev, grupo_id: '' })); // Resetar subcategoria ao mudar modalidade
                 }}
               >
                 <MenuItem value="EMBALAGEM">Embalagem</MenuItem>
@@ -219,8 +219,8 @@ export default function NovoMaterialPage() {
                 select
                 fullWidth
                 label="Subcategoria"
-                name="categoria_id"
-                value={formData.categoria_id}
+                name="grupo_id"
+                value={formData.grupo_id}
                 onChange={handleChange}
                 helperText={filteredCategorias.length === 0 ? "Nenhuma subcategoria cadastrada para esta modalidade" : "Opcional"}
               >

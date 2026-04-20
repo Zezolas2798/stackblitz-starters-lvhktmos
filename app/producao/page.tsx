@@ -52,13 +52,13 @@ interface ItemProducao {
 interface RequisicaoItem {
   id: string;
   ingrediente_id: string;
-  grupo_estoque_id: string | null;
+  subgrupo_id: string | null;
   qtd_necessaria_g: number;
   qtd_separada_g: number;
   ingredientes: {
     nome: string;
   } | null;
-  ingredientes_grupos: {
+  subgrupos_produto: {
     nome: string;
   } | null;
 }
@@ -84,9 +84,9 @@ export default function ProducaoDashboardPage() {
     setError('');
     try {
       const { data: setoresData, error: setoresErr } = await supabase
-        .from('cliente_setores_producao')
+        .from('setores_producao')
         .select('id, nome')
-        .eq('cliente_id', activeClientId)
+        .eq('unidade_id', unidadeId)
         .eq('ativo', true)
         .order('nome');
 

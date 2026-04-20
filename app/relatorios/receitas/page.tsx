@@ -39,6 +39,14 @@ interface ItemComposicaoCompleto {
   alergenicosNames?: string[];
 }
 
+interface VersaoReceita {
+  id: string;
+  receita_id: string;
+  versao: number;
+  nome_snapshot: string;
+  data_aprovacao: string;
+}
+
 interface ReceitaRelatorio {
   id: string;
   nome: string;
@@ -49,6 +57,7 @@ interface ReceitaRelatorio {
   foto_url?: string | null;
   tipos_receita?: { nome: string } | null;
   denominacao_venda?: string | null;
+  conteudo_liquido?: string | null;
   tabelaCalculada?: ResultadoCalculo;
   ingredientesDetalhados?: ItemComposicaoCompleto[];
   updated_at?: string | null;
@@ -57,8 +66,10 @@ interface ReceitaRelatorio {
 export default function RelatoriosPage() {
   const theme = useTheme();
   const lightTheme = useMemo(() => getTheme('light'), []);
-  const { activeClientId, activeClientName, activeClientLogo } = useClient();
+  const { activeClientId, activeClientName, activeClientLogo, unidadeSelecionada } = useClient();
   const [receitas, setReceitas] = useState<ReceitaRelatorio[]>([]);
+  const [versoesMap, setVersoesMap] = useState<Record<string, VersaoReceita[]>>({});
+  const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({}); // receitaId -> versaoId (vazio = atual)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -66,6 +77,7 @@ export default function RelatoriosPage() {
   const [modoImpressao, setModoImpressao] = useState<'FICHA' | 'NUTRICIONAL' | null>(null);
   const [layoutTabela, setLayoutTabela] = useState<any>('VERTICAL');
   const [layoutLupa, setLayoutLupa] = useState<any>('HORIZONTAL');
+  const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
 
   const [searchTerm, setSearchTerm] = useState('');
   const [unidadeInfo, setUnidadeInfo] = useState<any>(null);
@@ -77,25 +89,52 @@ export default function RelatoriosPage() {
       
       // Carrega receitas
       (supabase as any).from('receitas')
-        .select('id, nome, rendimento_total_g, peso_embalagem_g, modo_preparo, modo_conservacao, foto_url, denominacao_venda, updated_at, tipos_receita(nome)')
+        .select('id, nome, rendimento_total_g, peso_embalagem_g, modo_preparo, modo_conservacao, foto_url, denominacao_venda, conteudo_liquido, updated_at, tipos_receita(nome)')
         .eq('cliente_id', activeClientId)
         .order('nome')
         .then(({ data }: any) => {
-          if (data) setReceitas(data as any[]);
+          if (data) {
+            setReceitas(data as any[]);
+            
+            // Carrega versões das receitas
+            const ids = data.map((r: any) => r.id);
+            (supabase as any).from('receitas_versoes')
+              .select('id, receita_id, versao, nome_snapshot, data_aprovacao')
+              .in('receita_id', ids)
+              .order('versao', { ascending: false })
+              .then(({ data: vData }: any) => {
+                if (vData) {
+                  const map: Record<string, VersaoReceita[]> = {};
+                  vData.forEach((v: any) => {
+                    if (!map[v.receita_id]) map[v.receita_id] = [];
+                    map[v.receita_id].push(v);
+                  });
+                  setVersoesMap(map);
+                }
+              });
+          }
           setLoading(false);
         });
 
-      // Carrega informações da unidade (RT, CNPJ, Endereço)
-      (supabase as any).from('cliente_unidades')
-        .select('*')
-        .eq('cliente_id', activeClientId)
-        .limit(1)
-        .single()
-        .then(({ data }: any) => {
-          if (data) setUnidadeInfo(data);
-        });
+      // Carrega informações da unidade (Prioriza a selecionada no context)
+      if (unidadeSelecionada) {
+        setUnidadeInfo(unidadeSelecionada);
+      } else {
+        (supabase as any).from('cliente_unidades')
+          .select('*, cliente:clientes(*)')
+          .eq('cliente_id', activeClientId)
+          .limit(1)
+          .single()
+          .then(({ data }: any) => {
+            if (data) setUnidadeInfo(data);
+          });
+      }
     }
-  }, [activeClientId]);
+  }, [activeClientId, unidadeSelecionada]);
+
+  const handleVersionChange = (receitaId: string, versaoId: string) => {
+    setSelectedVersions(prev => ({ ...prev, [receitaId]: versaoId }));
+  };
 
   const handleToggleSelect = (id: string) => {
     const newSet = new Set(selectedIds);
@@ -139,19 +178,42 @@ export default function RelatoriosPage() {
   }, [receitas, searchTerm]);
 
   // --- PREPARAÇÃO DE DADOS ---
-  const prepararImpressao = async (modo: 'FICHA' | 'NUTRICIONAL') => {
-    if (selectedIds.size === 0) return alert('Selecione pelo menos uma receita.');
+  const carregarReceita = async (id: string, versionId: string, modo: 'FICHA' | 'NUTRICIONAL'): Promise<ReceitaRelatorio | null> => {
+    const { data: baseRec } = await (supabase as any).from('receitas')
+      .select('id, nome, rendimento_total_g, peso_embalagem_g, modo_preparo, modo_conservacao, foto_url, denominacao_venda, conteudo_liquido, updated_at, tipos_receita(nome)')
+      .eq('id', id)
+      .single();
 
-    setGenerating(true);
-    setModoImpressao(modo);
-    const ids = Array.from(selectedIds);
-    let completed = 0;
-    const receitasAtualizadas = [...receitas];
+    if (!baseRec) return null;
+    let rec = { ...baseRec } as ReceitaRelatorio;
 
-    for (const id of ids) {
-      const index = receitasAtualizadas.findIndex(r => r.id === id);
-      if (index === -1) continue;
+    if (versionId && versionId !== 'latest') {
+      const { data: vRecord } = await supabase.from('receitas_versoes').select('*').eq('id', versionId).single();
+      if (vRecord) {
+        rec = {
+          ...rec,
+          nome: vRecord.nome_snapshot || rec.nome,
+          modo_preparo: vRecord.modo_preparo_snapshot || '',
+          rendimento_total_g: vRecord.rendimento_snapshot || 0,
+          modo_conservacao: vRecord.modo_conservacao_snapshot,
+          tabelaCalculada: vRecord.tabela_nutricional_snapshot as any as ResultadoCalculo,
+        };
+        
+        if (modo === 'FICHA' && vRecord.composicao_snapshot) {
+          const comps = vRecord.composicao_snapshot as any[];
+          const idsIng = comps.filter((c: any) => c.tipo === 'ingrediente').map((c: any) => c.item_id);
+          const { data: ingBrands } = await supabase.from('ingredientes').select('id, fonte').in('id', idsIng);
+          const brandMap = new Map(ingBrands?.map((i: any) => [i.id, i.fonte]) || []);
 
+          rec.ingredientesDetalhados = comps.map((c: any) => ({
+            nome: c.nome_snapshot || c.nome,
+            peso_liquido_g: c.quantidade,
+            unidade: c.unidade,
+            fonte: brandMap.get(c.item_id)
+          }));
+        }
+      }
+    } else {
       if (modo === 'FICHA') {
         const { data: comps } = await (supabase as any).from('composicao_receitas')
           .select('item_id, item_type, peso_liquido_g')
@@ -181,7 +243,7 @@ export default function RelatoriosPage() {
             fonteMap.set(r.id, "Sub-receita");
           });
 
-          receitasAtualizadas[index].ingredientesDetalhados = comps.map((c: any) => ({
+          rec.ingredientesDetalhados = comps.map((c: any) => ({
             nome: nomeMap.get(c.item_id) || 'Item desconhecido',
             peso_liquido_g: c.peso_liquido_g,
             unidade: 'g',
@@ -191,23 +253,35 @@ export default function RelatoriosPage() {
         }
       }
 
-      // Diagnóstico: Forçar recálculo para garantir dados frescos
-      const forceRefresh = true;
-      if (!receitasAtualizadas[index].tabelaCalculada || forceRefresh) {
-        try {
-          console.log(`[DIAGNÓSTICO] Invocando Edge Function para receita: ${id}`);
-          const { data } = await supabase.functions.invoke('calcular-nutrientes', { body: { receita_id: id } });
-          console.log(`[DIAGNÓSTICO] Resposta da Edge Function:`, data);
-          if (data && !data.error) {
-            const result = data as ResultadoCalculo;
-            if (receitasAtualizadas[index].modo_conservacao) {
-              result.declaracoes.modo_conservacao = receitasAtualizadas[index].modo_conservacao;
-            }
-            receitasAtualizadas[index].tabelaCalculada = result;
-          }
-        } catch (e) {
-          console.error(`Erro ao calcular receita ${id}`, e);
-        }
+      const { data } = await supabase.functions.invoke('calcular-nutrientes', { body: { receita_id: id } });
+      if (data && !data.error) {
+        const result = data as ResultadoCalculo;
+        if (rec.modo_conservacao) result.declaracoes.modo_conservacao = rec.modo_conservacao;
+        result.declaracoes.conteudo_liquido = rec.conteudo_liquido || (rec.peso_embalagem_g ? `${rec.peso_embalagem_g}g` : null) || result.declaracoes.conteudo_liquido;
+        result.declaracoes.denominacao_venda = rec.denominacao_venda || result.declaracoes.denominacao_venda;
+        rec.tabelaCalculada = result;
+      }
+    }
+    return rec;
+  };
+
+  const prepararImpressao = async (modo: 'FICHA' | 'NUTRICIONAL') => {
+    if (selectedIds.size === 0) return alert('Selecione pelo menos uma receita.');
+
+    setGenerating(true);
+    setModoImpressao(modo);
+    const ids = Array.from(selectedIds);
+    let completed = 0;
+    const receitasAtualizadas = [...receitas];
+
+    for (const id of ids) {
+      const index = receitasAtualizadas.findIndex(r => r.id === id);
+      if (index === -1) continue;
+
+      const versionId = selectedVersions[id] || 'latest';
+      const recCarregada = await carregarReceita(id, versionId, modo);
+      if (recCarregada) {
+        receitasAtualizadas[index] = recCarregada;
       }
 
       completed++;
@@ -216,6 +290,29 @@ export default function RelatoriosPage() {
 
     setReceitas(receitasAtualizadas);
     setGenerating(false);
+  };
+
+  const handleLiveVersionChange = async (id: string, versionId: string) => {
+    setSelectedVersions(prev => ({ ...prev, [id]: versionId }));
+    if (!modoImpressao) return;
+
+    setLoadingItems(prev => new Set(prev).add(id));
+    const recCarregada = await carregarReceita(id, versionId, modoImpressao);
+    
+    if (recCarregada) {
+      setReceitas(prev => {
+        const index = prev.findIndex(r => r.id === id);
+        if (index === -1) return prev;
+        const newArr = [...prev];
+        newArr[index] = recCarregada;
+        return newArr;
+      });
+    }
+    setLoadingItems(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   // ==========================================
@@ -276,49 +373,58 @@ export default function RelatoriosPage() {
               .no-print { display: none !important; }
               * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
-            .preview-page {
-                width: 210mm;
-                min-height: 297mm;
-                background: white;
-                padding: 15mm;
-                padding-bottom: 40mm;
-                margin-bottom: 20px;
-                box-shadow: 0 0 10px rgba(0,0,0,0.5);
-                box-sizing: border-box;
-            }
+              @page {
+                  size: A4;
+                  margin: 15mm;
+              }
+              .preview-page {
+                  width: 210mm;
+                  min-height: 297mm;
+                  background: white;
+                  padding: 10mm;
+                  margin-bottom: 20px;
+                  box-shadow: 0 0 10px rgba(0,0,0,0.5);
+                  box-sizing: border-box;
+                  display: flex;
+                  flex-direction: column;
+              }
           `}} />
 
           {/* CONTROLES */}
           <Paper className="no-print" elevation={8} sx={{ position: 'fixed', bottom: 30, zIndex: 9999, px: 3, py: 2, borderRadius: 10, display: 'flex', gap: 2, alignItems: 'center', bgcolor: 'background.paper', border: '1px solid #ddd' }}>
             <Typography fontWeight="bold" sx={{ mr: 2 }}>{itensParaImprimir.length} receitas geradas</Typography>
             
-            <TextField
-              select
-              size="small"
-              label="Layout Tabela"
-              value={layoutTabela}
-              onChange={(e) => setLayoutTabela(e.target.value)}
-              sx={{ width: 140 }}
-            >
-              <MenuItem value="VERTICAL">Vertical</MenuItem>
-              <MenuItem value="VERTICAL_QUEBRADA">Vert. Quebrada</MenuItem>
-              <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
-              <MenuItem value="HORIZONTAL_QUEBRADA">Horiz. Quebrada</MenuItem>
-              <MenuItem value="LINEAR">Linear</MenuItem>
-            </TextField>
+            {modoImpressao === 'NUTRICIONAL' && (
+              <>
+                <TextField
+                  select
+                  size="small"
+                  label="Layout Tabela"
+                  value={layoutTabela}
+                  onChange={(e) => setLayoutTabela(e.target.value)}
+                  sx={{ width: 140 }}
+                >
+                  <MenuItem value="VERTICAL">Vertical</MenuItem>
+                  <MenuItem value="VERTICAL_QUEBRADA">Vert. Quebrada</MenuItem>
+                  <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+                  <MenuItem value="HORIZONTAL_QUEBRADA">Horiz. Quebrada</MenuItem>
+                  <MenuItem value="LINEAR">Linear</MenuItem>
+                </TextField>
 
-            <TextField
-              select
-              size="small"
-              label="Layout Lupa"
-              value={layoutLupa}
-              onChange={(e) => setLayoutLupa(e.target.value)}
-              sx={{ width: 140 }}
-            >
-              <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
-              <MenuItem value="VERTICAL">Vertical</MenuItem>
-              <MenuItem value="MISTO">Misto</MenuItem>
-            </TextField>
+                <TextField
+                  select
+                  size="small"
+                  label="Layout Lupa"
+                  value={layoutLupa}
+                  onChange={(e) => setLayoutLupa(e.target.value)}
+                  sx={{ width: 140 }}
+                >
+                  <MenuItem value="HORIZONTAL">Horizontal</MenuItem>
+                  <MenuItem value="VERTICAL">Vertical</MenuItem>
+                  <MenuItem value="MISTO">Misto</MenuItem>
+                </TextField>
+              </>
+            )}
 
             <Button variant="contained" onClick={() => window.print()} startIcon={<Printer />}>IMPRIMIR / PDF</Button>
             <Button variant="outlined" color="inherit" onClick={() => setModoImpressao(null)}>FECHAR</Button>
@@ -350,16 +456,60 @@ export default function RelatoriosPage() {
               <div key={receita.id} className="preview-page page-break">
                 
                 {/* CABEÇALHO INTEGRADO */}
-                <Box sx={{ borderBottom: '1px solid #eee', mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
-                  <Typography variant="caption" sx={{ color: '#66c8c7', fontWeight: 900, letterSpacing: 1.2 }}>
-                    {modoImpressao === 'FICHA' ? 'MANUAL DE PRODUÇÃO' : 'CATÁLOGO NUTRICIONAL'}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    REF: {receita.id.substring(0,8).toUpperCase()}
-                  </Typography>
-                </Box>
+                  <Box sx={{ borderBottom: '1px solid #eee', mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Typography variant="caption" sx={{ color: '#66c8c7', fontWeight: 900, letterSpacing: 1.2 }}>
+                        {modoImpressao === 'FICHA' ? 'MANUAL DE PRODUÇÃO' : 'CATÁLOGO NUTRICIONAL'}
+                      </Typography>
+                      
+                      {/* SELETOR DE VERSÃO LIVE */}
+                      <TextField
+                        select
+                        size="small"
+                        className="no-print"
+                        value={selectedVersions[receita.id] || 'latest'}
+                        onChange={(e) => handleLiveVersionChange(receita.id, e.target.value)}
+                        sx={{ 
+                          width: 140, 
+                          '& .MuiInputBase-root': { fontSize: '0.75rem', height: 28, bgcolor: alpha(theme.palette.primary.main, 0.05) },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: alpha(theme.palette.primary.main, 0.2) }
+                        }}
+                      >
+                        <MenuItem value="latest">Versão Atual</MenuItem>
+                        {versoesMap[receita.id]?.map((v: any) => (
+                          <MenuItem key={v.id} value={v.id}>Versão {v.versao} ({format(new Date(v.data_aprovacao), 'dd/MM/yy')})</MenuItem>
+                        ))}
+                      </TextField>
+                    </Stack>
 
-                <Box sx={{ flexGrow: 1 }}>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        REF: {receita.id.substring(0,8).toUpperCase()}
+                      </Typography>
+                      {/* VERSÃO PARA IMPRESSÃO / PDF */}
+                      <Typography variant="caption" sx={{ display: 'none', '@media print': { display: 'block' }, fontWeight: 700, color: '#334155', fontSize: '0.65rem' }}>
+                        {(() => {
+                          const vId = selectedVersions[receita.id];
+                          if (!vId || vId === 'latest') return 'Versão: Atual';
+                          const v = versoesMap[receita.id]?.find(u => u.id === vId);
+                          return v ? `Versão: ${v.versao} (${format(new Date(v.data_aprovacao), 'dd/MM/yy')})` : 'Versão Histórica';
+                        })()}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ flexGrow: 1, position: 'relative' }}>
+                    {loadingItems.has(receita.id) && (
+                      <Box sx={{ 
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
+                        bgcolor: 'rgba(255,255,255,0.8)', zIndex: 10,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        gap: 2, borderRadius: 2
+                      }}>
+                        <CircularProgress size={32} thickness={5} sx={{ color: '#66c8c7' }} />
+                        <Typography variant="caption" fontWeight="bold" sx={{ color: '#66c8c7' }}>ATUALIZANDO snapshot...</Typography>
+                      </Box>
+                    )}
                   {modoImpressao === 'FICHA' ? (
                     <Box sx={{ position: 'relative' }}>
                       <Box sx={{ mb: 4 }}>
@@ -382,7 +532,7 @@ export default function RelatoriosPage() {
                         <Box
                           sx={{
                             width: '100%',
-                            height: '350px',
+                            height: '220px',
                             borderRadius: '24px',
                             overflow: 'hidden',
                             position: 'relative',
@@ -468,9 +618,16 @@ export default function RelatoriosPage() {
                             return (
                               <ListItem key={i} disableGutters sx={{ py: 0.5, borderBottom: '1px solid #f8fafc', display: 'flex', alignItems: 'center' }}>
                                 <Box sx={{ width: '8px', height: '8px', borderRadius: '50%', bgcolor: '#66c8c7', mr: 2, flexShrink: 0, boxShadow: '0 0 0 2px rgba(102, 200, 199, 0.2)' }} />
-                                <Typography variant="body2" sx={{ fontWeight: 600, flexGrow: 1, color: '#1e293b' }}>
-                                  {ing.nome.charAt(0).toUpperCase() + ing.nome.slice(1).toLowerCase()}
-                                </Typography>
+                                <Box sx={{ flexGrow: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                                    {ing.nome.charAt(0).toUpperCase() + ing.nome.slice(1).toLowerCase()}
+                                  </Typography>
+                                  {ing.fonte && (
+                                    <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', fontSize: '0.65rem', mt: -0.5 }}>
+                                      Marca: {ing.fonte}
+                                    </Typography>
+                                  )}
+                                </Box>
                                 <Stack direction="row" spacing={1} alignItems="center">
                                   <Typography variant="body2" sx={{ fontWeight: 700, color: '#334155' }}>
                                     {formattedWeight}
@@ -574,6 +731,13 @@ export default function RelatoriosPage() {
                         <Typography variant="subtitle2" color="#66c8c7" sx={{ textTransform: 'uppercase', letterSpacing: 2, fontWeight: 700 }}>
                           {receita.denominacao_venda || 'Denominação de Venda não cadastrada'}
                         </Typography>
+                        
+                        {(receita.conteudo_liquido || receita.peso_embalagem_g) && (
+                          <Typography variant="h6" fontWeight="900" sx={{ color: '#0F172A', mt: 1, letterSpacing: 0.5 }}>
+                            PESO LÍQUIDO: {receita.conteudo_liquido || `${receita.peso_embalagem_g}g`}
+                          </Typography>
+                        )}
+
                         <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
                           Última Revisão: <strong>{receita.updated_at ? format(new Date(receita.updated_at), "dd/MM/yyyy") : 'N/A'}</strong>
                         </Typography>
@@ -604,94 +768,95 @@ export default function RelatoriosPage() {
 
                       <Divider sx={{ width: '100%', mb: 4 }} />
 
-                      {/* INFORMAÇÕES DE FABRICAÇÃO */}
-                      {unidadeInfo && (
-                        <Box sx={{ width: '100%', mb: 2, p: 2, bgcolor: '#F8FAFC', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                          <Typography variant="caption" fontWeight="900" color="#64748B" sx={{ display: 'block', mb: 0.5, letterSpacing: 1 }}>INFORMAÇÕES DE FABRICAÇÃO</Typography>
-                          <Grid container spacing={2}>
-                            <Grid item xs={6}>
-                              <Typography variant="caption" color="text.secondary">FABRICADO POR</Typography>
-                              <Typography variant="body2" fontWeight="700" sx={{ fontSize: '0.75rem' }}>{activeClientName}</Typography>
-                              <Typography variant="caption" sx={{ display: 'block', fontSize: '0.65rem' }}>CNPJ: {unidadeInfo.cnpj_completo || 'Não informado'}</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                              <Typography variant="caption" color="text.secondary">ENDEREÇO</Typography>
-                              <Typography variant="body2" sx={{ fontSize: '0.65rem' }}>{unidadeInfo.endereco_completo || 'Não informado'}</Typography>
-                            </Grid>
-                          </Grid>
-                        </Box>
-                      )}
 
-                      {/* CONTEÚDO TÉCNICO VERTICAL */}
-                      <Stack spacing={2} sx={{ width: '100%', alignItems: 'center' }}>
+                      {/* CONTEÚDO TÉCNICO HORIZONTAL */}
+                      <Box sx={{ width: '100%' }}>
                         
-                        {/* LUPAS FOP E ÍCONES (EM CIMA DA TABELA) */}
+                        {/* 1. LUPAS FOP E ÍCONES (CENTRALIZADOS NO TOPO) */}
                         {receita.tabelaCalculada && (
-                          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2 }}>
+                          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mb: 1, p: 1, border: '1px dashed #E2E8F0', borderRadius: '8px' }}>
                             <LupaFrontalANVISA lupas={receita.tabelaCalculada.lupas} layout={layoutLupa} />
                             
                             {/* ÍCONE DE TRANSGÊNICO (T) SE APLICÁVEL */}
                             {receita.tabelaCalculada.declaracoes.alerta_gmo && (
                               <Box sx={{ textAlign: 'center', ml: 1 }}>
-                                <GMOIcon width={36} />
-                                <Typography 
-                                  variant="caption" 
-                                  sx={{ 
-                                    fontSize: '8px', 
-                                    fontWeight: 900, 
-                                    display: 'block', 
-                                    mt: 0.5,
-                                    lineHeight: 1,
-                                    color: '#000'
-                                  }}
-                                >
-                                  TRANSGÊNICO
-                                </Typography>
+                                <GMOIcon width={32} />
                               </Box>
                             )}
                           </Box>
                         )}
 
-                        {/* TABELA NUTRICIONAL */}
-                        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-                          <Paper 
-                            elevation={0} 
-                            sx={{ 
-                              p: 2, 
-                              border: '1px solid #E2E8F0', 
-                              borderRadius: '12px',
-                              backgroundColor: '#fff',
-                              width: 'fit-content'
-                            }}
-                          >
-                            {receita.tabelaCalculada ? (
-                              <NutritionalLabel tabela={receita.tabelaCalculada} modelo={layoutTabela} />
-                            ) : (
-                              <Typography color="error" fontWeight="bold">Erro: Cálculo Nutricional não disponível.</Typography>
-                            )}
-                          </Paper>
-                        </Box>
-                      </Stack>
+                        {/* 2. GRID LADO A LADO: TABELA E DECLARAÇÕES */}
+                        <Grid container spacing={2} alignItems="flex-start">
+                          <Grid item xs={6}>
+                            {/* TABELA NUTRICIONAL (OCULTA AS DECLARAÇÕES INTERNAS) */}
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+                              <Paper 
+                                elevation={0} 
+                                sx={{ 
+                                  p: 1.5, 
+                                  border: '1px solid #E2E8F0', 
+                                  borderRadius: '12px',
+                                  backgroundColor: '#fff',
+                                  width: 'fit-content'
+                                }}
+                              >
+                                {receita.tabelaCalculada ? (
+                                  <NutritionalLabel tabela={receita.tabelaCalculada} modelo={layoutTabela} showDeclarations={false} />
+                                ) : (
+                                  <Typography color="error" fontWeight="bold" sx={{ fontSize: '10px' }}>Cálculo indisponível.</Typography>
+                                )}
+                              </Paper>
+                            </Box>
+                          </Grid>
 
-                      {/* RODAPÉ DA PÁGINA DO ITEM (SIMPLIFICADO) */}
-                      <Box sx={{ mt: 6, textAlign: 'center', opacity: 0.5 }}>
-                        <Typography variant="caption">
-                          ID Técnico: {receita.id.toUpperCase()} • Software Intelligence Platform
+                          <Grid item xs={6}>
+                            {/* DECLARAÇÕES TÉCNICAS (RENDERIZADAS SEPARADAMENTE) */}
+                            {receita.tabelaCalculada && (
+                              <Box sx={{ width: '100%' }}>
+                                <Typography variant="caption" fontWeight="900" color="#64748B" sx={{ letterSpacing: 1, mb: 1, display: 'block' }}>
+                                  DECLARAÇÕES OBRIGATÓRIAS
+                                </Typography>
+                                <RenderBlocoDeclaracoes declaracoes={receita.tabelaCalculada.declaracoes} />
+                              </Box>
+                            )}
+                          </Grid>
+                        </Grid>
+                      </Box>
+
+                      {/* INFORMAÇÕES DE FABRICAÇÃO (FORA DO CONTEÚDO PARA MT:AUTO FUNCIONAR) */}
+                      {(unidadeInfo || activeClientId) && (
+                        <Box sx={{ width: '100%', mt: 'auto', pt: 2, pb: 1, display: 'flex', flexDirection: 'column', gap: 0.1, borderTop: '1px dashed #eee' }}>
+                          <Typography variant="caption" sx={{ fontSize: '0.65rem', color: '#000', fontWeight: 600, textTransform: 'uppercase' }}>
+                            Fabricado por: {unidadeInfo?.cliente?.razao_social || activeClientName || 'NÃO INFORMADO'}
+                          </Typography>
+                          
+                          <Typography variant="caption" sx={{ fontSize: '0.62rem', color: '#000' }}>
+                            <strong>Endereço:</strong> {unidadeInfo?.endereco_completo || unidadeInfo?.cliente?.endereco_completo || 'NÃO INFORMADO'}
+                          </Typography>
+                          
+                          <Typography variant="caption" sx={{ fontSize: '0.62rem', color: '#000' }}>
+                            <strong>CNPJ:</strong> {unidadeInfo?.cnpj_completo || unidadeInfo?.cliente?.cnpj_raiz || 'NÃO INFORMADO'}
+                          </Typography>
+                          
+                          <Typography variant="caption" sx={{ fontSize: '0.6rem', color: '#000', fontWeight: 700, mt: 0.5, letterSpacing: '0.05em' }}>
+                            INDÚSTRIA BRASILEIRA
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* RODAPÉ INTEGRADO */}
+                      <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <NextImage src="/logo-cortex.svg" alt="" width={80} height={24} />
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 1 }}>SOFTWARE PLATFORM</Typography>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          {activeClientName} • Pág. {index + 1}
                         </Typography>
                       </Box>
                     </Box>
                   )}
-                </Box>
-
-                {/* RODAPÉ INTEGRADO */}
-                <Box sx={{ mt: 'auto', pt: 2, borderTop: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <NextImage src="/logo-cortex.svg" alt="" width={80} height={24} />
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 1 }}>SOFTWARE PLATFORM</Typography>
-                  </Box>
-                  <Typography variant="caption" color="text.secondary">
-                    {activeClientName} • Pág. {index + 1}
-                  </Typography>
                 </Box>
               </div>
             ))}
@@ -791,7 +956,10 @@ export default function RelatoriosPage() {
                             <ListItem key={r.id} disablePadding divider sx={{ pl: 9 }}>
                               <ListItemButton onClick={() => handleToggleSelect(r.id)} selected={selectedIds.has(r.id)}>
                                 <ListItemIcon><Checkbox edge="start" checked={selectedIds.has(r.id)} tabIndex={-1} /></ListItemIcon>
-                                <ListItemText primary={<Typography fontWeight="500">{r.nome}</Typography>} secondary={`Rendimento: ${r.rendimento_total_g}g`} />
+                                <ListItemText 
+                                  primary={<Typography fontWeight="500">{r.nome}</Typography>} 
+                                  secondary={`Rendimento: ${r.rendimento_total_g}g`} 
+                                />
                               </ListItemButton>
                             </ListItem>
                           ))}

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.fornecedores (
 );
 
 -- Tabela: Lotes de Estoque (Recebimento)
-CREATE TABLE IF NOT EXISTS public.lotes_estoque (
+CREATE TABLE IF NOT EXISTS public.estoque_lotes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     unidade_id UUID NOT NULL REFERENCES public.cliente_unidades(id) ON DELETE CASCADE,
     ingrediente_id UUID NOT NULL REFERENCES public.ingredientes(id) ON DELETE RESTRICT,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS public.lotes_estoque (
 -- ==========================================
 
 -- Tabela: Ordens de Produção (OP)
-CREATE TABLE IF NOT EXISTS public.ordens_producao (
+CREATE TABLE IF NOT EXISTS public.producao_ordens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     unidade_id UUID NOT NULL REFERENCES public.cliente_unidades(id) ON DELETE CASCADE,
     receita_id UUID NOT NULL REFERENCES public.receitas(id) ON DELETE RESTRICT,
@@ -61,19 +61,19 @@ CREATE TABLE IF NOT EXISTS public.ordens_producao (
 );
 
 -- Tabela: Apontamentos de Produção (Baixa de Múltiplos Lotes)
-CREATE TABLE IF NOT EXISTS public.apontamentos_producao (
+CREATE TABLE IF NOT EXISTS public.producao_apontamentos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ordem_producao_id UUID NOT NULL REFERENCES public.ordens_producao(id) ON DELETE CASCADE,
-    lote_estoque_id UUID NOT NULL REFERENCES public.lotes_estoque(id) ON DELETE RESTRICT,
+    ordem_producao_id UUID NOT NULL REFERENCES public.producao_ordens(id) ON DELETE CASCADE,
+    lote_estoque_id UUID NOT NULL REFERENCES public.estoque_lotes(id) ON DELETE RESTRICT,
     quantidade_utilizada_g_ml NUMERIC NOT NULL CHECK (quantidade_utilizada_g_ml > 0),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Tabela: Lotes Internos (Rastreabilidade e NutriPrint)
-CREATE TABLE IF NOT EXISTS public.lotes_internos (
+CREATE TABLE IF NOT EXISTS public.producao_lotes_internos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     unidade_id UUID NOT NULL REFERENCES public.cliente_unidades(id) ON DELETE CASCADE,
-    ordem_producao_id UUID NOT NULL UNIQUE REFERENCES public.ordens_producao(id) ON DELETE RESTRICT,
+    ordem_producao_id UUID NOT NULL UNIQUE REFERENCES public.producao_ordens(id) ON DELETE RESTRICT,
     codigo_lote_interno TEXT UNIQUE NOT NULL,
     data_fabricacao TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     data_validade TIMESTAMPTZ NOT NULL, -- O menor vencimento entre os insumos ou regra própria
@@ -85,10 +85,10 @@ CREATE TABLE IF NOT EXISTS public.lotes_internos (
 -- ==========================================
 
 ALTER TABLE public.fornecedores ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.lotes_estoque ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.ordens_producao ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.apontamentos_producao ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.lotes_internos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.estoque_lotes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.producao_ordens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.producao_apontamentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.producao_lotes_internos ENABLE ROW LEVEL SECURITY;
 
 -- Exemplo RLS: Fornecedor (Baseado em Cliente)
 CREATE POLICY "Fornecedores Isolados por Cliente" ON public.fornecedores
@@ -100,28 +100,29 @@ CREATE POLICY "Fornecedores Isolados por Cliente" ON public.fornecedores
     ));
 
 -- Exemplo RLS: Lotes e Estoque (Baseado em Unidade)
-CREATE POLICY "Estoque Isolado por Unidade" ON public.lotes_estoque
+CREATE POLICY "Estoque Isolado por Unidade" ON public.estoque_lotes
     FOR ALL
     USING (unidade_id IN (
         SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
     ));
 
-CREATE POLICY "Produção Isolada por Unidade" ON public.ordens_producao
+CREATE POLICY "Produção Isolada por Unidade" ON public.producao_ordens
     FOR ALL
     USING (unidade_id IN (
         SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
     ));
 
-CREATE POLICY "Apontamentos da Produção Local" ON public.apontamentos_producao
+CREATE POLICY "Apontamentos da Produção Local" ON public.producao_apontamentos
     FOR ALL
     USING (ordem_producao_id IN (
-        SELECT id FROM public.ordens_producao WHERE unidade_id IN (
+        SELECT id FROM public.producao_ordens WHERE unidade_id IN (
             SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
         )
     ));
 
-CREATE POLICY "Lotes Internos da Unidade" ON public.lotes_internos
+CREATE POLICY "Lotes Internos da Unidade" ON public.producao_lotes_internos
     FOR ALL
     USING (unidade_id IN (
         SELECT unidade_id FROM public.app_user_memberships WHERE usuario_id = auth.uid()
     ));
+

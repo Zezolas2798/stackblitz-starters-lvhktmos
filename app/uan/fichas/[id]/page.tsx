@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
-import { FichaTecnicaUAN, ComposicaoFichaUAN, Ingrediente, CategoriaUAN } from '@/lib/types';
+import { FichaTecnicaUAN, ComposicaoFichaUAN, Ingrediente, CategoriaUAN, CorPredominante, TexturaPrincipal, MetodoCoccao } from '@/lib/types';
 import {
   Box, Typography, Button, Paper, TextField, MenuItem,
   Grid, Divider, Autocomplete, IconButton, Chip, Table, TableHead,
   TableRow, TableCell, TableBody, InputAdornment,
-  Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress
+  Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
+  FormControlLabel, Checkbox
 } from '@mui/material';
 import { Save, ArrowLeft, Trash2, PlusCircle, Calculator, ActivitySquare } from 'lucide-react';
 
@@ -189,7 +190,11 @@ export default function EditarFichaUANPage() {
           peso_porcao_g: Number(ficha.peso_porcao_g || 0),
           modo_preparo: ficha.modo_preparo || '',
           tempo_preparo_min: Number(ficha.tempo_preparo_min || 0),
-          refeicoes: ficha.refeicoes || []
+          refeicoes: ficha.refeicoes || [],
+          cor_predominante: ficha.cor_predominante || null,
+          textura_principal: ficha.textura_principal || null,
+          metodo_coccao: ficha.metodo_coccao || null,
+          rico_em_enxofre: ficha.rico_em_enxofre || false
         })
         .eq('id', id);
 
@@ -439,6 +444,63 @@ export default function EditarFichaUANPage() {
             </TableBody>
           </Table>
         </Box>
+      </Paper>
+
+      <Paper sx={{ p: 4, mb: 4 }}>
+        <Typography variant="h6" mb={2}>Dados para UAN (Sensores e Planejamento Assistido)</Typography>
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={3}>
+            <TextField
+              select fullWidth
+              label="Cor Predominante"
+              value={ficha.cor_predominante || ''}
+              onChange={(e) => setFicha({...ficha, cor_predominante: e.target.value as CorPredominante})}
+            >
+              <MenuItem value="">Nenhuma</MenuItem>
+              {['Branca/Pálida', 'Amarela/Laranja', 'Vermelha', 'Verde', 'Marrom/Escura'].map(o => (
+                <MenuItem key={o} value={o}>{o}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={3}>
+            <TextField
+              select fullWidth
+              label="Textura Principal"
+              value={ficha.textura_principal || ''}
+              onChange={(e) => setFicha({...ficha, textura_principal: e.target.value as TexturaPrincipal})}
+            >
+              <MenuItem value="">Nenhuma</MenuItem>
+              {['Cremosa', 'Crocante', 'Líquida', 'Macio/Cozida', 'Sólida/Firme'].map(o => (
+                <MenuItem key={o} value={o}>{o}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={3}>
+            <TextField
+              select fullWidth
+              label="Método de Cocção"
+              value={ficha.metodo_coccao || ''}
+              onChange={(e) => setFicha({...ficha, metodo_coccao: e.target.value as MetodoCoccao})}
+            >
+              <MenuItem value="">Nenhum</MenuItem>
+              {['Assado', 'Cozido', 'Cru', 'Frito', 'Grelhado', 'Refogado'].map(o => (
+                <MenuItem key={o} value={o}>{o}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={3} display="flex" alignItems="center">
+            <FormControlLabel
+              control={
+                <Checkbox 
+                  checked={ficha.rico_em_enxofre || false}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({...ficha, rico_em_enxofre: e.target.checked})}
+                  color="primary"
+                />
+              }
+              label="Rico em Enxofre?"
+            />
+          </Grid>
+        </Grid>
       </Paper>
 
       <Paper sx={{ p: 4 }}>

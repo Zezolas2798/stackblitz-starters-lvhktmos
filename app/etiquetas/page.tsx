@@ -81,7 +81,7 @@ export default function EtiquetasPage() {
   async function loadDestinos() {
     // Busca locais de estoque
     const { data: locaisData } = await (supabase as any)
-      .from('cliente_locais_estoque')
+      .from('estoque_locais')
       .select('id, nome')
       .eq('unidade_id', unidadeId)
       .eq('ativo', true);
@@ -89,9 +89,9 @@ export default function EtiquetasPage() {
 
     // Busca setores de produção
     const { data: setoresData } = await (supabase as any)
-      .from('cliente_setores_producao')
+      .from('setores_producao')
       .select('id, nome')
-      .eq('cliente_id', activeClientId)
+      .eq('unidade_id', unidadeId)
       .eq('ativo', true);
     setSetores(setoresData || []);
   }
@@ -179,9 +179,9 @@ export default function EtiquetasPage() {
         .from('producao_consumos')
         .select(`
           quantidade_utilizada,
-          lotes_estoque (
+          estoque_lotes (
             id,
-            ingredientes ( id, nome, grupo_estoque_id )
+            ingredientes ( id, nome, subgrupo_id )
           )
         `)
         .eq('producao_id', opId);
@@ -190,7 +190,7 @@ export default function EtiquetasPage() {
         const uniqueItems: any[] = [];
         const seenIds = new Set();
         data.forEach((c: any) => {
-          const ing = c.lotes_estoque?.ingredientes;
+          const ing = c.estoque_lotes?.ingredientes;
           if (ing && !seenIds.has(ing.id)) {
             seenIds.add(ing.id);
             uniqueItems.push(ing);
@@ -212,7 +212,7 @@ export default function EtiquetasPage() {
         .from('producao_consumos')
         .select(`
           estoque_lote_id,
-          lotes_estoque (
+          estoque_lotes (
             *,
             fornecedores(razao_social)
           )
@@ -220,8 +220,8 @@ export default function EtiquetasPage() {
         .eq('producao_id', selectedOPForSobra.id);
       
       const filteredLotes = data
-        ?.filter((c: any) => c.lotes_estoque?.ingrediente_id === ingredienteId)
-        .map((c: any) => c.lotes_estoque) || [];
+        ?.filter((c: any) => c.estoque_lotes?.ingrediente_id === ingredienteId)
+        .map((c: any) => c.estoque_lotes) || [];
         
       setLotes(filteredLotes);
       if (filteredLotes.length > 0) setSelectedLote(filteredLotes[0]);
@@ -230,7 +230,7 @@ export default function EtiquetasPage() {
     }
 
     const { data } = await (supabase as any)
-      .from('lotes_estoque')
+      .from('estoque_lotes')
       .select('*, fornecedores(razao_social)')
       .eq('ingrediente_id', ingredienteId)
       .eq('unidade_id', unidadeId)
@@ -326,7 +326,7 @@ export default function EtiquetasPage() {
         if (movErr) throw movErr;
         
         const novaQtd = Math.max(0, selectedLote.quantidade_atual_g_ml - pesoGml);
-        await (supabase as any).from('lotes_estoque').update({ 
+        await (supabase as any).from('estoque_lotes').update({ 
           quantidade_atual_g_ml: novaQtd,
         }).eq('id', selectedLote.id);
       }
@@ -644,3 +644,4 @@ export default function EtiquetasPage() {
     </Container>
   );
 }
+
