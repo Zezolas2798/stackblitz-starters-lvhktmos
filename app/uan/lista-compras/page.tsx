@@ -8,21 +8,31 @@ import { CardapioUAN } from '@/lib/types';
 import {
   Box, Typography, Button, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, MenuItem, TextField,
-  Accordion, AccordionSummary, AccordionDetails
+  Accordion, AccordionSummary, AccordionDetails, Alert, Grid
 } from '@mui/material';
-import { ShoppingCart, ArrowLeft, Loader2, AlertTriangle, FileText } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, Loader2, AlertTriangle, FileText, ServerCrash } from 'lucide-react';
+import { formatLocalDate } from '@/lib/utils/dateUtils';
 
-interface CompraItem {
+interface ItemListaCompra {
   ingrediente_id: string;
-  nome_insumo: string;
+  nome_ingrediente: string;
+  grupo_id: string | null;
+  nome_grupo: string | null;
+  necessidade_bruta_g: number;
   necessidade_bruta_kg: number;
   estoque_atual_kg: number;
   estoque_minimo_kg: number;
-  quantidade_comprar_kg: number;
+  qtd_comprar_kg: number;
   preco_ultima_compra: number;
-  categoria: string;
-  fornecedor_padrao?: string;
-  lead_time_dias?: number;
+  custo_estimado_total: number;
+}
+
+interface ResumoCompras {
+  total_ingredientes: number;
+  custo_total_estimado: number;
+  peso_total_bruto_kg: number;
+  dias_no_ciclo: number;
+  total_porcoes_ciclo: number;
 }
 
 export default function ListaComprasUANPage() {
@@ -33,10 +43,11 @@ export default function ListaComprasUANPage() {
   const [cardapios, setCardapios] = useState<CardapioUAN[]>([]);
   const [cardapioSelecionado, setCardapioSelecionado] = useState<string>('');
   
-  const [compras, setCompras] = useState<CompraItem[]>([]);
-  const [custoTotal, setCustoTotal] = useState(0);
+  const [compras, setCompras] = useState<ItemListaCompra[]>([]);
+  const [resumo, setResumo] = useState<ResumoCompras | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
-  // 1. Carrega os Cardápios Disponíveis
+  // 1. Carrega os Cardápios Disponíveis (permanece client-side — é apenas um SELECT simples)
   useEffect(() => {
     async function fetchCardapios() {
       if (!activeClientId) return;
@@ -50,132 +61,66 @@ export default function ListaComprasUANPage() {
     fetchCardapios();
   }, [activeClientId]);
 
-  // 2. Calcula a Necessidade quando um Cardápio é selecionado
+  // 2. Calcula a Necessidade via Edge Function
   useEffect(() => {
     async function calcularCompras() {
       if (!cardapioSelecionado || !activeClientId) return;
       setLoading(true);
+      setErro(null);
       
       try {
-        // A. Dados do Cardápio
-        const cardapio = cardapios.find(c => c.id === cardapioSelecionado);
-        if (!cardapio) throw new Error("Cardápio inválido");
-
-        // B. Buscar a Grade (Todas as fichas alocadas e suas quantidades contextuais)
-        const { data: gradeData, error: errGrade } = await supabase
-          .from('cardapio_dias_uan')
-          .select('ficha_uan_id, data_consumo, tipo_refeicao, fator_multiplicador')
-          .eq('cardapio_id', cardapioSelecionado);
-
-        if (errGrade) throw errGrade;
-        if (!gradeData || gradeData.length === 0) {
-           setCompras([]);
-           setCustoTotal(0);
-           setLoading(false);
-           return;
-        }
-        
-        // C. Mapear Total de Porções Planetadas para cada Ficha Técnica no Ciclo
-        // Chave: ficha_uan_id, Valor: soma das (comensais * fator)
-        const totalPortionsPerFicha: Record<string, number> = {};
-        
-        gradeData.forEach(item => {
-           const d = new Date(item.data_consumo + 'T12:00:00Z');
-           const dayOfWeek = d.getDay().toString();
-           const config = cardapio.config_excecoes_dias?.[item.data_consumo] || {};
-           
-           // Resolve o numero de comensais para esta refeição específica neste dia
-           const comensaisRef = config.comensais?.[item.tipo_refeicao] ?? 
-                              cardapio.comensais_modelo?.[dayOfWeek]?.[item.tipo_refeicao] ?? 
-                              cardapio.comensais_estimados_dia;
-           
-           const porcoesItem = comensaisRef * (item.fator_multiplicador || 1);
-           totalPortionsPerFicha[item.ficha_uan_id] = (totalPortionsPerFicha[item.ficha_uan_id] || 0) + porcoesItem;
+        const { data, error } = await supabase.functions.invoke('calcular-cardapio-uan', {
+          body: { cardapio_id: cardapioSelecionado },
         });
 
-        const fichasIds = Object.keys(totalPortionsPerFicha);
+        if (error) throw new Error(error.message || 'Erro na Edge Function');
+        if (data?.error) throw new Error(data.error);
 
-        // D. Buscar a Composição dessas Fichas
-        const { data: compData, error: compErr } = await supabase
-          .from('composicao_fichas_uan')
-          .select('ficha_uan_id, ingrediente_id, peso_bruto_g')
-          .in('ficha_uan_id', fichasIds);
+        setCompras(data.itens || []);
+        setResumo(data.resumo || null);
 
-        if (compErr) throw compErr;
-
-        // E. Buscar Detalhes dos Ingredientes (Estoque, Preço)
-        const ingredIds = Array.from(new Set(compData?.map(c => c.ingrediente_id) || []));
-        const { data: ingData, error: ingErr } = await supabase
-          .from('ingredientes')
-          .select('id, nome, preco_ultima_compra, estoque_minimo_kg, grupo_id, grupos_produto(nome)')
-          .in('id', ingredIds);
-
-        if (ingErr) throw ingErr;
-
-        // F. Consolidar Cálculos (Agrupar por Insumo)
-        const mapCalculo: Record<string, CompraItem> = {};
-
-        compData?.forEach((composicao: any) => {
-           const porcoesTotaisFicha = totalPortionsPerFicha[composicao.ficha_uan_id] || 0;
-           
-           // Peso Bruto Total = Peso Bruto (g) da Ficha * Total de Porções no Ciclo
-           const pbTotalG = composicao.peso_bruto_g * porcoesTotaisFicha;
-           const pbTotalKg = pbTotalG / 1000;
-
-           const ing = ingData?.find(i => i.id === composicao.ingrediente_id);
-           
-           if (!mapCalculo[composicao.ingrediente_id]) {
-               mapCalculo[composicao.ingrediente_id] = {
-                  ingrediente_id: composicao.ingrediente_id,
-                  nome_insumo: ing?.nome || 'Desconhecido',
-                  necessidade_bruta_kg: 0,
-                  estoque_atual_kg: 0, 
-                  estoque_minimo_kg: ing?.estoque_minimo_kg || 0,
-                  preco_ultima_compra: ing?.preco_ultima_compra || 0,
-                  quantidade_comprar_kg: 0,
-                  categoria: (() => {
-                    const catObj = ing?.grupos_produto;
-                    if (Array.isArray(catObj)) return catObj[0]?.nome || 'Outros';
-                    return (catObj as any)?.nome || 'Outros';
-                  })()
-               };
-           }
-           
-           mapCalculo[composicao.ingrediente_id].necessidade_bruta_kg += pbTotalKg;
-        });
-
-        let total = 0;
-        const listaFinal = Object.values(mapCalculo).map(item => {
-           // Quantidade a Comprar = MAX(0, Necessidade - EstoqueAtual + EstoqueMinimo)
-           item.quantidade_comprar_kg = Math.max(0, item.necessidade_bruta_kg - item.estoque_atual_kg + item.estoque_minimo_kg);
-           total += item.quantidade_comprar_kg * item.preco_ultima_compra;
-           return item;
-        });
-
-        listaFinal.sort((a,b) => (b.quantidade_comprar_kg * b.preco_ultima_compra) - (a.quantidade_comprar_kg * a.preco_ultima_compra));
-
-        setCompras(listaFinal);
-        setCustoTotal(total);
-
-      } catch(e: any) {
-        alert("Erro no cálculo: " + e.message);
+      } catch (e: any) {
+        console.error('Erro ao calcular compras:', e);
+        setErro(e.message || 'Erro desconhecido ao processar a lista de compras.');
+        setCompras([]);
+        setResumo(null);
       } finally {
         setLoading(false);
       }
     }
     calcularCompras();
-  }, [cardapioSelecionado, cardapios, activeClientId]);
+  }, [cardapioSelecionado, activeClientId]);
+
+  const handleExportarPDF = () => {
+    window.print();
+  };
+
+  const custoTotal = resumo?.custo_total_estimado ?? 0;
 
   return (
-    <Box p={4}>
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+    <Box p={4} sx={{ 
+      '@media print': { 
+        p: 0,
+        '& .no-print': { display: 'none' },
+        '& .Paper-root': { boxShadow: 'none', border: '1px solid #eee' }
+      } 
+    }}>
+      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }} className="no-print">
         <Typography variant="h5" fontWeight="bold" flexGrow={1} display="flex" alignItems="center" gap={1}>
            <ShoppingCart /> Previsão de Compras (UAN)
         </Typography>
-        <Button variant="outlined" startIcon={<FileText />}>Exportar PDF</Button>
+        <Button variant="contained" startIcon={<FileText />} onClick={handleExportarPDF}>Exportar PDF</Button>
       </Box>
 
-      <Paper sx={{ mb: 4, p: 3 }}>
+      {/* Cabeçalho de Impressão (Auditável) */}
+      <Box sx={{ display: 'none', '@media print': { display: 'block', mb: 4, borderBottom: '2px solid #333', pb: 2 } }}>
+        <Typography variant="h4" fontWeight="bold">Relatório de Previsão de Compras - UAN</Typography>
+        <Typography variant="subtitle1" color="text.secondary">
+          Data de Emissão: {new Date().toLocaleDateString('pt-BR')} | Unidade: Filial - Shopping
+        </Typography>
+      </Box>
+
+      <Paper sx={{ mb: 4, p: 3 }} className="no-print">
         <Typography variant="subtitle2" color="text.secondary" mb={2}>SELECIONE O CICLO DE CARDÁPIO APROVADO</Typography>
         <TextField
           select
@@ -186,100 +131,144 @@ export default function ListaComprasUANPage() {
         >
            {cardapios.map(c => (
              <MenuItem key={c.id} value={c.id}>
-               {c.nome_ciclo} ({new Date(c.data_inicio).toLocaleDateString()} a {new Date(c.data_fim).toLocaleDateString()}) - {c.comensais_estimados_dia} Comensais
+               {c.nome_ciclo} ({formatLocalDate(c.data_inicio)} a {formatLocalDate(c.data_fim)}) - {c.comensais_estimados_dia} Comensais
              </MenuItem>
            ))}
         </TextField>
       </Paper>
 
+      {/* Erro da Edge Function */}
+      {erro && (
+        <Alert severity="error" icon={<ServerCrash size={20} />} sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" fontWeight="bold">Erro no cálculo</Typography>
+          <Typography variant="body2">{erro}</Typography>
+        </Alert>
+      )}
+
       {loading ? (
         <Box display="flex" justifyContent="center" p={4}><Loader2 className="animate-spin" /></Box>
-      ) : cardapioSelecionado && (
+      ) : cardapioSelecionado && !erro && (
         <>
-          <Box sx={{ display: 'flex', gap: 3, mb: 3 }}>
-            <Paper sx={{ p: 3, flex: 1, bgcolor: '#f0f9ff', borderLeft: '4px solid #0284c7' }}>
-               <Typography variant="body2" color="text.secondary">Insumos Mapeados</Typography>
-               <Typography variant="h4" color="primary.main">{compras.length}</Typography>
-            </Paper>
-            <Paper sx={{ p: 3, flex: 1, bgcolor: '#fef2f2', borderLeft: '4px solid #ef4444' }}>
-               <Typography variant="body2" color="text.secondary">Orçamento Estimado (Baseado na última compra)</Typography>
-               <Typography variant="h4" color="error.main">R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Typography>
-            </Paper>
-          </Box>
+          {/* KPI Cards - Executive Summary */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, bgcolor: 'primary.main', color: 'primary.contrastText', borderRadius: 2, boxShadow: '0 4px 20px rgba(25, 118, 210, 0.2)' }}>
+                 <Typography variant="overline" sx={{ opacity: 0.8, fontWeight: 'bold', letterSpacing: 1 }}>Insumos Mapeados</Typography>
+                 <Typography variant="h3" fontWeight="bold">{resumo?.total_ingredientes ?? 0}</Typography>
+                 <Typography variant="body2" sx={{ opacity: 0.8 }}>Total de itens distintos no ciclo</Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, bgcolor: '#ffffff', border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                 <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 'bold', letterSpacing: 1 }}>Orçamento Estimado</Typography>
+                 <Typography variant="h3" fontWeight="bold" color="error.main">
+                   R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                 </Typography>
+                 <Typography variant="body2" color="text.secondary">Baseado no preço da última compra</Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Paper sx={{ p: 3, bgcolor: '#ffffff', border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                 <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 'bold', letterSpacing: 1 }}>Peso Logístico Total</Typography>
+                 <Typography variant="h3" fontWeight="bold" color="success.main">
+                   {(resumo?.peso_total_bruto_kg ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} <small style={{ fontSize: '0.5em' }}>kg</small>
+                 </Typography>
+                 <Typography variant="body2" color="text.secondary">Volume bruto para transporte/armazenagem</Typography>
+              </Paper>
+            </Grid>
+          </Grid>
 
-          {/* Grupos de Categorias */}
-          {(() => {
-            const grouped = compras.reduce((acc, item) => {
-              const cat = item.categoria || 'Outros';
-              if (!acc[cat]) acc[cat] = { items: [], totalCusto: 0 };
-              acc[cat].items.push(item);
-              acc[cat].totalCusto += item.quantidade_comprar_kg * (item.preco_ultima_compra || 0);
-              return acc;
-            }, {} as Record<string, { items: CompraItem[], totalCusto: number }>);
+          {/* DETALHAMENTO EXECUTIVO POR CATEGORIA */}
+          <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+            {(() => {
+              const grouped = compras.reduce((acc, item) => {
+                const cat = item.nome_grupo || 'Outros';
+                if (!acc[cat]) acc[cat] = { items: [], totalCusto: 0 };
+                acc[cat].items.push(item);
+                acc[cat].totalCusto += item.custo_estimado_total;
+                return acc;
+              }, {} as Record<string, { items: ItemListaCompra[], totalCusto: number }>);
 
-            const categoriasOrdenadas = Object.keys(grouped).sort((a,b) => {
-               if (a === 'Outros') return 1;
-               if (b === 'Outros') return -1;
-               return a.localeCompare(b);
-            });
+              const categoriasOrdenadas = Object.keys(grouped).sort((a,b) => {
+                 if (a === 'Outros') return 1;
+                 if (b === 'Outros') return -1;
+                 return a.localeCompare(b);
+              });
 
-            if (compras.length === 0) {
+              if (compras.length === 0) {
+                return (
+                  <Box p={8} textAlign="center">
+                    <Typography color="text.secondary">O cardápio selecionado não possui preparações planejadas para o período.</Typography>
+                  </Box>
+                );
+              }
+
               return (
-                <Paper sx={{ p: 4, textAlign: 'center' }}>
-                  O cardápio selecionado não possui fichas distribuídas na grade.
-                </Paper>
-              );
-            }
-
-            return categoriasOrdenadas.map(cat => (
-              <Accordion key={cat} defaultExpanded sx={{ mb: 2, borderRadius: 2, '&:before': { display: 'none' }, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                <AccordionSummary expandIcon={<span>▼</span>} sx={{ bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                   <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', pr: 2 }}>
-                     <Typography fontWeight="bold" color="primary.main">{cat} ({grouped[cat].items.length} itens)</Typography>
-                     <Typography fontWeight="bold" color="error.main">Subtotal: R$ {grouped[cat].totalCusto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Typography>
-                   </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ p: 0 }}>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow sx={{ bgcolor: 'action.hover' }}>
-                          <TableCell>Insumo</TableCell>
-                          <TableCell align="right">Nec. Bruta</TableCell>
-                          <TableCell align="right">Buffer</TableCell>
-                          <TableCell align="right">Comprar</TableCell>
-                          <TableCell align="right">Preço Base</TableCell>
-                          <TableCell align="right">Custo Est.</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {grouped[cat].items.map(c => (
-                          <TableRow key={c.ingrediente_id} hover>
-                             <TableCell sx={{ fontWeight: 'medium' }}>{c.nome_insumo}</TableCell>
-                             <TableCell align="right">{c.necessidade_bruta_kg.toFixed(2)} kg</TableCell>
-                             <TableCell align="right">
-                                {c.estoque_minimo_kg > 0 ? (
-                                  <Chip size="small" label={`${c.estoque_minimo_kg} kg`} color="warning" variant="outlined" />
-                                ) : '-'}
-                             </TableCell>
-                             <TableCell align="right">
-                                <Typography color="primary.main" fontWeight="bold">
-                                   {c.quantidade_comprar_kg.toFixed(2)} kg
-                                </Typography>
-                             </TableCell>
-                             <TableCell align="right">R$ {c.preco_ultima_compra?.toFixed(2) || '0.00'}</TableCell>
-                             <TableCell align="right" sx={{ color: 'error.main', fontWeight: 'bold' }}>
-                                R$ {(c.quantidade_comprar_kg * (c.preco_ultima_compra || 0)).toFixed(2)}
-                             </TableCell>
+                <Box>
+                  <Box sx={{ p: 2, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" color="text.secondary">DETALHAMENTO POR GRUPO DE INSUMOS</Typography>
+                    <Typography variant="caption" color="text.secondary">Valores em Reais (R$) e Quilogramas (kg)</Typography>
+                  </Box>
+                  
+                  {categoriasOrdenadas.map(cat => (
+                    <Box key={cat} sx={{ mb: 4 }}>
+                      <Box sx={{ px: 3, py: 1.5, bgcolor: 'rgba(25, 118, 210, 0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 700, color: 'primary.dark' }}>
+                          {cat}
+                        </Typography>
+                        <Chip 
+                          label={`Subtotal: R$ ${grouped[cat].totalCusto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
+                          size="small" 
+                          color="primary" 
+                          variant="outlined" 
+                          sx={{ fontWeight: 'bold', bgcolor: 'white' }}
+                        />
+                      </Box>
+                      
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 'bold', color: 'text.secondary', pl: 4 }}>Item / Insumo</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>Nec. Bruta</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>Estoque/Buffer</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>Qtd. Compra</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>Preço Unit.</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary', pr: 3 }}>Subtotal</TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </AccordionDetails>
-              </Accordion>
-            ));
-          })()}
+                        </TableHead>
+                        <TableBody>
+                          {grouped[cat].items.map(c => (
+                            <TableRow key={c.ingrediente_id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
+                               <TableCell sx={{ pl: 4, py: 1.5 }}>
+                                 <Typography variant="body2" fontWeight={500}>{c.nome_ingrediente}</Typography>
+                               </TableCell>
+                               <TableCell align="right">{c.necessidade_bruta_kg.toFixed(2)} kg</TableCell>
+                               <TableCell align="right">
+                                  {c.estoque_minimo_kg > 0 ? (
+                                    <Typography variant="caption" sx={{ color: 'warning.dark' }}>Min: {c.estoque_minimo_kg} kg</Typography>
+                                  ) : '-'}
+                               </TableCell>
+                               <TableCell align="right">
+                                  <Typography variant="body2" fontWeight="bold" color="primary.main">
+                                     {c.qtd_comprar_kg.toFixed(2)} kg
+                                  </Typography>
+                               </TableCell>
+                               <TableCell align="right" sx={{ color: 'text.secondary' }}>R$ {c.preco_ultima_compra?.toFixed(2) || '0.00'}</TableCell>
+                               <TableCell align="right" sx={{ pr: 3 }}>
+                                  <Typography variant="body2" fontWeight="bold">
+                                    R$ {c.custo_estimado_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </Typography>
+                               </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Box>
+                  ))}
+                </Box>
+              );
+            })()}
+          </Paper>
         </>
       )}
     </Box>

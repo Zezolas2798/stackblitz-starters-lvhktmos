@@ -46,6 +46,7 @@ function ConfigCategoriasContent({ activeClientId }: { activeClientId: string | 
   const [docsList, setDocsList] = useState<{nome: string, ged_pasta_id: string | null}[]>([]);
   const [newDoc, setNewDoc] = useState('');
   const [newDocPastaId, setNewDocPastaId] = useState<string>('');
+  const [tipoEscopoCat, setTipoEscopoCat] = useState<string>('NENHUM');
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
@@ -186,10 +187,12 @@ function ConfigCategoriasContent({ activeClientId }: { activeClientId: string | 
       setEditingCat(cat);
       setNomeCat(cat.nome);
       setDocsList(cat.documentos_obrigatorios || []);
+      setTipoEscopoCat(cat.tipo_escopo || 'NENHUM');
     } else {
       setEditingCat(null);
       setNomeCat('');
       setDocsList([]);
+      setTipoEscopoCat('NENHUM');
     }
     setDialogOpen(true);
   };
@@ -225,7 +228,8 @@ function ConfigCategoriasContent({ activeClientId }: { activeClientId: string | 
       cliente_id: activeClientId,
       tipo: currentTipo,
       nome: nomeCat,
-      documentos_obrigatorios: docsList
+      documentos_obrigatorios: docsList,
+      tipo_escopo: tipoEscopoCat
     };
 
     try {
@@ -349,6 +353,24 @@ function ConfigCategoriasContent({ activeClientId }: { activeClientId: string | 
               disabled={tipoAbas === 0 && !!editingCat?.id}
               helperText={tipoAbas === 0 ? "O nome das categorias de fornecedores é fixo conforme o módulo de compras." : ""}
             />
+
+            {currentTipo === 'SERVICO' && (
+              <FormControl fullWidth>
+                <InputLabel>Tipo de Escopo Exigido</InputLabel>
+                <Select
+                  value={tipoEscopoCat}
+                  label="Tipo de Escopo Exigido"
+                  onChange={(e) => setTipoEscopoCat(e.target.value)}
+                >
+                  <MenuItem value="NENHUM">Geral / Unidade (Sem vínculo específico)</MenuItem>
+                  <MenuItem value="EQUIPAMENTO">Vínculo com Equipamentos (Manutenção)</MenuItem>
+                  <MenuItem value="SETOR">Vínculo com Setores (Limpeza/Pragas)</MenuItem>
+                </Select>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 1.5 }}>
+                  Define se ao cadastrar um prestador desta categoria será exigido selecionar equipamentos ou setores específicos.
+                </Typography>
+              </FormControl>
+            )}
 
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>Documentos Obrigatórios</Typography>

@@ -58,8 +58,12 @@ export default function EditFornecedorPage() {
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'info' });
   const [categoriasConfig, setCategoriasConfig] = useState<any[]>([]);
   const [gruposDisponiveis, setGruposDisponiveis] = useState<any[]>([]);
+  const [subgruposDisponiveis, setSubgruposDisponiveis] = useState<any[]>([]);
   const [itensDisponiveis, setItensDisponiveis] = useState<any[]>([]);
   const [carregandoPortfolio, setCarregandoPortfolio] = useState(false);
+  const [equipamentosDisponiveis, setEquipamentosDisponiveis] = useState<any[]>([]);
+  const [setoresDisponiveis, setSetoresDisponiveis] = useState<any[]>([]);
+  const [carregandoAtivos, setCarregandoAtivos] = useState(false);
 
   const [fornecedor, setFornecedor] = useState<any>({
     razao_social: '',
@@ -76,7 +80,10 @@ export default function EditFornecedorPage() {
     situacao_cadastral: '',
     categorias_compras: [],
     grupos_fornecidos: [],
+    subgrupos_fornecidos: [],
     itens_fornecidos: [],
+    equipamentos_vinculados: [],
+    setores_vinculados: [],
     tipo: queryTipo
   });
   const [originalFornecedor, setOriginalFornecedor] = useState<any>(null);
@@ -101,7 +108,9 @@ export default function EditFornecedorPage() {
         licenca_sanitaria_validade: data.licenca_sanitaria_validade
           ? new Date(data.licenca_sanitaria_validade).toISOString().split('T')[0]
           : '',
-        categorias_compras: data.categorias_compras || []
+        categorias_compras: data.categorias_compras || [],
+        equipamentos_vinculados: data.equipamentos_vinculados || [],
+        setores_vinculados: data.setores_vinculados || []
       };
       setFornecedor(formatted);
       setOriginalFornecedor(formatted);
@@ -116,8 +125,28 @@ export default function EditFornecedorPage() {
   useEffect(() => {
     if (activeClientId) {
       fetchCategorias();
+      if (fornecedor.tipo === 'SERVICO') {
+        fetchAtivosData();
+      }
     }
   }, [activeClientId, fornecedor.tipo]);
+
+  const fetchAtivosData = async () => {
+    if (!activeClientId) return;
+    try {
+      setCarregandoAtivos(true);
+      const [equipRes, setoresRes] = await Promise.all([
+        (supabase as any).from('equipamentos_config').select('id, nome, grupo').eq('cliente_id', activeClientId).is('ativo', true),
+        (supabase as any).from('setores_producao').select('id, nome').eq('cliente_id', activeClientId)
+      ]);
+      setEquipamentosDisponiveis(equipRes.data || []);
+      setSetoresDisponiveis(setoresRes.data || []);
+    } catch (err) {
+      console.error('Erro ao buscar ativos:', err);
+    } finally {
+      setCarregandoAtivos(false);
+    }
+  };
 
   const fetchCategorias = async () => {
     const { data } = await (supabase as any)
@@ -142,10 +171,11 @@ export default function EditFornecedorPage() {
 
   // Efeito para carregar o portfólio assim que as categorias do fornecedor estiverem disponíveis
   useEffect(() => {
-    if (activeClientId && fornecedor.id && fornecedor.categorias_compras?.length > 0) {
+    if (activeClientId && fornecedor.id && fornecedor.tipo === 'FORNECEDOR' && fornecedor.categorias_compras?.length > 0) {
       fetchPortfolioData(fornecedor.categorias_compras);
-    } else if (fornecedor.categorias_compras?.length === 0) {
+    } else if (fornecedor.categorias_compras?.length === 0 || fornecedor.tipo === 'SERVICO') {
       setGruposDisponiveis([]);
+      setSubgruposDisponiveis([]);
       setItensDisponiveis([]);
     }
   }, [activeClientId, fornecedor.id, JSON.stringify(fornecedor.categorias_compras)]);
@@ -163,7 +193,7 @@ export default function EditFornecedorPage() {
     try {
       setCarregandoPortfolio(true);
       
-      // 1. Buscar Grupos (registros de grupos_produto com modalidades selecionadas)
+      // 1. Buscar Grupos (Level 2)
       const { data: grupos } = await (supabase as any)
         .from('grupos_produto')
         .select('*')
@@ -174,18 +204,16 @@ export default function EditFornecedorPage() {
 
       setGruposDisponiveis(grupos || []);
 
-      // 2. Buscar Grupos de Estoque para mapeamento
-      const { data: stockGroups } = await (supabase as any)
+      // 2. Buscar Subgrupos (Level 3)
+      const { data: subgrupos } = await (supabase as any)
         .from('subgrupos_produto')
-        .select('id, categoria_id')
-        .eq('cliente_id', activeClientId);
+        .select('*')
+        .eq('cliente_id', activeClientId)
+        .order('nome');
       
-      const stockGroupToCat: Record<string, string> = {};
-      (stockGroups || []).forEach((sg: any) => {
-        if (sg.categoria_id) stockGroupToCat[sg.id] = sg.categoria_id;
-      });
+      setSubgruposDisponiveis(subgrupos || []);
 
-      // 3. Buscar Subgrupos (registros de ingredientes)
+      // 3. Buscar Itens (Level 4 / Ingredientes)
       const { data: ingredientes } = await (supabase as any)
         .from('ingredientes')
         .select('id, nome, subgrupo_id, grupo_id')
@@ -193,30 +221,24 @@ export default function EditFornecedorPage() {
         .is('deleted_at', null)
         .order('nome');
       
-      // Mapear modalidades
+      // Mapear modalidades para filtragem visual
       const catMap: Record<string, string> = {};
-      const { data: allCats } = await (supabase as any)
-        .from('grupos_produto')
-        .select('id, modalidade')
-        .eq('cliente_id', activeClientId);
-      (allCats || []).forEach((c: any) => { catMap[c.id] = c.modalidade; });
+      grupos?.forEach((c: any) => { catMap[c.id] = c.modalidade; });
 
       const mappedItens = (ingredientes || []).map((i: any) => {
-        // Encontrar a categoria comercial (ex: 'Leite e Derivados')
-        const catId = i.grupo_id || stockGroupToCat[i.subgrupo_id];
-        // Encontrar a modalidade (ex: 'ALIMENTOS')
-        const mod = catId ? catMap[catId] : (i.subgrupo_id ? catMap[i.subgrupo_id] : null);
+        const catId = i.grupo_id || (subgrupos?.find((s: any) => s.id === i.subgrupo_id)?.grupo_id);
+        const mod = catId ? catMap[catId] : null;
         
         return {
           id: i.id,
           nome: i.nome,
-          categoria_id: catId,
+          grupo_id: catId,
+          subgrupo_id: i.subgrupo_id,
           modalidade: mod
         };
       });
 
       const filteredItens = mappedItens.filter((i: any) => i.modalidade && categorias.includes(i.modalidade));
-
       setItensDisponiveis(filteredItens);
     } catch (err) {
       console.error('Erro ao carregar portfólio:', err);
@@ -241,27 +263,55 @@ export default function EditFornecedorPage() {
     const novosIds = newValue.map(v => v.id);
     
     setFornecedor((prev: any) => {
-      // Se removeu um grupo, remover também os subgrupos (itens) vinculados a ele
+      // Se removeu um grupo, remover também os subgrupos e itens vinculados a ele
       const gruposRemovidos = (prev.grupos_fornecidos || []).filter((id: string) => !novosIds.includes(id));
-      let subgruposRestantes = prev.itens_fornecidos || [];
+      let subgruposRestantes = prev.subgrupos_fornecidos || [];
+      let itensRestantes = prev.itens_fornecidos || [];
       
       if (gruposRemovidos.length > 0) {
-        const subgruposParaRemover = itensDisponiveis
-          .filter((i: any) => gruposRemovidos.includes(i.categoria_id))
+        const subgruposParaRemover = subgruposDisponiveis
+          .filter((s: any) => gruposRemovidos.includes(s.grupo_id))
+          .map((s: any) => s.id);
+        
+        const itensParaRemover = itensDisponiveis
+          .filter((i: any) => gruposRemovidos.includes(i.grupo_id))
           .map((i: any) => i.id);
           
         subgruposRestantes = subgruposRestantes.filter((id: string) => !subgruposParaRemover.includes(id));
+        itensRestantes = itensRestantes.filter((id: string) => !itensParaRemover.includes(id));
       }
       
       return {
         ...prev,
         grupos_fornecidos: novosIds,
-        itens_fornecidos: subgruposRestantes
+        subgrupos_fornecidos: subgruposRestantes,
+        itens_fornecidos: itensRestantes
       };
     });
   };
 
   const handleUpdateSubgrupos = (event: any, newValue: any[]) => {
+    const novosIds = newValue.map(v => v.id);
+    setFornecedor((prev: any) => {
+      const subgruposRemovidos = (prev.subgrupos_fornecidos || []).filter((id: string) => !novosIds.includes(id));
+      let itensRestantes = prev.itens_fornecidos || [];
+      
+      if (subgruposRemovidos.length > 0) {
+        const itensParaRemover = itensDisponiveis
+          .filter((i: any) => subgruposRemovidos.includes(i.subgrupo_id))
+          .map((i: any) => i.id);
+        itensRestantes = itensRestantes.filter((id: string) => !itensParaRemover.includes(id));
+      }
+      
+      return {
+        ...prev,
+        subgrupos_fornecidos: novosIds,
+        itens_fornecidos: itensRestantes
+      };
+    });
+  };
+
+  const handleUpdateItens = (event: any, newValue: any[]) => {
     setFornecedor((prev: any) => ({
       ...prev,
       itens_fornecidos: newValue.map(v => v.id)
@@ -340,7 +390,10 @@ export default function EditFornecedorPage() {
         situacao_cadastral: fornecedor.situacao_cadastral || null,
         categorias_compras: fornecedor.categorias_compras || [],
         grupos_fornecidos: fornecedor.grupos_fornecidos || [],
+        subgrupos_fornecidos: fornecedor.subgrupos_fornecidos || [],
         itens_fornecidos: fornecedor.itens_fornecidos || [],
+        equipamentos_vinculados: fornecedor.equipamentos_vinculados || [],
+        setores_vinculados: fornecedor.setores_vinculados || [],
         tipo: fornecedor.tipo
       };
 
@@ -352,9 +405,6 @@ export default function EditFornecedorPage() {
       } else {
         const { error } = await (supabase as any).from('fornecedores').update(payload).eq('id', id);
         if (error) throw error;
-
-        // ─── Lógica de Sincronização GED Automatizada ───
-        await ensureFolderExists();
 
         setOriginalFornecedor({ ...fornecedor });
         setSnackbar({ open: true, message: 'Fornecedor atualizado com sucesso!', severity: 'success' });
@@ -389,106 +439,9 @@ export default function EditFornecedorPage() {
     }
   };
 
-  // ─── Criação Automática de Pasta GED ───
-  const ensureFolderExists = async () => {
-    if (isNew || !activeClientId) return;
 
-    try {
-      setFolderError(null);
-      
-      // 1. Identificar a pasta base padrão (3.1.1 ou 3.2) como fallback global
-      const searchNome = fornecedor.tipo === 'SERVICO' ? '%3.2%' : '%3.1.1%';
-      const { data: baseFolder } = await (supabase as any)
-        .from('documentos_pastas')
-        .select('id, documentos_categorias!inner(cliente_id)')
-        .eq('documentos_categorias.cliente_id', activeClientId)
-        .ilike('nome', searchNome)
-        .limit(1)
-        .maybeSingle();
-
-      const targetParentId = baseFolder?.id || null;
-
-      // 2. Sincronizar placeholders para as categorias do fornecedor
-      const categoriesToProcess = fornecedor.categorias_compras || [];
-      const razaoSocial = fornecedor.razao_social;
-
-      // Se ainda não temos uma pasta vinculada ao fornecedor (ou se mudou), tentamos atualizar o registro
-      if (targetParentId && fornecedor.pasta_documentos_id !== targetParentId) {
-        await (supabase as any)
-          .from('fornecedores')
-          .update({ pasta_documentos_id: targetParentId })
-          .eq('id', id);
-        setFornecedor((prev: any) => ({ ...prev, pasta_documentos_id: targetParentId }));
-      }
-
-      if (categoriesToProcess.length === 0) return;
-
-      // 3. Gerar placeholders para documentos obrigatórios
-      // Buscar o que já existe para o fornecedor para evitar duplicatas
-      const { data: allExistingFiles } = await (supabase as any)
-        .from('documentos_arquivos')
-        .select('id, nome_arquivo, pasta_id')
-        .filter('nome_arquivo', 'ilike', `%[${razaoSocial}]%`)
-        .is('deleted_at', null);
-
-      for (const catName of categoriesToProcess) {
-        const { data: catDocs } = await (supabase as any)
-          .from('categorias_config')
-          .select('documentos_obrigatorios, ged_pasta_id')
-          .eq('cliente_id', activeClientId)
-          .eq('nome', catName)
-          .maybeSingle();
-
-        if (catDocs?.documentos_obrigatorios && Array.isArray(catDocs.documentos_obrigatorios)) {
-          const categoryDefaultFolder = catDocs.ged_pasta_id || targetParentId;
-
-          for (const doc of catDocs.documentos_obrigatorios) {
-            const docName = typeof doc === 'string' ? doc : doc.nome;
-            const docPastaId = typeof doc === 'object' ? doc.ged_pasta_id : null;
-            const finalTargetFolderId = docPastaId || categoryDefaultFolder;
-            
-            if (!finalTargetFolderId) continue;
-
-            const fullTargetName = `[${razaoSocial}] ${docName}`;
-            
-            // Verificar se o documento JÁ EXISTE nesta pasta específica
-            const existsInFolder = allExistingFiles?.some((f: any) => 
-              f.pasta_id === finalTargetFolderId && 
-              f.nome_arquivo.toLowerCase() === fullTargetName.toLowerCase()
-            );
-
-            if (!existsInFolder) {
-              await (supabase as any)
-                .from('documentos_arquivos')
-                .insert({
-                  pasta_id: finalTargetFolderId,
-                  nome_arquivo: fullTargetName,
-                  url_storage: null, // Placeholder pendente
-                  versao: 1
-                });
-              
-              // Adicionamos à lista local para evitar duplicatas por múltiplas categorias
-              if (allExistingFiles) {
-                allExistingFiles.push({ pasta_id: finalTargetFolderId, nome_arquivo: fullTargetName });
-              }
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      console.error('Erro ao gerar placeholders automáticos:', err);
-      // O erro só bloqueia visualmente se realmente não conseguimos nem uma pasta raiz
-      if (!fornecedor.pasta_documentos_id) {
-        setFolderError(`Atenção: Algumas pastas do GED podem não ter sido localizadas.`);
-      }
-    }
-  };
-
-  const handleTabChange = async (_: any, newValue: number) => {
+  const handleTabChange = (_: any, newValue: number) => {
     setTabValue(newValue);
-    if (newValue === 1) {
-      await ensureFolderExists();
-    }
   };
 
   // ─── Formatação CNPJ ───
@@ -628,8 +581,8 @@ export default function EditFornecedorPage() {
                 </Paper>
               </Grid>
 
-              {/* ── Seleção Granular de Portfólio (Refatorado - Multi-categoria) ── */}
-              {fornecedor.categorias_compras?.length > 0 && (
+              {/* ── Seleção Granular de Portfólio (Exclusiva para FORNECEDOR) ── */}
+              {fornecedor.tipo === 'FORNECEDOR' && fornecedor.categorias_compras?.length > 0 && (
                 <Grid item xs={12}>
                   <Paper variant="outlined" sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
                     <Box sx={{ mb: 3 }}>
@@ -666,8 +619,8 @@ export default function EditFornecedorPage() {
                           renderInput={(params) => (
                             <TextField
                               {...params}
-                              label="Grupos Fornecidos"
-                              placeholder="Ex: Farinhas, Carnes, Caixas..."
+                              label="Grupos Fornecidos (Level 2)"
+                              placeholder="Ex: Farinhas, Carnes..."
                               helperText="Grupos organizados por modalidade"
                             />
                           )}
@@ -684,18 +637,17 @@ export default function EditFornecedorPage() {
                         />
                       </Grid>
 
-                      {/* SUBGRUPOS DE COMPRAS */}
+                      {/* SUBGRUPOS (LEVEL 3) */}
                       {(fornecedor.grupos_fornecidos || []).length > 0 && (
                         <Grid item xs={12} md={6}>
                           <Autocomplete
                             multiple
                             disableCloseOnSelect
-                            options={itensDisponiveis.filter(i => 
-                              // Opções: Itens que pertencem aos grupos selecionados OR itens órfãos (sem grupo)
-                              (fornecedor.grupos_fornecidos || []).includes(i.categoria_id) || !i.categoria_id
+                            options={subgruposDisponiveis.filter(s => 
+                              (fornecedor.grupos_fornecidos || []).includes(s.grupo_id)
                             )}
                             getOptionLabel={(option) => option.nome}
-                            value={itensDisponiveis.filter(i => (fornecedor.itens_fornecidos || []).includes(i.id))}
+                            value={subgruposDisponiveis.filter(s => (fornecedor.subgrupos_fornecidos || []).includes(s.id))}
                             onChange={handleUpdateSubgrupos}
                             renderOption={(props, option, { selected }) => (
                               <li {...props}>
@@ -710,9 +662,53 @@ export default function EditFornecedorPage() {
                             renderInput={(params) => (
                               <TextField
                                 {...params}
-                                label="Sub grupos de Compras"
-                                placeholder="Ex: Farinha de trigo..."
-                                helperText="Especifique os itens dos grupos selecionados"
+                                label="Subgrupos (Level 3)"
+                                placeholder="Filtro fino de categorias"
+                              />
+                            )}
+                            renderTags={(value, getTagProps) =>
+                              value.map((option, index) => (
+                                <Chip
+                                  label={option.nome}
+                                  {...getTagProps({ index })}
+                                  color="info"
+                                  size="small"
+                                />
+                              ))
+                            }
+                          />
+                        </Grid>
+                      )}
+
+                      {/* ITENS / INGREDIENTES (LEVEL 4) */}
+                      {(fornecedor.grupos_fornecidos || []).length > 0 && (
+                        <Grid item xs={12}>
+                          <Autocomplete
+                            multiple
+                            disableCloseOnSelect
+                            options={itensDisponiveis.filter(i => 
+                              (fornecedor.grupos_fornecidos || []).includes(i.grupo_id) &&
+                              ((fornecedor.subgrupos_fornecidos || []).length === 0 || (fornecedor.subgrupos_fornecidos || []).includes(i.subgrupo_id))
+                            )}
+                            getOptionLabel={(option) => option.nome}
+                            value={itensDisponiveis.filter(i => (fornecedor.itens_fornecidos || []).includes(i.id))}
+                            onChange={handleUpdateItens}
+                            renderOption={(props, option, { selected }) => (
+                              <li {...props}>
+                                <Checkbox
+                                  size="small"
+                                  style={{ marginRight: 8 }}
+                                  checked={selected}
+                                />
+                                {option.nome}
+                              </li>
+                            )}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Itens Específicos (Level 4)"
+                                placeholder="Ex: Farinha de Trigo Tipo 1..."
+                                helperText="Especifique os insumos homologados deste fornecedor"
                               />
                             )}
                             renderTags={(value, getTagProps) =>
@@ -735,6 +731,65 @@ export default function EditFornecedorPage() {
                         Nenhum Grupo configurado no sistema para as categorias selecionadas.
                       </Alert>
                     )}
+                  </Paper>
+                </Grid>
+              )}
+
+              {/* ── Seção de Ativos/Setores (Exclusiva para SERVICO e Reativa à Categoria) ── */}
+              {fornecedor.tipo === 'SERVICO' && (categoriasConfig.some(c => (fornecedor.categorias_compras || []).includes(c.nome) && ['EQUIPAMENTO', 'SETOR'].includes(c.tipo_escopo))) && (
+                <Grid item xs={12}>
+                  <Paper variant="outlined" sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: alpha(theme.palette.secondary.main, 0.02) }}>
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="h6" fontWeight="bold" sx={{ color: 'secondary.main', mb: 0.5 }}>
+                        Escopo Técnico: Ativos & Áreas
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Vínculo de recursos técnicos habilitado com base nas categorias selecionadas.
+                      </Typography>
+                    </Box>
+
+                    <Grid container spacing={3}>
+                      {categoriasConfig.some(c => (fornecedor.categorias_compras || []).includes(c.nome) && c.tipo_escopo === 'EQUIPAMENTO') && (
+                        <Grid item xs={12} md={6}>
+                          <Autocomplete
+                            multiple
+                            options={equipamentosDisponiveis}
+                            groupBy={(option) => option.grupo || 'Geral'}
+                            getOptionLabel={(option) => option.nome}
+                            value={equipamentosDisponiveis.filter(e => (fornecedor.equipamentos_vinculados || []).includes(e.id))}
+                            onChange={(_, newValue) => handleChange('equipamentos_vinculados', newValue.map(v => v.id))}
+                            loading={carregandoAtivos}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Equipamentos Atendidos"
+                                placeholder="Ex: Fornos, Geladeiras..."
+                              />
+                            )}
+                          />
+                        </Grid>
+                      )}
+
+                      {categoriasConfig.some(c => (fornecedor.categorias_compras || []).includes(c.nome) && c.tipo_escopo === 'SETOR') && (
+                        <Grid item xs={12} md={6}>
+                          <Autocomplete
+                            multiple
+                            options={setoresDisponiveis}
+                            getOptionLabel={(option) => option.nome}
+                            value={setoresDisponiveis.filter(s => (fornecedor.setores_vinculados || []).includes(s.id))}
+                            onChange={(_, newValue) => handleChange('setores_vinculados', newValue.map(v => v.id))}
+                            loading={carregandoAtivos}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Setores de Atuação"
+                                placeholder="Ex: Cozinha Quente, Depósito..."
+                              />
+                            )}
+                          />
+                        </Grid>
+                      )}
+                    </Grid>
                   </Paper>
                 </Grid>
               )}
@@ -888,13 +943,10 @@ export default function EditFornecedorPage() {
                       pastaId={fornecedor.pasta_documentos_id} 
                       categoriasSelecionadas={fornecedor.categorias_compras} 
                       razaoSocial={fornecedor.razao_social}
+                      entidadeId={id as string}
                     />
                   ) : folderError ? (
-                    <Alert severity="error" action={
-                      <Button color="inherit" size="small" onClick={ensureFolderExists}>
-                        Tentar Novamente
-                      </Button>
-                    }>
+                    <Alert severity="error">
                       {folderError}
                     </Alert>
                   ) : (

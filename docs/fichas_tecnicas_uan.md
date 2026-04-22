@@ -144,6 +144,18 @@ Disponível no botão "Análise Nutricional (TACO/TBCA)" — abre um modal que c
 
 Nutrientes calculados: Energia (kcal), Carboidratos Totais (g), Carboidratos Disponíveis (g), Proteínas (g), Gorduras Totais (g), Fibras (g), Cálcio (mg), Sódio (mg).
 
+### 4.5. Detecção Automática de Família Proteica (Linter)
+
+O sistema utiliza a **composição** da ficha para identificar automaticamente qual a proteína predominante. Esta informação é fundamental para o motor de validação do cardápio.
+
+**Algoritmo de Detecção:**
+1. O sistema filtra os ingredientes da composição que pertencem aos grupos de proteína (Aves, Bovinos, Suínos, Pescados, Ovos, Embutidos).
+2. Dentre os ingredientes encontrados, ele seleciona aquele com o maior **Peso Bruto (g)**.
+3. O `grupo_id` deste ingrediente é atribuído à ficha técnica como `proteina_familia_id` durante o carregamento da grade.
+
+> [!NOTE]
+> Essa lógica de "Peso Dominante" garante que pratos mistos (ex: Escondidinho de Carne com Bacon) sejam classificados corretamente pela proteína principal (Carne), evitando que o bacon dispare alertas de família suína indevidamente.
+
 ---
 
 ## 5. Regras de Validação (Salvar)

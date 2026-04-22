@@ -37,6 +37,8 @@ tags:
 | estoque.Movimentacao | Movimentação | [[estoque.movimentacoes]] | — | Registro imutável de fluxo de estoque (Entrada, Saída, etc) |
 | estoque.Inventario | Inventário | [[estoque.inventarios]] | StatusInventario | Sessão de auditoria física para reconciliação de saldos |
 | estoque.Recebimento | Recebimento | [[estoque.recebimento]] | — | Protocolo de check-in físico e fiscal de mercadorias |
+| fornecedor.Fornecedor | Fornecedor | [[suprimentos.fornecedores]] | StatusHomologacao | Parceiro comercial de suprimentos com homologação GED |
+| servicos.Prestador | Prestador de Serviço | [[servicos.prestadores]] | StatusHomologacao | Especialista técnico vinculado a ativos e áreas |
 
 ---
 
@@ -51,7 +53,7 @@ tags:
 | rotulagem.ResultadoCalculo | Resultado de Cálculo | [[GERENCIAMENTO_ROTULAGEM_E_PRODUTO]] | Objeto retornado pela Edge Function |
 | uan.ComposicaoFichaUAN | Composição UAN | [[fichas_tecnicas_uan]] | Relação NxN ficha↔ingrediente com PB, PL, FC e IC (sem vínculo com rótulo) |
 | uan.CardapioDiaUAN | Grade UAN | [[uan.cardapios]] | Alocação unitária: data × refeição × ficha técnica com fator_multiplicador |
-| estoque.Local | Local de Estoque | [[estoque_locais]] | Endereço físico de armazenamento (Ex: Câmara, Prateleira) |
+| estoque.Local | Local de Estoque | [[estoque.locais]] | Endereço físico de armazenamento (Ex: Câmara, Prateleira) |
 
 ---
 
@@ -68,6 +70,7 @@ tags:
 | uan.StatusCardapio | StatusCardapio | `Rascunho`, `Em Planejamento`, `Aprovado`, `Enviado para Compras`, `Em Execução` | Lifecycle do ciclo de cardápio |
 | estoque.StatusLote | StatusLote | `PREVISTO`, `APROVADO`, `REJEITADO`, `VENCIDO` | Estado de disponibilidade do lote físico |
 | estoque.StatusInventario | StatusInventario | `EM_ANDAMENTO`, `FINALIZADO`, `CANCELADO` | Estado da auditoria física |
+| fornecedor.StatusHomologacao | StatusHomologacao | `PENDENTE`, `APROVADO`, `REJEITADO` | Lifecycle de conformidade documental do parceiro |
 
 ---
 
@@ -179,5 +182,16 @@ tags:
 | uan.PoliticaCategoriaFiltrada | **applies** | uan.FichaTecnicaUAN (formulário) |
 | uan.RegraAntiFantasma | **enforces** | handleSalvar (Fichas UAN) |
 | edge.calcularCardapioUAN | **derives-from** | edge.calcularNutrientes |
+| fornecedor.Fornecedor | **regulado-por** | categorias.Config |
+| fornecedor.Fornecedor | **vincula** | ged.Documento |
+| fornecedor.Fornecedor | **provê** | estoque.Lote |
+| fornecedor.Fornecedor | **gera-tarefa** | tarefas.Checklist (future) |
+| servicos.Prestador | **regulado-por** | categorias.Config |
+| servicos.Prestador | **vincula** | ged.Documento |
+| servicos.Prestador | **atende** | ativos.Equipamento |
+| servicos.Prestador | **atua** | areas.Setor |
+
+| estoque.Material | **refina** | subgrupos.Especialidade |
+
 
 

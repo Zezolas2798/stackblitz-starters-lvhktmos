@@ -8,14 +8,16 @@ import { CardapioUAN, CardapioDiaUAN, FichaTecnicaUAN } from '@/lib/types';
 import {
   Box, Typography, Button, Paper, Chip, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, Autocomplete, TextField,
-  Divider, Grid, FormControlLabel, Checkbox, Accordion, AccordionSummary, AccordionDetails, Tooltip, Badge
+  Divider, Grid, FormControlLabel, Checkbox, Accordion, AccordionSummary, AccordionDetails, Tooltip, Badge,
+  Menu, MenuItem as MuiMenuItem, ListItemIcon, ListItemText
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
-import { ArrowLeft, Plus, Save, Trash2, CalendarDays, Loader2, RefreshCw, ChevronDown, Pencil, Settings, Tag, X, ShieldAlert, AlertTriangle, Wand2 } from 'lucide-react';
+import { ArrowLeft, Plus, Save, Trash2, CalendarDays, Loader2, RefreshCw, ChevronDown, Pencil, Settings, Tag, X, ShieldAlert, AlertTriangle, Wand2, Dna, Zap } from 'lucide-react';
 import { validateMenuGrid, ValidationAlert, FichaValidationData } from '@/lib/uan-validator';
 import { CardapioRegraVariedade, PerfilCardapio, PerfilCardapioSlot } from '@/lib/types';
 const DEFAULT_REFEICOES = ['Desjejum', 'Colação', 'Almoço', 'Lanche da Tarde', 'Jantar', 'Ceia'];
 import { MEAL_CATEGORY_GROUPS, REFEICAO_TO_GROUP } from '@/lib/uan-constants';
+import { formatLocalDate } from '@/lib/utils/dateUtils';
 export default function GradeCardapioUANPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { activeClientId, unidadeId } = useClient();
@@ -50,6 +52,8 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
   const [mealDialogOpen, setMealDialogOpen] = useState(false);
   const [expandedMeals, setExpandedMeals] = useState<Record<string, boolean>>({}); // 'YYYY-MM-DD_Refeicao' -> boolean
   const [isGenerating, setIsGenerating] = useState(false);
+  const [solverMenuAnchor, setSolverMenuAnchor] = useState<null | HTMLElement>(null);
+  const [activeSolver, setActiveSolver] = useState<'csp' | 'nsga'>('csp');
 
   // LINTER & AQPC State
   const [regras, setRegras] = useState<CardapioRegraVariedade[]>([]);
@@ -58,6 +62,9 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
   const [fichasMap, setFichasMap] = useState<Record<string, FichaValidationData>>({});
   const [validationAlerts, setValidationAlerts] = useState<ValidationAlert[]>([]);
   const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
+  const [showAllCategories, setShowAllCategories] = useState(false);
+
+  const PROTEIC_CLUSTER = ['Prato Principal', 'Alternativa', 'Opção Vegetariana'];
 
   const fetchData = async () => {
     if (!activeClientId) return;
@@ -72,56 +79,120 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
 
     if (cData) setCardapio(cData as unknown as CardapioUAN);
 
-    // 2. Busca Fichas Disponíveis (com composição para cálculo de custo)
-    const { data: fData } = await supabase
-      .from('fichas_tecnicas_uan')
-      .select('*, composicao_fichas_uan(peso_bruto_g, ingrediente:ingredientes(preco_ultima_compra))')
-      .eq('cliente_id', activeClientId)
-      .order('nome');
+    // 2. Busca Fichas e Regras (em paralelo para agilizar)
+    const [fRes, rRes] = await Promise.all([
+      supabase.from('fichas_tecnicas_uan').select(`
+        *, 
+        composicao_fichas_uan(
+          peso_bruto_g, 
+          ingrediente:ingredientes(id, preco_ultima_compra, grupo_id, subgrupo_id)
+        )
+      `).eq('cliente_id', activeClientId).order('nome'),
+      supabase.from('cardapio_regras_variedade' as any).select('*').eq('cliente_id', activeClientId).eq('ativo', true)
+    ]);
+
+    const fData = fRes.data;
+    const rData = rRes.data;
     
+    if (rData) setRegras(rData as any);
+
     if (fData) {
       setFichas(fData as unknown as FichaTecnicaUAN[]);
       
+      const PROTEIN_GROUPS = [
+        '891ea919-fac8-48d0-b985-26cc6b46d049', // Aves
+        '050d1d7b-c2e6-4abd-98c5-17ab8c6240cb', // Carnes Suínas
+        '3ba507e2-2515-4b90-934e-35ceda97fc09', // Carnes Bovinas
+        '88055c58-06d7-414c-964b-993561feecdf', // Pescados e Frutos do Mar
+        '45a6c299-59d5-455c-b26b-df592720d573', // Carnes exóticas e Outras
+        '67820f74-908b-42fd-8a7a-397386c0f4e0', // Ovos
+        'b4267b71-8662-456b-955b-df2c1891b355'  // Embutidos, Frios e Curados
+      ];
+
+      // Mapeamento de Subgrupos de Enxofre (da regra dinâmica)
+      const enxofreSubgroups = rData?.filter((r: any) => r.tipo_regra === 'MAP_SUBGRUPO_ENXOFRE').map((r: any) => r.parametro_alvo) || [];
+      const thresholdEnxofre = (rData as any[])?.find((r: any) => r.tipo_regra === 'LIMIAR_PREVALENCIA_ENXOFRE')?.valor_limite ?? 5;
+
       const fMap: Record<string, FichaValidationData> = {};
       fData.forEach((f: any) => {
         let custo = 0;
+        let pesoTotal = 0;
+        let pesoEnxofre = 0;
+        let proteinasEncontradas: { subgrupo_id: string, peso: number }[] = [];
+
+        let subgrupo_ids: string[] = [];
+
         if (f.composicao_fichas_uan && Array.isArray(f.composicao_fichas_uan)) {
           f.composicao_fichas_uan.forEach((comp: any) => {
-            const pbKg = comp.peso_bruto_g / 1000;
-            const precoKg = comp.ingrediente?.preco_ultima_compra || 0;
+            const pesoBruto = comp.peso_bruto_g || 0;
+            const pbKg = pesoBruto / 1000;
+            const ing = comp.ingrediente;
+            const precoKg = ing?.preco_ultima_compra || 0;
+            
             custo += (pbKg * precoKg);
+            pesoTotal += pesoBruto;
+
+            if (ing?.subgrupo_id) {
+              subgrupo_ids.push(ing.subgrupo_id);
+            }
+
+            // Diferenciação de Enxofre Automática via Subgrupo
+            // EXCEÇÃO BIMODAL: Se a ficha for "Prato Base", ignoramos Leguminosas (Grupo 2ab8ec83-d810-45b6-902a-d5edba11edd5)
+            // pois o feijão de base não deve disparar o alerta de enxofre bimodal.
+            const isLeguminosa = ing?.grupo_id === '2ab8ec83-d810-45b6-902a-d5edba11edd5';
+            const skipEnxofre = f.categoria_uan === 'Prato Base' && isLeguminosa;
+
+            if (!skipEnxofre && ing?.subgrupo_id && enxofreSubgroups.includes(ing.subgrupo_id)) {
+              pesoEnxofre += pesoBruto;
+            }
+
+            // Verificação de Proteína
+            if (ing?.grupo_id && PROTEIN_GROUPS.includes(ing.grupo_id) && ing.subgrupo_id) {
+              proteinasEncontradas.push({
+                subgrupo_id: ing.subgrupo_id,
+                peso: pesoBruto
+              });
+            }
           });
         }
         
         const rendimento = f.rendimento_porcoes || 1;
         const custoPorca = custo / rendimento;
+        const percEnxofre = pesoTotal > 0 ? (pesoEnxofre / pesoTotal) * 100 : 0;
         
-        fMap[f.id] = { ...f, custo_por_porcao: custoPorca } as FichaValidationData;
+        // Atribui flag se ultrapassar o limiar configurado pelo nutricionista
+        // EXCEÇÃO: Se a ficha for "Prato Base", ignoramos Leguminosas (Grupo 2ab8ec83-d810-45b6-902a-d5edba11edd5)
+        const isSulphurRich = percEnxofre >= thresholdEnxofre || f.rico_em_enxofre;
+
+        // Determina Proteína Dominante
+        const proteinaDominante = proteinasEncontradas.sort((a,b) => b.peso - a.peso)[0];
+        const winningGroup = f.composicao_fichas_uan?.find((c: any) => c.ingrediente?.subgrupo_id === proteinaDominante?.subgrupo_id)?.ingrediente?.grupo_id;
+
+        fMap[f.id] = { 
+          ...f, 
+          custo_por_porcao: custoPorca,
+          proteina_familia_id: winningGroup || null,
+          rico_em_enxofre: isSulphurRich,
+          ingredientes_subgrupos: Array.from(new Set(subgrupo_ids)) as any
+        } as FichaValidationData;
       });
       setFichasMap(fMap);
     }
 
-    // 3. Busca Grade Atual
-    const { data: gData } = await supabase
-      .from('cardapio_dias_uan')
-      .select('*, fichas_tecnicas_uan(nome, categoria_uan)')
-      .eq('cardapio_id', params.id);
+    // 3. Busca Grade Atual e Outros Mapeamentos
+    const [gRes, pRes] = await Promise.all([
+      supabase.from('cardapio_dias_uan').select('*, fichas_tecnicas_uan(nome, categoria_uan)').eq('cardapio_id', params.id),
+      supabase.from('cardapio_perfis_refeicao' as any).select('*').eq('cardapio_id', params.id)
+    ]);
       
-    if (gData) setGrade(gData as unknown as Partial<CardapioDiaUAN>[]);
-
-    // X1. Busca Regras de Variedade
-    const { data: rData } = await supabase.from('cardapio_regras_variedade' as any).select('*').eq('cliente_id', activeClientId).eq('ativo', true);
-    if (rData) setRegras(rData as any);
-
-    // X2. Busca Perfis e Mapeamentos
-    const { data: pMapData } = await supabase.from('cardapio_perfis_refeicao' as any).select('*').eq('cardapio_id', params.id);
-    if (pMapData) {
+    if (gRes.data) setGrade(gRes.data as unknown as Partial<CardapioDiaUAN>[]);
+    if (pRes.data) {
       const pr: Record<string, string> = {};
-      pMapData.forEach((pm: any) => { pr[pm.refeicao] = pm.perfil_id; });
+      pRes.data.forEach((pm: any) => { pr[pm.refeicao] = pm.perfil_id; });
       setPerfisRefeicao(pr);
       
-      if (pMapData.length > 0) {
-        const perfisIds = Array.from(new Set(pMapData.map((d: any) => d.perfil_id)));
+      if (pRes.data.length > 0) {
+        const perfisIds = Array.from(new Set(pRes.data.map((d: any) => d.perfil_id)));
         const { data: profiles } = await supabase.from('perfis_cardapio' as any).select('*, slots:perfil_cardapio_slots(*)').in('id', perfisIds);
         if (profiles) {
           const map: Record<string, any> = {};
@@ -180,9 +251,11 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
     setGrade(prev => prev.filter(g => !(g.data_consumo === dateStr && g.tipo_refeicao === refeicao)));
   };
 
-  const handleGenerateAutomagic = async () => {
+  const handleGenerateAutomagic = async (solver: 'csp' | 'nsga' = 'csp') => {
     if(!activeClientId) return;
     setIsGenerating(true);
+    setActiveSolver(solver);
+    setSolverMenuAnchor(null);
     
     // Preparar Payload Limpo
     const diasRange = calendarDays.filter(Boolean) as string[];
@@ -195,11 +268,16 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
        textura_principal: f.textura_principal,
        metodo_coccao: f.metodo_coccao,
        rico_em_enxofre: f.rico_em_enxofre,
-       custo_por_porcao: f.custo_por_porcao
+       custo_por_porcao: f.custo_por_porcao,
+       ingredientes_subgrupos: (f as any).ingredientes_subgrupos,
+       proteina_familia_id: (f as any).proteina_familia_id
     }));
 
+    const functionName = solver === 'nsga' ? 'uan-nsga-solver' : 'uan-csp-generator';
+    const solverLabel = solver === 'nsga' ? 'NSGA-II' : 'CSP';
+
     try {
-      const { data, error } = await supabase.functions.invoke('uan-csp-generator', {
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: {
           diasAtivos: diasRange,
           perfisRefeicao: perfisRefeicao,
@@ -215,11 +293,14 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
 
       if (data.gradeOutput) {
         setGrade(data.gradeOutput);
-        alert('Cardápio Gerado Automaticamente com Sucesso! Analise os Linter Alerts para refinamento fino.');
+        const metaInfo = data.meta 
+          ? `\n\nSolver: ${solverLabel}\nGerações: ${data.meta.generations}\nTempo: ${data.meta.elapsed_ms}ms\nSoluções Pareto: ${data.meta.pareto_front_size}\nViolações HARD: ${data.meta.has_hard_violations ? 'Sim ⚠️' : 'Não ✅'}`
+          : '';
+        alert(`Cardápio Gerado com ${solverLabel}! Analise os Linter Alerts para refinamento fino.${metaInfo}`);
       }
 
     } catch (e: any) {
-      alert(`Falha na Geração Automática: ${e.message}`);
+      alert(`Falha na Geração (${solverLabel}): ${e.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -582,15 +663,30 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
             variant="contained"
             color="secondary"
             startIcon={isGenerating ? <Loader2 className="animate-spin" /> : <Wand2 />}
-            onClick={handleGenerateAutomagic}
+            endIcon={!isGenerating && <ChevronDown size={16} />}
+            onClick={(e) => isGenerating ? null : setSolverMenuAnchor(e.currentTarget)}
             disabled={salvando || sincronizando || isGenerating}
             sx={{
                background: isGenerating ? 'grey' : 'linear-gradient(45deg, #FE6B8B 30%, #FF8E53 90%)',
                boxShadow: '0 3px 5px 2px rgba(255, 105, 135, .3)',
             }}
           >
-            {isGenerating ? 'Calculando CSP...' : 'Gerar Auto (Beta)'}
+            {isGenerating ? (activeSolver === 'nsga' ? 'Otimizando NSGA-II...' : 'Calculando CSP...') : 'Gerar Cardápio'}
           </Button>
+          <Menu
+            anchorEl={solverMenuAnchor}
+            open={Boolean(solverMenuAnchor)}
+            onClose={() => setSolverMenuAnchor(null)}
+          >
+            <MuiMenuItem onClick={() => handleGenerateAutomagic('csp')}>
+              <ListItemIcon><Zap size={18} /></ListItemIcon>
+              <ListItemText primary="⚡ Rápido (CSP)" secondary="Backtracking ~1-9s" />
+            </MuiMenuItem>
+            <MuiMenuItem onClick={() => handleGenerateAutomagic('nsga')}>
+              <ListItemIcon><Dna size={18} /></ListItemIcon>
+              <ListItemText primary="🧬 Otimizado (NSGA-II)" secondary="Evolutivo ~10-30s, mais variado" />
+            </MuiMenuItem>
+          </Menu>
 
           <Badge badgeContent={validationAlerts.length} color={validationAlerts.some(a => a.severity === 'HARD') ? 'error' : 'warning'}>
             <Button
@@ -620,7 +716,7 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
            <Box>
               <Typography variant="caption" color="text.secondary" display="block">Período</Typography>
               <Typography variant="body1" fontWeight="bold">
-                {new Date(cardapio.data_inicio).toLocaleDateString()} a {new Date(cardapio.data_fim).toLocaleDateString()}
+                {formatLocalDate(cardapio.data_inicio)} a {formatLocalDate(cardapio.data_fim)}
               </Typography>
            </Box>
            <Box>
@@ -731,8 +827,11 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
                     const grouped = mealItems.reduce((acc, curr) => {
                       const cat = (curr as any).fichas_tecnicas_uan?.categoria_uan || 'Outros';
                       const name = (curr as any).fichas_tecnicas_uan?.nome || 'Sem nome';
+                      const mult = curr.fator_multiplicador !== undefined ? curr.fator_multiplicador : 1;
+                      const displayItem = mult !== 1 ? `${name} (${Math.round(mult * 100)}%)` : name;
+                      
                       if (!acc[cat]) acc[cat] = new Set();
-                      acc[cat].add(name);
+                      acc[cat].add(displayItem);
                       return acc;
                     }, {} as Record<string, Set<string>>);
 
@@ -832,7 +931,7 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
         <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: 'primary.main', color: 'white' }}>
           <Box>
             <Typography variant="h6">{activeMeal}</Typography>
-            <Typography variant="caption">{activeDay ? new Date(activeDay + 'T12:00:00Z').toLocaleDateString() : ''}</Typography>
+            <Typography variant="caption">{activeDay ? formatLocalDate(activeDay) : ''}</Typography>
           </Box>
           <IconButton size="small" onClick={() => setMealDialogOpen(false)} sx={{ color: 'white' }}>
             <X size={20} />
@@ -852,12 +951,24 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
 
           <Box display="flex" flexDirection="column" gap={3}>
             {(() => {
-              const groupKey = REFEICAO_TO_GROUP[activeMeal!] || 'ALMOCO_JANTAR';
-              const categoriesToShow = [...(MEAL_CATEGORY_GROUPS[groupKey] || [])];
+              const activePerfilId = perfisRefeicao[activeMeal!];
+              const activePerfil = activePerfilId ? perfisMap[activePerfilId] : null;
+              
+              let categoriesToShow: string[] = [];
+              
+              if (activePerfil?.slots && !showAllCategories) {
+                // Modo Perfil: Mostra apenas o que está no template
+                categoriesToShow = Array.from(new Set(activePerfil.slots.map((s: PerfilCardapioSlot) => s.categoria_uan)));
+              } else {
+                // Modo Flexível ou Sem Perfil
+                const groupKey = REFEICAO_TO_GROUP[activeMeal!] || 'ALMOCO_JANTAR';
+                categoriesToShow = [...(MEAL_CATEGORY_GROUPS[groupKey] || [])];
+              }
+              
+              const gradeItemsCurrentMeal = grade.filter(g => g.data_consumo === activeDay && g.tipo_refeicao === activeMeal);
               
               const existingItemCategories = Array.from(new Set(
-                grade
-                  .filter(g => g.data_consumo === activeDay && g.tipo_refeicao === activeMeal)
+                gradeItemsCurrentMeal
                   .map(g => (g as any).fichas_tecnicas_uan?.categoria_uan)
                   .filter(Boolean)
               ));
@@ -866,55 +977,142 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
                 if (!categoriesToShow.includes(cat)) categoriesToShow.push(cat);
               });
 
-              return categoriesToShow.map(cat => {
-                const categoryItems = grade.filter(g => g.data_consumo === activeDay && g.tipo_refeicao === activeMeal && (g as any).fichas_tecnicas_uan?.categoria_uan === cat);
-                const filteredOptions = fichas.filter(f => 
-                  (f.categoria_uan || "Sem Categoria") === cat &&
-                  (!f.refeicoes || f.refeicoes.length === 0 || f.refeicoes.includes(activeMeal!))
-                );
-
-                return (
-                  <Box key={cat}>
-                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
-                      <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', textTransform: 'uppercase' }}>
-                        {cat}
-                      </Typography>
-                    </Box>
-                    <Autocomplete
-                      multiple
-                      options={filteredOptions}
-                      getOptionLabel={(option) => option.nome}
-                      value={filteredOptions.filter(o => categoryItems.some(item => item.ficha_uan_id === o.id))}
-                      onChange={(_, newValues) => {
-                        setGrade(prev => {
-                          const newValIds = newValues.map(v => v.id);
-                          let next = prev.filter(g => !(g.data_consumo === activeDay && g.tipo_refeicao === activeMeal && (g as any).fichas_tecnicas_uan?.categoria_uan === cat));
-                          next = next.filter(g => !(g.data_consumo === activeDay && g.tipo_refeicao === activeMeal && newValIds.includes(g.ficha_uan_id!)));
-                          const newItems = newValues.map(val => {
-                            const existing = categoryItems.find(item => item.ficha_uan_id === val.id);
-                            return {
-                              id: existing?.id || `temp_${Date.now()}_${val.id}`,
-                              cardapio_id: cardapio.id,
-                              ficha_uan_id: val.id,
-                              data_consumo: activeDay!,
-                              tipo_refeicao: activeMeal!,
-                              fator_multiplicador: existing?.fator_multiplicador || 1,
-                              fichas_tecnicas_uan: { nome: val.nome, categoria_uan: val.categoria_uan }
-                            };
-                          });
-                          return [...next, ...newItems];
-                        });
-                      }}
-                      renderInput={(params) => <TextField {...params} size="small" placeholder="Selecione as opções..." />}
-                      renderTags={(value: FichaTecnicaUAN[], getTagProps) =>
-                        value.map((option: FichaTecnicaUAN, index: number) => (
-                          <Chip label={option.nome} size="small" {...getTagProps({ index })} key={option.id} />
-                        ))
-                      }
-                    />
+              return (
+                <Box display="flex" flexDirection="column" gap={3}>
+                  {/* BOTÃO MODO FLEXÍVEL */}
+                  <Box display="flex" justifyContent="flex-end">
+                    <Button 
+                      size="small" 
+                      startIcon={<Settings size={14} />} 
+                      onClick={() => setShowAllCategories(!showAllCategories)}
+                      sx={{ fontSize: '0.7rem' }}
+                    >
+                      {showAllCategories ? 'Restringir ao Perfil' : 'Ver Todas as Categorias'}
+                    </Button>
                   </Box>
-                );
-              });
+
+                  {/* AVISOS DE CLUSTER (PROTEICO) */}
+                  {(() => {
+                    const itemsInCluster = gradeItemsCurrentMeal.filter(it => 
+                      PROTEIC_CLUSTER.includes((it as any).fichas_tecnicas_uan?.categoria_uan)
+                    );
+                    if (itemsInCluster.length > 1) {
+                      const total = itemsInCluster.reduce((acc: number, curr: any) => acc + (curr.fator_multiplicador || 0), 0);
+                      const isError = total < 0.98 || total > 1.02;
+                      return (
+                        <Paper variant="outlined" sx={{ p: 1.5, borderColor: isError ? 'error.main' : 'success.main', bgcolor: alpha(isError ? '#f44336' : '#4caf50', 0.05) }}>
+                          <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {isError ? <AlertTriangle size={14} color="red" /> : <RefreshCw size={14} color="green" />}
+                            Cluster Principal (Principal + Alt + Veg): {Math.round(total * 100)}%
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            A soma das opções competitivas deve estar próxima de 100%.
+                          </Typography>
+                        </Paper>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {categoriesToShow.map((cat: string) => {
+                    const categoryItems = gradeItemsCurrentMeal.filter(g => (g as any).fichas_tecnicas_uan?.categoria_uan === cat);
+                    const filteredOptions = fichas.filter(f => 
+                      (f.categoria_uan || "Sem Categoria") === cat &&
+                      (!f.refeicoes || f.refeicoes.length === 0 || f.refeicoes.includes(activeMeal!))
+                    );
+
+                    // Verifica se esta categoria tem competição interna
+                    const sumCat = categoryItems.reduce((acc: number, curr: any) => acc + (curr.fator_multiplicador || 0), 0);
+                    const isCompetition = categoryItems.length > 1 && cat !== 'Prato Base' && !PROTEIC_CLUSTER.includes(cat);
+                    const isErrorCat = isCompetition && (sumCat < 0.98 || sumCat > 1.02);
+
+                    return (
+                      <Box key={cat} sx={{ p: 1.5, border: '1px solid #eee', borderRadius: 2 }}>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                          <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', textTransform: 'uppercase' }}>
+                            {cat} {isCompetition && `(Soma: ${Math.round(sumCat * 100)}%)`}
+                          </Typography>
+                          {isErrorCat && <Tooltip title="A soma dos itens desta categoria deve ser ~100%"><AlertTriangle size={14} color="orange" /></Tooltip>}
+                        </Box>
+                        <Autocomplete
+                          multiple
+                          options={filteredOptions}
+                          getOptionLabel={(option) => option.nome}
+                          value={filteredOptions.filter(o => categoryItems.some(item => item.ficha_uan_id === o.id))}
+                          onChange={(_, newValues) => {
+                            setGrade(prev => {
+                              const newValIds = newValues.map(v => v.id);
+                              // Remove apenas os que não estão mais na lista para esta categoria e dia
+                              let next = prev.filter(g => !(g.data_consumo === activeDay && g.tipo_refeicao === activeMeal && (g as any).fichas_tecnicas_uan?.categoria_uan === cat && !newValIds.includes(g.ficha_uan_id!)));
+                              
+                              const newItems = newValues.map(val => {
+                                const existing = categoryItems.find(item => item.ficha_uan_id === val.id);
+                                if (existing) return existing;
+                                return {
+                                  id: `temp_${Date.now()}_${val.id}`,
+                                  cardapio_id: cardapio!.id,
+                                  ficha_uan_id: val.id,
+                                  data_consumo: activeDay!,
+                                  tipo_refeicao: activeMeal!,
+                                  fator_multiplicador: 1, // Começa cheio
+                                  fichas_tecnicas_uan: { nome: val.nome, categoria_uan: val.categoria_uan }
+                                };
+                              });
+
+                              // Merge: Adiciona os novos que ainda não estavam no 'next'
+                              const result = [...next];
+                              newItems.forEach(ni => {
+                                if (!result.find(r => r.data_consumo === ni.data_consumo && r.tipo_refeicao === ni.tipo_refeicao && r.ficha_uan_id === ni.ficha_uan_id)) {
+                                  result.push(ni);
+                                }
+                              });
+                              return result;
+                            });
+                          }}
+                          renderInput={(params) => <TextField {...params} size="small" placeholder="Selecione as opções..." />}
+                          renderTags={(value: FichaTecnicaUAN[], getTagProps) =>
+                            value.map((option: FichaTecnicaUAN, index: number) => (
+                              <Chip label={option.nome} size="small" {...getTagProps({ index })} key={option.id} />
+                            ))
+                          }
+                        />
+
+                        {/* LISTA DE ITENS PARA AJUSTE DE ACEITABILIDADE */}
+                        {categoryItems.length > 0 && (
+                          <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            {categoryItems.map((item: any) => (
+                              <Box key={item.id} display="flex" justifyContent="space-between" alignItems="center" sx={{ bgcolor: 'action.hover', p: 1, borderRadius: 1 }}>
+                                <Typography variant="caption" sx={{ flex: 1, fontWeight: 'medium' }}>{item.fichas_tecnicas_uan?.nome}</Typography>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                  <Typography variant="caption" color="text.secondary">Aceitabilidade:</Typography>
+                                  <TextField 
+                                    size="small"
+                                    type="number"
+                                    value={Math.round((item.fator_multiplicador || 0) * 100)}
+                                    onChange={(e) => {
+                                      const val = Number(e.target.value) / 100;
+                                      setGrade(prev => prev.map(g => g.id === item.id ? { ...g, fator_multiplicador: val } : g));
+                                    }}
+                                    sx={{ width: 100 }}
+                                    InputProps={{ 
+                                      endAdornment: <Typography variant="caption" sx={{ ml: 0.5, fontWeight: 'bold' }}>%</Typography>,
+                                      inputProps: { 
+                                        min: 0, 
+                                        max: 200,
+                                        style: { textAlign: 'center', fontSize: '0.8rem' }
+                                      }
+                                    }}
+                                  />
+                                </Box>
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Box>
+              );
             })()}
           </Box>
         </DialogContent>

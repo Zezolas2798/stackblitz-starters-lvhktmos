@@ -85,9 +85,12 @@
 
 ### 2.2 Critérios Computacionais
 
-#### Critério 1: Contraste Cromático
-- **Tag obrigatória no BD:** Cor predominante por preparação: `ENUM('Branco', 'Marrom', 'Verde', 'Vermelho', 'Amarelo')`
-- **Alerta "Monotonia de Cores":** ≥ 3 preparações com mesma cor no mesmo dia
+#### Critério 1: Contraste Cromático (Bimodal)
+- **Tag no BD:** Cor predominante por preparação. Expansão para 1 Paleta de 10 opções: `Branco`, `Marrom`, `Verde`, `Vermelho`, `Amarelo`, `Laranja`, `Roxo`, `Preto`, `Bege`, `Misto`.
+- **Frequência Bimodal (Configurável):**
+  - **Limite por Refeição (Visual):** Focado na harmonia da bandeja. Máximo padrão sugerido: 2 itens da mesma cor.
+  - **Limite por Dia (Variedade):** Focado na diversidade de fitoquímicos no ciclo circadiano. Máximo padrão sugerido: 3 itens da mesma cor.
+- **Ação:** Bloqueio ou Aviso conforme configuração de severidade (`SOFT`/`HARD`).
 
 #### Critério 2: Técnicas de Cocção e Frituras
 - **Tag obrigatória:** Método primário de cocção (Cozido vapor, Assado, Grelhado, Frito imersão, Salteado, Cru)
@@ -96,11 +99,14 @@
   - Lógica: hiperlipidemia + pico glicêmico → letargia pós-prandial → queda de produtividade
   - **Ação:** Sugerir troca do doce por fruta fresca
 
-#### Critério 3: Alimentos Ricos em Enxofre (Flatulência)
-- **Flag booleana no BD:** `rico_em_enxofre = TRUE`
-- **Lista:** abacate, acelga, aipo, alho, amendoim, batata-doce, brócolis, castanha, cebola crua, couve-de-bruxelas, couve-flor, ervilha seca, gengibre, goiaba, jaca, lentilha, maçã, melancia, melão, milho, mostarda folha, nabo, nozes, ovo cozido, rabanete, repolho, pimentão, uva
-- **EXCEÇÃO:** Feijão é IGNORADO (tolerância adaptativa da microbiota brasileira)
-- **Alerta Azul:** ≥ 2 preparações com flag enxofre no mesmo turno
+#### Critério 3: Alimentos Ricos em Enxofre (Flatulência - Detecção Automática)
+- **Motor de Detecção:** Identificação via **Subgrupo de Ingrediente** mapeado na taxonomia (`MAP_SUBGRUPO_ENXOFRE`).
+- **Limiar de Relevância (Threshold):** Ignorar se ingrediente flatulento for < 5% do peso bruto total da ficha técnica (evita alertas por temperos como alho/cebola).
+- **EXCEÇÃO CULTURAL:** "Feijão" é ignorado **APENAS** se vinculado à categoria `"Prato Base"`. Preparações como "Feijão Tropeiro" (Guarnição) seguem a regra padrão de peso.
+- **Validação Bimodal:**
+  - **Limite por Refeição:** Máximo sugerido 1-2 itens (foco no desconforto imediato).
+  - **Limite por Dia:** Máximo sugerido 2-3 itens (foco no balanço digestivo diário).
+- **Alerta:** Aviso de "Desconforto Gástrico/Flatulência".
 
 #### Critério 4: Repetições e Carnes Gordurosas
 - **Rastreador temporal:** Impedir repetição de cortes/texturas/sabores na mesma semana

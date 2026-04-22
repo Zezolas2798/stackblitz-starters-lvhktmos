@@ -8,6 +8,15 @@
  */
 export const formatLocalDate = (dateInput: string | Date | null | undefined): string => {
   if (!dateInput) return '-';
+  
+  // Handle ISO date strings (YYYY-MM-DD) explicitly to avoid timezone shifts
+  if (typeof dateInput === 'string' && dateInput.includes('-') && !dateInput.includes('T')) {
+    const [year, month, day] = dateInput.split('-').map(Number);
+    if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+      return new Date(year, month - 1, day).toLocaleDateString('pt-BR');
+    }
+  }
+
   const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
   if (isNaN(date.getTime())) return '-';
   

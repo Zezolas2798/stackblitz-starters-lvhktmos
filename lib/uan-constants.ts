@@ -50,3 +50,26 @@ export const ALL_UAN_CATEGORIES = Array.from(new Set([
   ...MEAL_CATEGORY_GROUPS.ALMOCO_JANTAR,
   ...MEAL_CATEGORY_GROUPS.CAFE_LANCHES
 ])).sort();
+
+export const COLORS_AQPC = ['Branco', 'Verde', 'Amarelo', 'Laranja', 'Vermelho', 'Rosa', 'Roxo', 'Marrom', 'Bege', 'Preto', 'Misto'];
+
+export const METHODS_AQPC = [
+  { id: 'Cru', label: 'Cru/Natural' },
+  { id: 'Cozido_Agua', label: 'Cozido em Água' },
+  { id: 'Cozido_Vapor', label: 'Cozido ao Vapor' },
+  { id: 'Assado', label: 'Assado ao Forno' },
+  { id: 'Grelhado', label: 'Grelhado/Chapa' },
+  { id: 'Frito_Imersao', label: 'Frito (Imersão)' },
+  { id: 'Salteado', label: 'Salteado' },
+  { id: 'Refogado', label: 'Refogado' },
+  { id: 'Brasado', label: 'Brasado (Panela)' }
+];
+
+export const TEXTURES_AQPC = [
+  { id: 'Crocante', label: 'Crocante' },
+  { id: 'Macio', label: 'Macio' },
+  { id: 'Cremoso', label: 'Cremoso/Pastoso' },
+  { id: 'Firme', label: 'Firme/Elástico' },
+  { id: 'Gelatinoso', label: 'Gelatinoso' },
+  { id: 'Líquido', label: 'Líquido' }
+];

@@ -22,6 +22,7 @@ interface Arquivo {
   data_validade: string | null;
   url_storage: string | null;
   pasta_id: string;
+  entidade_id?: string | null;
 }
 
 interface CategoriaConfig {
@@ -34,9 +35,10 @@ interface Props {
   pastaId: string;
   categoriasSelecionadas: string[];
   razaoSocial?: string;
+  entidadeId?: string;
 }
 
-export default function DocumentosFornecedor({ pastaId, categoriasSelecionadas, razaoSocial }: Props) {
+export default function DocumentosFornecedor({ pastaId, categoriasSelecionadas, razaoSocial, entidadeId }: Props) {
   const { activeClientId } = useClient();
   const [loading, setLoading] = useState(true);
   const [arquivos, setArquivos] = useState<Arquivo[]>([]);
@@ -109,18 +111,31 @@ export default function DocumentosFornecedor({ pastaId, categoriasSelecionadas, 
       }
     });
 
-    const { data, error } = await (supabase as any)
+    let query = (supabase as any)
       .from('documentos_arquivos')
       .select('*')
-      .in('pasta_id', Array.from(idsDePasta))
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
+    if (entidadeId) {
+      // Se temos entidadeId, buscamos pelo ID DIRETO ou pela pasta (fallback legados)
+      query = query.or(`entidade_id.eq.${entidadeId},pasta_id.in.(${Array.from(idsDePasta).map(id => `"${id}"`).join(',')})`);
+    } else {
+      query = query.in('pasta_id', Array.from(idsDePasta));
+    }
+
+    const { data, error } = await query;
+
     if (!error && data) {
-      // Filtrar por prefixo da empresa apenas se razaoSocial for fornecido
+      // Filtrar por prefixo da empresa apenas para registros que NÃO tem entidadeId
+      // ou se razaoSocial for fornecido (mantendo compatibilidade com legados sem ID)
       if (razaoSocial) {
         const prefix = `[${razaoSocial}]`.toLowerCase();
-        setArquivos(data.filter((a: any) => a.nome_arquivo.toLowerCase().startsWith(prefix)));
+        setArquivos(data.filter((a: any) => 
+          a.entidade_id === entidadeId || 
+          a.nome_arquivo.toLowerCase().startsWith(prefix) ||
+          a.nome_arquivo.toLowerCase().includes(prefix)
+        ));
       } else {
         setArquivos(data);
       }
@@ -176,13 +191,16 @@ export default function DocumentosFornecedor({ pastaId, categoriasSelecionadas, 
         }
       } else {
         // INSERIR NOVO REGISTRO
-        const { error: insertError } = await (supabase as any).from('documentos_arquivos').insert({
-          pasta_id: pastaId,
-          nome_arquivo: finalNome,
-          data_emissao: docEmissao || null,
-          data_validade: docValidade || null,
-          url_storage: uploadData!.path
-        });
+        const { error: insertError } = await (supabase as any)
+          .from('documentos_arquivos')
+          .insert({
+            pasta_id: pastaId,
+            entidade_id: entidadeId || null,
+            nome_arquivo: finalNome,
+            data_emissao: docEmissao || null,
+            data_validade: docValidade || null,
+            url_storage: uploadData!.path
+          });
 
         if (insertError) {
           await supabase.storage.from('ged_documentos').remove([uploadData!.path]);
@@ -299,6 +317,7 @@ export default function DocumentosFornecedor({ pastaId, categoriasSelecionadas, 
             {docsObrigatorios.map((doc) => {
               const searchDoc = razaoSocial ? `[${razaoSocial}] ${doc}`.toLowerCase() : doc.toLowerCase();
               const anexado = arquivos.some(a => 
+                (a.entidade_id === entidadeId && a.nome_arquivo.toLowerCase().includes(doc.toLowerCase())) ||
                 a.nome_arquivo.toLowerCase().includes(searchDoc) || 
                 (razaoSocial && a.nome_arquivo.toLowerCase().includes(doc.toLowerCase()))
               );
@@ -306,6 +325,7 @@ export default function DocumentosFornecedor({ pastaId, categoriasSelecionadas, 
               const handleChipClick = () => {
                 const placeholder = arquivos.find(a => 
                   !a.url_storage && (
+                    (a.entidade_id === entidadeId && a.nome_arquivo.toLowerCase().includes(doc.toLowerCase())) ||
                     a.nome_arquivo.toLowerCase().includes(searchDoc) || 
                     (razaoSocial && a.nome_arquivo.toLowerCase().includes(doc.toLowerCase()))
                   )

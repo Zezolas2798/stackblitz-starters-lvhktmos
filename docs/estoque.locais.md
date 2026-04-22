@@ -1,10 +1,15 @@
 ---
-id: modulo.estoque_locais
+id: estoque.Local
 titulo: "Locais de Estoque (Armazenamento Físico)"
 tipo: domain
-modulo: configuracoes_globais
-status: active
-ultima_revisao: 2026-04-19
+modulo: estoque
+status: consolidated
+layer: ontology
+nature: reference
+veracidade: high
+convicção: high
+version: 1.2.0
+ultima_revisao: 2026-04-20
 tags:
   - dominio/configuracoes
   - entidade/estoque_locais
@@ -12,7 +17,7 @@ tags:
   - policy/multi-tenant
 edges:
   - regulado_por: "[[categorias]]"
-  - alimenta: "[[estoque_lotes]]"
+  - alimenta: "[[estoque.lotes]]"
   - gerencia: "[[equipamentos]]"
 ---
 

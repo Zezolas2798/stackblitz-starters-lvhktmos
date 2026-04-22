@@ -15,18 +15,6 @@ export default function UANMenuModule() {
       path: '/uan/fichas'
     },
     {
-      title: 'Perfis de Cardápio',
-      description: 'Crie templates estruturais (slots de saladas, proteínas) para padronizar os ciclos.',
-      icon: <Layers size={40} color="#0288d1" />,
-      path: '/uan/perfis'
-    },
-    {
-      title: 'Regras de Variedade',
-      description: 'Configure restrições de custo, monotonia e sensoriais (AQPC) para o gerador automático.',
-      icon: <Scale size={40} color="#ed6c02" />,
-      path: '/uan/regras'
-    },
-    {
       title: 'Planejamento Mensal',
       description: 'Criação de Cardápios cíclicos para as Unidades, determinando o que será servido dia a dia.',
       icon: <CalendarDays size={40} color="#388e3c" />,
@@ -36,7 +24,7 @@ export default function UANMenuModule() {
       title: 'Logística & Compras',
       description: 'Verificação do orçamento consolidado, previsibilidade de compras via curva ABC e Lead Time.',
       icon: <ShoppingBasket size={40} color="#f57c00" />,
-      path: '/uan/compras'
+      path: '/uan/lista-compras'
     },
     {
       title: 'Relatórios de Custos',

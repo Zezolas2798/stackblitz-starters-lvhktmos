@@ -336,9 +336,7 @@ export function AppSidebar({ width }: AppSidebarProps) {
           visible: can('nutrition.menu.manage'),
           subItems: [
             { label: 'Cardápio Mensal', href: '/uan/cardapios', visible: true },
-            { label: 'Previsão de Custos', href: '/uan/lista-compras', visible: true },
-            { label: 'Templates / Perfis', href: '/uan/perfis', visible: true },
-            { label: 'Regras e Restrições', href: '/uan/regras', visible: true }
+            { label: 'Previsão de Custos', href: '/uan/lista-compras', visible: true }
           ]
         }
       ]

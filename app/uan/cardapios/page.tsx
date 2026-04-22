@@ -9,21 +9,25 @@ import {
   Box, Typography, Button, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, IconButton
 } from '@mui/material';
-import { Plus, Edit, CalendarDays, Eye, ArrowLeft, Loader2, Trash2 } from 'lucide-react';
+import { Plus, Edit, CalendarDays, Eye, ArrowLeft, Loader2, Trash2, Settings } from 'lucide-react';
+import ConfiguracoesGeraisUANDialog from '@/components/uan/ConfiguracoesGeraisUANDialog';
+import { formatLocalDate } from '@/lib/utils/dateUtils';
 
 export default function CardapiosUANPage() {
   const router = useRouter();
-  const { activeClientId } = useClient();
+  const { activeClientId, unidadeId } = useClient();
   const [cardapios, setCardapios] = useState<CardapioUAN[]>([]);
   const [loading, setLoading] = useState(false);
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
   const fetchCardapios = async () => {
-    if (!activeClientId) return;
+    if (!activeClientId || !unidadeId) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('cardapios_uan')
       .select('*')
       .eq('cliente_id', activeClientId)
+      .eq('unidade_id', unidadeId)
       .order('data_inicio', { ascending: false });
 
     if (!error && data) {
@@ -34,7 +38,7 @@ export default function CardapiosUANPage() {
 
   useEffect(() => {
     fetchCardapios();
-  }, [activeClientId]);
+  }, [activeClientId, unidadeId]);
 
   const handleExcluir = async (id: string, nome: string) => {
     if (!window.confirm(`Tem certeza que deseja excluir o cardápio "${nome}"? Esta ação removerá também todas as fichas planejadas na grade dele.`)) {
@@ -73,6 +77,16 @@ export default function CardapiosUANPage() {
         <Typography variant="h5" fontWeight="bold" flexGrow={1}>
           Planejamento de Cardápios (UAN)
         </Typography>
+        
+        <Button
+          variant="outlined"
+          startIcon={<Settings />}
+          onClick={() => setConfigDialogOpen(true)}
+          sx={{ mr: 1 }}
+        >
+          Configurações Gerais
+        </Button>
+
         <Button
           variant="contained"
           startIcon={<Plus />}
@@ -81,6 +95,11 @@ export default function CardapiosUANPage() {
           Novo Período/Ciclo
         </Button>
       </Box>
+
+      <ConfiguracoesGeraisUANDialog 
+        open={configDialogOpen} 
+        onClose={() => setConfigDialogOpen(false)} 
+      />
 
       {loading ? (
          <Box display="flex" justifyContent="center" p={4}><Loader2 className="animate-spin" /></Box>
@@ -107,7 +126,7 @@ export default function CardapiosUANPage() {
                        </Box>
                     </TableCell>
                     <TableCell align="center">
-                      {new Date(c.data_inicio).toLocaleDateString()} a {new Date(c.data_fim).toLocaleDateString()}
+                      {formatLocalDate(c.data_inicio)} a {formatLocalDate(c.data_fim)}
                     </TableCell>
                     <TableCell align="center">{c.comensais_estimados_dia}</TableCell>
                     <TableCell align="center">

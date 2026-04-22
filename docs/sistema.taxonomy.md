@@ -63,6 +63,13 @@ Fonte Legal (texto original do DOU)
         └── Rule/Policy/Calculation (implementação no código)
 ```
 
+### O Grupo como Âncora de Regras
+
+No domínio UAN, os **Grupos de Produto** deixaram de ser apenas categorias estruturais para se tornarem âncoras funcionais para o meta-conceito de **Rule**. 
+
+- **Ação:** O sistema utiliza o `grupo_id` para disparar constraints de monotonia e frequência.
+- **Vantagem:** A taxonomia de estoque (estoque.suprimentos) agora governa a segurança e variedade nutricional (uan.cardapios) sem necessidade de re-classificação manual de pratos.
+
 **Edge types regulatórios:**
 
 | Edge | De → Para | Significado |

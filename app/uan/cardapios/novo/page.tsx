@@ -117,11 +117,12 @@ export default function NovoCardapioUANPage() {
       const ano = Number(anoStr);
       const mes = Number(mesStr) - 1;
       
-      const dataInicio = new Date(ano, mes, 1);
+      const dataInicio = new Date(Date.UTC(ano, mes, 1, 12, 0, 0));
       const dataFim = new Date(Date.UTC(ano, mes + 1, 0, 12, 0, 0));
 
       const payload = {
         cliente_id: activeClientId,
+        unidade_id: unidadeId,
         status: 'Em Planejamento',
         nome_ciclo: form.nome_ciclo,
         comensais_estimados_dia: form.comensais_estimados_dia,

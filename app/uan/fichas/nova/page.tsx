@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import { Save, ArrowLeft, Trash2, PlusCircle, Calculator, ActivitySquare } from 'lucide-react';
 
-import { MEAL_CATEGORY_GROUPS, REFEICAO_TO_GROUP, ALL_UAN_CATEGORIES } from '@/lib/uan-constants';
+import { MEAL_CATEGORY_GROUPS, REFEICAO_TO_GROUP, ALL_UAN_CATEGORIES, COLORS_AQPC } from '@/lib/uan-constants';
 
 const OPCOES_REFEICOES = ['Desjejum', 'Colação', 'Almoço', 'Lanche da Tarde', 'Jantar', 'Ceia'];
 
@@ -118,6 +118,9 @@ export default function NovaFichaUANPage() {
   const handleSalvar = async () => {
     if (!activeClientId) return alert("Selecione um cliente.");
     if (!ficha.nome) return alert("Informe o nome da preparação.");
+    if (!ficha.cor_predominante) return alert("Selecione a Cor Predominante (obrigatório para UAN).");
+    if (!ficha.textura_principal) return alert("Selecione a Textura Principal (obrigatório para UAN).");
+    if (!ficha.metodo_coccao) return alert("Selecione o Método de Cocção (obrigatório para UAN).");
     if (linhas.length === 0) return alert("Adicione pelo menos um ingrediente.");
 
     // Função auxiliar para verificar se um campo está tecnicamente vazio
@@ -156,8 +159,7 @@ export default function NovaFichaUANPage() {
         // Atributos Sensoriais (AQPC)
         cor_predominante: ficha.cor_predominante || null,
         textura_principal: ficha.textura_principal || null,
-        metodo_coccao: ficha.metodo_coccao || null,
-        rico_em_enxofre: ficha.rico_em_enxofre || false
+        metodo_coccao: ficha.metodo_coccao || null
       };
 
       const { data: resFicha, error: errFicha } = await supabase
@@ -307,20 +309,33 @@ export default function NovaFichaUANPage() {
         <Grid container spacing={3}>
           <Grid item xs={12} md={3}>
             <TextField
-              select fullWidth label="Cor Predominante"
+              select fullWidth label="Cor Predominante *"
               value={ficha.cor_predominante || ''}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, cor_predominante: (e.target.value || null) as CorPredominante | null })}
               helperText="Cor visual do prato servido"
             >
               <MenuItem value=""><em>Não definido</em></MenuItem>
-              {(['Branco','Marrom','Verde','Vermelho','Amarelo','Laranja','Misto'] as CorPredominante[]).map(c => (
+              {COLORS_AQPC.map(c => (
                 <MenuItem key={c} value={c}>
                   <Box display="flex" alignItems="center" gap={1}>
-                    <Box sx={{ width: 14, height: 14, borderRadius: '50%', border: '1px solid #ccc',
-                      bgcolor: c === 'Branco' ? '#f5f5f5' : c === 'Marrom' ? '#8D6E63' : c === 'Verde' ? '#66BB6A' :
-                        c === 'Vermelho' ? '#EF5350' : c === 'Amarelo' ? '#FFEE58' : c === 'Laranja' ? '#FFA726' : 'linear-gradient(135deg, #EF5350, #66BB6A, #FFEE58)'
+                    <Box sx={{ 
+                      width: 14, 
+                      height: 14, 
+                      borderRadius: '50%', 
+                      border: '1px solid #ccc',
+                      background: c === 'Misto' ? 'linear-gradient(135deg, #d32f2f, #2e7d32, #fbc02d)' : 
+                                 c === 'Branco' ? '#ffffff' : 
+                                 c === 'Verde' ? '#2e7d32' :
+                                 c === 'Amarelo' ? '#fbc02d' :
+                                 c === 'Laranja' ? '#ef6c00' :
+                                 c === 'Vermelho' ? '#d32f2f' :
+                                 c === 'Rosa' ? '#f06292' :
+                                 c === 'Roxo' ? '#7b1fa2' :
+                                 c === 'Marrom' ? '#8B4513' :
+                                 c === 'Bege' ? '#f5f5dc' :
+                                 c === 'Preto' ? '#212121' : '#eee'
                     }} />
-                    {c}
+                    {c === 'Misto' ? 'Colorido (Misto)' : c}
                   </Box>
                 </MenuItem>
               ))}
@@ -329,7 +344,7 @@ export default function NovaFichaUANPage() {
 
           <Grid item xs={12} md={3}>
             <TextField
-              select fullWidth label="Textura Principal"
+              select fullWidth label="Textura Principal *"
               value={ficha.textura_principal || ''}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, textura_principal: (e.target.value || null) as TexturaPrincipal | null })}
               helperText="Textura dominante ao paladar"
@@ -343,7 +358,7 @@ export default function NovaFichaUANPage() {
 
           <Grid item xs={12} md={3}>
             <TextField
-              select fullWidth label="Método de Cocção"
+              select fullWidth label="Método de Cocção *"
               value={ficha.metodo_coccao || ''}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, metodo_coccao: (e.target.value || null) as MetodoCoccao | null })}
               helperText="Técnica primária de preparo"
@@ -365,27 +380,6 @@ export default function NovaFichaUANPage() {
             </TextField>
           </Grid>
 
-          <Grid item xs={12} md={3}>
-            <Box sx={{ p: 2, bgcolor: ficha.rico_em_enxofre ? 'info.light' : 'action.hover', borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={!!ficha.rico_em_enxofre}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFicha({ ...ficha, rico_em_enxofre: e.target.checked })}
-                    color="info"
-                  />
-                }
-                label={
-                  <Box>
-                    <Typography variant="body2" fontWeight="bold">Rico em Enxofre</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Brócolis, couve-flor, repolho, cebola crua, etc.
-                    </Typography>
-                  </Box>
-                }
-              />
-            </Box>
-          </Grid>
         </Grid>
       </Paper>
 
@@ -500,62 +494,6 @@ export default function NovaFichaUANPage() {
         </Box>
       </Paper>
 
-      <Paper sx={{ p: 4, mb: 4 }}>
-        <Typography variant="h6" mb={2}>Dados para UAN (Sensores e Planejamento Assistido)</Typography>
-        <Grid container spacing={3}>
-          <Grid item xs={12} sm={3}>
-            <TextField
-              select fullWidth
-              label="Cor Predominante"
-              value={ficha.cor_predominante || ''}
-              onChange={(e) => setFicha({...ficha, cor_predominante: e.target.value as CorPredominante})}
-            >
-              <MenuItem value="">Nenhuma</MenuItem>
-              {['Branca/Pálida', 'Amarela/Laranja', 'Vermelha', 'Verde', 'Marrom/Escura'].map(o => (
-                <MenuItem key={o} value={o}>{o}</MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-          <Grid item xs={12} sm={3}>
-            <TextField
-              select fullWidth
-              label="Textura Principal"
-              value={ficha.textura_principal || ''}
-              onChange={(e) => setFicha({...ficha, textura_principal: e.target.value as TexturaPrincipal})}
-            >
-              <MenuItem value="">Nenhuma</MenuItem>
-              {['Cremosa', 'Crocante', 'Líquida', 'Macio/Cozida', 'Sólida/Firme'].map(o => (
-                <MenuItem key={o} value={o}>{o}</MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-          <Grid item xs={12} sm={3}>
-            <TextField
-              select fullWidth
-              label="Método de Cocção"
-              value={ficha.metodo_coccao || ''}
-              onChange={(e) => setFicha({...ficha, metodo_coccao: e.target.value as MetodoCoccao})}
-            >
-              <MenuItem value="">Nenhum</MenuItem>
-              {['Assado', 'Cozido', 'Cru', 'Frito', 'Grelhado', 'Refogado'].map(o => (
-                <MenuItem key={o} value={o}>{o}</MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-          <Grid item xs={12} sm={3} display="flex" alignItems="center">
-            <FormControlLabel
-              control={
-                <Checkbox 
-                  checked={ficha.rico_em_enxofre || false}
-                  onChange={(e) => setFicha({...ficha, rico_em_enxofre: e.target.checked})}
-                  color="primary"
-                />
-              }
-              label="Rico em Enxofre?"
-            />
-          </Grid>
-        </Grid>
-      </Paper>
 
       <Paper sx={{ p: 4 }}>
         <Typography variant="h6" mb={2}>Modo de Preparo</Typography>

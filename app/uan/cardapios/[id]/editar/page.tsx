@@ -39,13 +39,15 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
 
   useEffect(() => {
     async function fetchCardapio() {
-      if (!params.id) return;
+      if (!params.id || !activeClientId || !unidadeId) return;
       setLoading(true);
       try {
         const { data, error } = await supabase
           .from('cardapios_uan')
           .select('*')
           .eq('id', params.id)
+          .eq('cliente_id', activeClientId)
+          .eq('unidade_id', unidadeId)
           .single();
 
         if (error || !data) throw error;
@@ -88,7 +90,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
   }, [activeClientId]);
 
   const handleSalvar = async () => {
-    if (!activeClientId) return window.alert('Selecione um cliente.');
+    if (!activeClientId || !unidadeId) return window.alert('Selecione um cliente e uma unidade.');
     if (!form.nome_ciclo || !form.mes_referencia) {
       return window.alert('Preencha o nome do ciclo e o mês de referência.');
     }
@@ -107,6 +109,7 @@ export default function EditarCardapioUANPage({ params }: { params: { id: string
       const dataFim = new Date(Date.UTC(ano, mes + 1, 0, 12, 0, 0));
 
       const payload = {
+        unidade_id: unidadeId,
         nome_ciclo: form.nome_ciclo,
         comensais_estimados_dia: form.comensais_estimados_dia,
         dias_funcionamento: form.dias_funcionamento,

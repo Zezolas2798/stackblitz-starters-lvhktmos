@@ -54,7 +54,11 @@ export interface Profile {
 
 export type CategoriaUAN = 'Prato Base' | 'Prato Principal' | 'Alternativa' | 'Opção Vegetariana' | 'Guarnição' | 'Saladas' | 'Bebidas' | 'Complemento' | 'Sopa' | 'Bebida Quente' | 'Bebida Fria' | 'Base' | 'Recheio' | 'Sobremesa';
 
-export type CorPredominante = 'Branco' | 'Marrom' | 'Verde' | 'Vermelho' | 'Amarelo' | 'Laranja' | 'Misto';
+export const COLORS_AQPC = [
+  'Branco', 'Verde', 'Amarelo', 'Laranja', 'Vermelho', 'Rosa', 'Roxo', 'Marrom', 'Bege', 'Preto', 'Misto'
+] as const;
+export type CorPredominante = typeof COLORS_AQPC[number];
+
 export type TexturaPrincipal = 'Crocante' | 'Macio' | 'Cremoso' | 'Firme' | 'Gelatinoso' | 'Líquido';
 export type MetodoCoccao = 'Cru' | 'Cozido_Agua' | 'Cozido_Vapor' | 'Assado' | 'Grelhado' | 'Frito_Imersao' | 'Salteado' | 'Refogado' | 'Brasado';
 
@@ -76,6 +80,7 @@ export interface FichaTecnicaUAN {
   textura_principal?: TexturaPrincipal | null;
   metodo_coccao?: MetodoCoccao | null;
   rico_em_enxofre?: boolean;
+  proteina_familia_id?: string | null;
   
   // Relacionamentos Injetados via JOIN
   composicao?: ComposicaoFichaUAN[];
@@ -161,6 +166,8 @@ export interface PerfilCardapioSlot {
   obrigatorio: boolean;
   rotulo_display?: string | null;
   ordem_exibicao: number;
+  fixo: boolean;
+  fichas_fixas?: string[] | null; // UUIDs de fichas_tecnicas_uan
 }
 
 export interface CardapioPerfilRefeicao {
@@ -179,15 +186,23 @@ export interface CardapioPerfilRefeicao {
 
 export type TipoRegraVariedade = 
   | 'MAX_SEMANAL_FAMILIA'
+  | 'DISTANCIA_MINIMA_FAMILIA'
   | 'DISTANCIA_MINIMA_DIAS'
   | 'MAX_DIARIO_COR'
-  | 'MAX_DIARIO_TEXTURA'
-  | 'MAX_DIARIO_METODO_COCCAO'
+  | 'MAX_REFEICAO_COR'
   | 'MAX_DIARIO_ENXOFRE'
+  | 'MAX_REFEICAO_ENXOFRE'
+  | 'MAP_SUBGRUPO_ENXOFRE'
+  | 'MAX_DIARIO_TEXTURA'
+  | 'MAX_REFEICAO_TEXTURA'
+  | 'MAX_DIARIO_METODO_COCCAO'
+  | 'MAX_REFEICAO_METODO_COCCAO'
+  | 'MAX_SEMANAL_METODO_COCCAO'
   | 'INCOMPATIBILIDADE_DIARIA'
   | 'SIMILARIDADE_ENTRE_DIAS'
   | 'CUSTO_MAX_REFEICAO'
-  | 'CUSTO_MAX_DIARIO';
+  | 'CUSTO_MAX_DIARIO'
+  | 'LIMIAR_PREVALENCIA_ENXOFRE';
 
 export type SeveridadeRegra = 'SOFT' | 'HARD';
 

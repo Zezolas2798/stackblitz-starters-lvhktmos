@@ -9,7 +9,7 @@ import {
   TableCell, TableContainer, TableHead, TableRow, Chip, IconButton,
   Tooltip, CircularProgress, InputAdornment, TextField,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
-  Snackbar, Alert, Tabs, Tab, Divider
+  Snackbar, Alert, Tabs, Tab, Divider, Stack
 } from '@mui/material';
 import {
   Search, Plus, Filter, Edit, Trash2,
@@ -220,6 +220,7 @@ export default function ServicosPage() {
                   <TableCell>Razão Social / Nome Fantasia</TableCell>
                   <TableCell>CNPJ</TableCell>
                   <TableCell>Status Homologação</TableCell>
+                  <TableCell>Escopo Técnico</TableCell>
                   <TableCell>Próxima Visita / Validade</TableCell>
                   <TableCell align="right">Ações</TableCell>
                 </TableRow>
@@ -258,6 +259,35 @@ export default function ServicosPage() {
                     </TableCell>
                     <TableCell>
                       {serv.licenca_sanitaria_validade ? format(new Date(serv.licenca_sanitaria_validade), 'dd/MM/yyyy') : '-'}
+                    </TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={1}>
+                        {(serv.equipamentos_vinculados || []).length > 0 && (
+                          <Tooltip title={`${serv.equipamentos_vinculados.length} Equipamento(s) Vinculado(s)`}>
+                            <Chip 
+                              label={`${serv.equipamentos_vinculados.length} Ativos`} 
+                              size="small" 
+                              color="secondary" 
+                              variant="outlined" 
+                              sx={{ fontWeight: 'bold', fontSize: '0.65rem' }} 
+                            />
+                          </Tooltip>
+                        )}
+                        {(serv.setores_vinculados || []).length > 0 && (
+                          <Tooltip title={`${serv.setores_vinculados.length} Setor(es) Vinculado(s)`}>
+                            <Chip 
+                              label={`${serv.setores_vinculados.length} Setores`} 
+                              size="small" 
+                              color="info" 
+                              variant="outlined" 
+                              sx={{ fontWeight: 'bold', fontSize: '0.65rem' }} 
+                            />
+                          </Tooltip>
+                        )}
+                        {(!serv.equipamentos_vinculados?.length && !serv.setores_vinculados?.length) && (
+                          <Typography variant="caption" color="text.secondary">Geral</Typography>
+                        )}
+                      </Stack>
                     </TableCell>
                     <TableCell align="right">
                       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
