@@ -57,10 +57,9 @@ export function TarefaDialog({ open, onClose, onSuccess, initialStatus = 'A_FAZE
       if (dataModelos) setModelos(dataModelos);
 
       // 2. Buscar Equipe (Usuários vinculados ao Cliente/Empresa)
-      // Nota: Ajuste 'company_id' se sua tabela profiles usar outro nome de coluna para o cliente
       const { data: dataEquipe } = await (supabase as any).from('profiles') 
         .select('id, full_name, email')
-        .eq('company_id', activeClientId!);
+        .eq('cliente_id', activeClientId!);
 
       if (dataEquipe) setEquipe(dataEquipe);
 

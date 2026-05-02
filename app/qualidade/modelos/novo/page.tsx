@@ -390,6 +390,8 @@ const FormularioHeader = memo(({
     setDescricao,
     frequencia,
     setFrequencia,
+    categoria,
+    setCategoria,
     totalSecoes,
     totalItens,
 }: {
@@ -400,6 +402,8 @@ const FormularioHeader = memo(({
     setDescricao: (v: string) => void;
     frequencia: string;
     setFrequencia: (v: string) => void;
+    categoria: string;
+    setCategoria: (v: string) => void;
     totalSecoes: number;
     totalItens: number;
 }) => {
@@ -414,7 +418,7 @@ const FormularioHeader = memo(({
         <Paper elevation={0} sx={{ p: 3, mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
             <Typography variant="h6" fontWeight="bold" gutterBottom color="primary.main">Definições do Formulário</Typography>
             <Grid container spacing={3}>
-                <Grid item xs={12} md={8}>
+                <Grid item xs={12} md={4}>
                     <TextField
                         label="Nome do Checklist" fullWidth
                         value={localNome}
@@ -423,6 +427,20 @@ const FormularioHeader = memo(({
                         placeholder="Ex: Controle de Temperatura de Equipamentos"
                         required InputLabelProps={{ shrink: true }}
                     />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                    <FormControl fullWidth>
+                        <InputLabel shrink>Categoria (Tipo de Avaliação)</InputLabel>
+                        <Select value={categoria} label="Categoria (Tipo de Avaliação)" onChange={e => setCategoria(e.target.value as string)}>
+                            <MenuItem value="DIAGNOSTICO">Diagnóstico</MenuItem>
+                            <MenuItem value="VISITA_TECNICA">Visita Técnica</MenuItem>
+                            <MenuItem value="AUDITORIA">Auditoria</MenuItem>
+                            <MenuItem value="FOLLOW_UP">Follow-up</MenuItem>
+                            <MenuItem value="OCORRENCIA">Ocorrência / Investigação</MenuItem>
+                            <MenuItem value="TREINAMENTO">Treinamento / Capacitação</MenuItem>
+                            <MenuItem value="RECEBIMENTO">Recebimento (Fornecedor)</MenuItem>
+                        </Select>
+                    </FormControl>
                 </Grid>
                 <Grid item xs={12} md={4}>
                     <FormControl fullWidth>
@@ -462,6 +480,7 @@ const FormularioHeader = memo(({
     return prev.nome === next.nome
         && prev.descricao === next.descricao
         && prev.frequencia === next.frequencia
+        && prev.categoria === next.categoria
         && prev.totalSecoes === next.totalSecoes
         && prev.totalItens === next.totalItens
         && prev.editingId === next.editingId;
@@ -477,6 +496,7 @@ function EditorModeloChecklistContent() {
     const [nome, setNome] = useState('');
     const [descricao, setDescricao] = useState('');
     const [frequencia, setFrequencia] = useState('DIARIO');
+    const [categoria, setCategoria] = useState('AUDITORIA');
     const [secoes, setSecoes] = useState<SecaoForm[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -496,6 +516,8 @@ function EditorModeloChecklistContent() {
     descricaoRef.current = descricao;
     const frequenciaRef = useRef(frequencia);
     frequenciaRef.current = frequencia;
+    const categoriaRef = useRef(categoria);
+    categoriaRef.current = categoria;
 
     // Carrega dados se for edição
     useEffect(() => {
@@ -551,6 +573,7 @@ function EditorModeloChecklistContent() {
             setNome(modelo.titulo);
             setDescricao(modelo.descricao || '');
             setFrequencia(modelo.frequencia_sugerida || 'DIARIO');
+            setCategoria(modelo.categoria || 'AUDITORIA');
 
             const { data: secoesData } = await (supabase as any)
                 .from('checklist_secoes')
@@ -674,6 +697,7 @@ function EditorModeloChecklistContent() {
         const currentNome = nomeRef.current;
         const currentDescricao = descricaoRef.current;
         const currentFrequencia = frequenciaRef.current;
+        const currentCategoria = categoriaRef.current;
         const currentSecoes = secoesRef.current;
 
         if (!currentNome.trim()) return alert('O modelo precisa de um nome.');
@@ -695,6 +719,7 @@ function EditorModeloChecklistContent() {
                 titulo: currentNome,
                 descricao: currentDescricao,
                 frequencia_sugerida: currentFrequencia,
+                categoria: currentCategoria,
                 ativo: true
             };
 
@@ -872,17 +897,13 @@ function EditorModeloChecklistContent() {
                 </Box>
             </Box>
 
-            {/* DADOS GERAIS — componente isolado para não re-renderizar as seções ao digitar */}
             <FormularioHeader
                 editingId={editingId}
-                nome={nome}
-                setNome={setNome}
-                descricao={descricao}
-                setDescricao={setDescricao}
-                frequencia={frequencia}
-                setFrequencia={setFrequencia}
-                totalSecoes={secoes.length}
-                totalItens={totalItens}
+                nome={nome} setNome={setNome}
+                descricao={descricao} setDescricao={setDescricao}
+                frequencia={frequencia} setFrequencia={setFrequencia}
+                categoria={categoria} setCategoria={setCategoria}
+                totalSecoes={secoes.length} totalItens={totalItens}
             />
 
             {/* CONSTRUTOR DE SEÇÕES */}

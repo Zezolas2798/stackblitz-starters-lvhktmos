@@ -1079,6 +1079,7 @@ export type Database = {
       checklist_modelos: {
         Row: {
           ativo: boolean | null
+          categoria: string | null
           cliente_id: string
           created_at: string | null
           created_by: string | null
@@ -1091,6 +1092,7 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean | null
+          categoria?: string | null
           cliente_id: string
           created_at?: string | null
           created_by?: string | null
@@ -1103,6 +1105,7 @@ export type Database = {
         }
         Update: {
           ativo?: boolean | null
+          categoria?: string | null
           cliente_id?: string
           created_at?: string | null
           created_by?: string | null

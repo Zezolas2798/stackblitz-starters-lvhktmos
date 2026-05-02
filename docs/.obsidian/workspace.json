@@ -4,17 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "1dd07fa691d90461",
+        "id": "282ea84bb0de4f66",
         "type": "tabs",
         "children": [
           {
-            "id": "d506d8ed1ad602c3",
+            "id": "f2a9bef9d2231cb5",
             "type": "leaf",
             "state": {
-              "type": "graph",
+              "type": "empty",
               "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Visualização em gráfico"
+              "icon": "lucide-file",
+              "title": "Nova aba"
             }
           }
         ]
@@ -179,7 +179,7 @@
       "3d-graph-new:Global 3D Graph": false
     }
   },
-  "active": "d506d8ed1ad602c3",
+  "active": "f2a9bef9d2231cb5",
   "lastOpenFiles": [
     "uan-knowledge/14_gestao_regras_variedade_uan.md",
     "categorias.md",

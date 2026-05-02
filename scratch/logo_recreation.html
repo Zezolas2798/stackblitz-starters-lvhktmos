@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Logo Comparison</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; }
+        .comparison { display: flex; gap: 20px; margin-top: 20px; }
+        .box { background: white; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .box h3 { margin-top: 0; text-align: center; }
+        .overlay-container { position: relative; width: 500px; height: 500px; }
+        .overlay-container img, .overlay-container svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        .original { opacity: 0.5; }
+        .recreation { opacity: 0.5; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <h1>Zelus Logo Recreation</h1>
+    <div class="comparison">
+        <div class="box">
+            <h3>Original vs Recreation (Overlay)</h3>
+            <div class="overlay-container">
+                <img src="/public/logo_original.jpeg" class="original">
+                <!-- SVG Recreation -->
+                <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" class="recreation">
+                    <!-- Icon Part 1 -->
+                    <path d="M 830,300 L 400,300 L 250,450 L 400,600 L 480,520 L 350,390 L 750,390 L 830,300 Z" fill="#E31E24" />
+                    <!-- Icon Part 2 (Mirrored/Rotated) -->
+                    <path d="M 194,724 L 624,724 L 774,574 L 624,424 L 544,504 L 674,634 L 274,634 L 194,724 Z" fill="#E31E24" />
+                    
+                    <!-- Text (Placeholder until paths are drawn) -->
+                    <text x="512" y="850" font-family="Montserrat, Inter, sans-serif" font-weight="900" font-size="120" text-anchor="middle" fill="#414042">ZELUS</text>
+                    <text x="512" y="950" font-family="Montserrat, Inter, sans-serif" font-weight="400" font-size="40" text-anchor="middle" letter-spacing="15" fill="#414042">FOOD SOLUTION</text>
+                </svg>
+            </div>
+        </div>
+    </div>
+    <div style="margin-top: 20px; padding: 20px; background: white; width: 80%;">
+        <h3>Current SVG Code</h3>
+        <textarea id="svg-output" style="width: 100%; height: 200px;"></textarea>
+    </div>
+    <script>
+        document.getElementById('svg-output').value = document.querySelector('.recreation').outerHTML;
+    </script>
+</body>
+</html>

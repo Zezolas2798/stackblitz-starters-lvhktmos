@@ -17,6 +17,7 @@ interface ChecklistModelo {
   id: string;
   titulo: string;
   frequencia_sugerida: string;
+  categoria: string;
   versao: number;
   ativo: boolean;
   created_at: string;
@@ -91,6 +92,19 @@ export default function ListaModelosPage() {
       }
   };
 
+  const getCategoriaLabel = (cat: string) => {
+      const map: Record<string, string> = {
+          'DIAGNOSTICO': 'Diagnóstico',
+          'VISITA_TECNICA': 'Visita Técnica',
+          'AUDITORIA': 'Auditoria',
+          'FOLLOW_UP': 'Follow-up',
+          'OCORRENCIA': 'Ocorrência',
+          'TREINAMENTO': 'Treinamento',
+          'RECEBIMENTO': 'Recebimento'
+      };
+      return map[cat] || cat || 'Não Definida';
+  };
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
       
@@ -135,6 +149,7 @@ export default function ListaModelosPage() {
                         <TableHead sx={{ bgcolor: 'grey.50' }}>
                             <TableRow>
                                 <TableCell>Título do Checklist</TableCell>
+                                <TableCell>Categoria</TableCell>
                                 <TableCell>Frequência</TableCell>
                                 <TableCell>Versão</TableCell>
                                 <TableCell align="right">Ações</TableCell>
@@ -146,6 +161,9 @@ export default function ListaModelosPage() {
                                     <TableCell>
                                         <Typography fontWeight="bold" variant="body1">{modelo.titulo}</Typography>
                                         <Typography variant="caption" color="text.secondary">ID: {modelo.id.slice(0,8)}...</Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Chip label={getCategoriaLabel(modelo.categoria)} size="small" variant="outlined" />
                                     </TableCell>
                                     <TableCell>
                                         <Chip 

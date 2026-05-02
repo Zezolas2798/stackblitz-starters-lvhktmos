@@ -7,7 +7,7 @@ import {
     MenuItem, InputAdornment, Tabs, Tab, Divider, Alert,
     Autocomplete, Checkbox, FormControlLabel, Chip, Stack,
     Accordion, AccordionSummary, AccordionDetails,
-    CircularProgress, IconButton
+    CircularProgress, IconButton, Switch, ToggleButton, ToggleButtonGroup
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import {
@@ -68,6 +68,12 @@ export default function EditarIngredientePage() {
     const [loading, setLoading] = useState(false);
     const [tabIndex, setTabIndex] = useState(0);
     const [openScanner, setOpenScanner] = useState(false);
+
+    // Estados para Base Científica (TACO/TBCA)
+    const [isCientifica, setIsCientifica] = useState(false);
+    const [fonteCientifica, setFonteCientifica] = useState<'TACO' | 'TBCA'>('TACO');
+    const [referenciasDB, setReferenciasDB] = useState<any[]>([]);
+    const [loadingRefs, setLoadingRefs] = useState(false);
 
     // Estados de Dados Mestres
     const [listaMestraAlergenicos, setListaMestraAlergenicos] = useState<AnvisaAlergenico[]>([]);
@@ -205,6 +211,49 @@ export default function EditarIngredientePage() {
         if (activeClientId) loadMastersAndData();
     }, [ingredienteId, activeClientId]);
 
+    // Carga de Referências Científicas (Paginada - Supabase retorna max 1000 por req)
+    useEffect(() => {
+        if (isCientifica) {
+            const loadReferencias = async () => {
+                setLoadingRefs(true);
+                try {
+                    let allData: any[] = [];
+                    let page = 0;
+                    const pageSize = 1000;
+                    let hasMore = true;
+
+                    while (hasMore) {
+                        const from = page * pageSize;
+                        const to = from + pageSize - 1;
+
+                        const { data, error } = await (supabase.from('referencias_nutricionais' as any) as any)
+                            .select('*')
+                            .eq('fonte', fonteCientifica)
+                            .order('nome')
+                            .range(from, to);
+
+                        if (error) throw error;
+                        if (data && data.length > 0) {
+                            allData = allData.concat(data);
+                            page++;
+                            hasMore = data.length === pageSize;
+                        } else {
+                            hasMore = false;
+                        }
+                    }
+
+                    console.log(`[Editar Ingrediente] Referências ${fonteCientifica}: ${allData.length}`);
+                    setReferenciasDB(allData);
+                } catch (err) {
+                    console.error("Erro ao carregar referências:", err);
+                } finally {
+                    setLoadingRefs(false);
+                }
+            };
+            loadReferencias();
+        }
+    }, [isCientifica, fonteCientifica]);
+
     // Filtrar grupos quando a categoria muda
     useEffect(() => {
         if (categoriaValue?.id) {
@@ -261,6 +310,38 @@ export default function EditarIngredientePage() {
 
     const handleAlergenoChange = (id: number, field: 'contem' | 'contem_derivado') => {
         setAlergenosSelecionados(prev => prev.map(tag => tag.alergenico_id === id ? { ...tag, [field]: !tag[field] } : tag));
+    };
+
+    const handleSelectReferencia = (ref: any | null) => {
+        if (!ref) {
+            setFormData(prev => ({ ...prev, referencia_id: null }));
+            return;
+        }
+        
+        setFormData(prev => ({
+            ...prev,
+            referencia_id: ref.id,
+            fonte: ref.fonte,
+            energia_kcal: ref.energia_kcal,
+            proteina_g: ref.proteina_g,
+            lipideos_g: ref.lipideos_g,
+            carboidrato_g: ref.carboidrato_g,
+            fibra_alimentar_g: ref.fibra_alimentar_g,
+            sodio_mg: ref.sodio_mg,
+            calcio_mg: ref.calcio_mg,
+            ferro_mg: ref.ferro_mg,
+            potassio_mg: ref.potassio_mg,
+            magnesio_mg: ref.magnesio_mg,
+            zinco_mg: ref.zinco_mg,
+            vitamina_c_mg: ref.vitamina_c_mg,
+            colesterol_mg: ref.colesterol_mg,
+            gordura_saturada_g: ref.gordura_saturada_g,
+            gordura_mono_g: ref.gordura_monoinsaturada_g,
+            gordura_poli_g: ref.gordura_poliinsaturada_g,
+        }));
+        
+        // Feedback visual: avisa que preencheu e vai para a aba nutricional
+        setTabIndex(1);
     };
 
     const handleSalvar = async (e?: React.FormEvent) => {
@@ -442,6 +523,76 @@ export default function EditarIngredientePage() {
                                             Escanear
                                         </Button>
                                     </Box>
+                                </Grid>
+                            )}
+
+                            {formData.tipo_ingrediente !== 'ADITIVO' && (
+                                <Grid item xs={12}>
+                                    <Paper variant="outlined" sx={{ p: 2, bgcolor: 'rgba(156, 39, 176, 0.02)', borderColor: 'secondary.light' }}>
+                                        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: isCientifica ? 2 : 0 }}>
+                                            <FormControlLabel
+                                                control={<Switch checked={isCientifica} onChange={(e) => setIsCientifica(e.target.checked)} color="secondary" />}
+                                                label={<Typography variant="body2" sx={{ fontWeight: 'bold', color: 'secondary.main' }}>Vincular à Base Científica (TACO/TBCA)</Typography>}
+                                            />
+                                            {isCientifica && (
+                                                <ToggleButtonGroup
+                                                    size="small"
+                                                    value={fonteCientifica}
+                                                    exclusive
+                                                    onChange={(_: React.MouseEvent<HTMLElement>, val: 'TACO' | 'TBCA' | null) => val && setFonteCientifica(val)}
+                                                    color="secondary"
+                                                >
+                                                    <ToggleButton value="TACO" sx={{ px: 2 }}>TACO</ToggleButton>
+                                                    <ToggleButton value="TBCA" sx={{ px: 2 }}>TBCA</ToggleButton>
+                                                </ToggleButtonGroup>
+                                            )}
+                                        </Box>
+
+                                        {isCientifica && (
+                                            <Autocomplete
+                                                options={referenciasDB}
+                                                getOptionLabel={(option) => option.nome}
+                                                loading={loadingRefs}
+                                                onChange={(_, val) => handleSelectReferencia(val)}
+                                                filterOptions={(options, { inputValue }) => {
+                                                    const term = inputValue.toLowerCase().trim();
+                                                    if (!term) return options.slice(0, 50);
+
+                                                    return options
+                                                        .filter(o => o.nome.toLowerCase().includes(term))
+                                                        .sort((a, b) => {
+                                                            const aName = a.nome.toLowerCase();
+                                                            const bName = b.nome.toLowerCase();
+                                                            const aStarts = aName.startsWith(term);
+                                                            const bStarts = bName.startsWith(term);
+
+                                                            if (aStarts && !bStarts) return -1;
+                                                            if (!aStarts && bStarts) return 1;
+                                                            if (aStarts && bStarts) return aName.length - bName.length;
+                                                            return aName.localeCompare(bName);
+                                                        })
+                                                        .slice(0, 100);
+                                                }}
+                                                renderInput={(params) => (
+                                                    <TextField 
+                                                        {...params} 
+                                                        label={`Buscar Alimento na ${fonteCientifica}...`} 
+                                                        placeholder="A seleção abaixo preencherá automaticamente os dados nutricionais"
+                                                        helperText="Selecione um item para carregar os valores nutricionais da base oficial."
+                                                        InputProps={{
+                                                            ...params.InputProps,
+                                                            endAdornment: (
+                                                                <>
+                                                                    {loadingRefs ? <CircularProgress color="inherit" size={20} /> : null}
+                                                                    {params.InputProps.endAdornment}
+                                                                </>
+                                                            ),
+                                                        }}
+                                                    />
+                                                )}
+                                            />
+                                        )}
+                                    </Paper>
                                 </Grid>
                             )}
 

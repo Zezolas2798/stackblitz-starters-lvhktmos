@@ -54,10 +54,10 @@ function NovoModeloContent() {
   }, [activeClientId, editingId]);
 
   const loadEquipe = React.useCallback(async () => {
-    // Busca perfis vinculados à empresa
+    // Busca perfis vinculados ao cliente
     const { data } = await (supabase as any).from('profiles')
       .select('id, full_name')
-      .eq('company_id', activeClientId as string);
+      .eq('cliente_id', activeClientId as string);
     
     if (data) setEquipe(data);
   }, [activeClientId]);

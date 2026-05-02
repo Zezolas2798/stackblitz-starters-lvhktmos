@@ -287,9 +287,29 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
         }
       });
 
-      if (error || !data) {
-        throw new Error(data?.error || error?.message || 'Erro Desconhecido.');
+      if (error) {
+        let errorMsg = 'Erro ao chamar o gerador automático.';
+        
+        // Verifica se é um erro HTTP do Supabase Functions que contém o corpo da resposta
+        if ((error as any).context && typeof (error as any).context.json === 'function') {
+          try {
+            const errorResponse = await (error as any).context.json();
+            if (errorResponse && errorResponse.error) {
+              errorMsg = errorResponse.error;
+            } else {
+              errorMsg = error.message;
+            }
+          } catch (e) {
+            errorMsg = error.message;
+          }
+        } else {
+          errorMsg = error.message;
+        }
+        
+        throw new Error(errorMsg);
       }
+
+      if (!data) throw new Error('O servidor não retornou dados.');
 
       if (data.gradeOutput) {
         setGrade(data.gradeOutput);
@@ -300,7 +320,7 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
       }
 
     } catch (e: any) {
-      alert(`Falha na Geração (${solverLabel}): ${e.message}`);
+      alert(`Falha na Geração (${solverLabel}):\n\n${e.message}`);
     } finally {
       setIsGenerating(false);
     }

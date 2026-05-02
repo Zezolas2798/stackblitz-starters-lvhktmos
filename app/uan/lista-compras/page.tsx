@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
@@ -10,7 +10,7 @@ import {
   TableContainer, TableHead, TableRow, Chip, MenuItem, TextField,
   Accordion, AccordionSummary, AccordionDetails, Alert, Grid
 } from '@mui/material';
-import { ShoppingCart, ArrowLeft, Loader2, AlertTriangle, FileText, ServerCrash } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, Loader2, AlertTriangle, FileText, ServerCrash, ChevronDown, ChevronRight } from 'lucide-react';
 import { formatLocalDate } from '@/lib/utils/dateUtils';
 
 interface ItemListaCompra {
@@ -95,6 +95,12 @@ export default function ListaComprasUANPage() {
     window.print();
   };
 
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (cat: string) => {
+    setExpandedGroups(prev => ({ ...prev, [cat]: !prev[cat] }));
+  };
+
   const custoTotal = resumo?.custo_total_estimado ?? 0;
 
   return (
@@ -149,37 +155,39 @@ export default function ListaComprasUANPage() {
         <Box display="flex" justifyContent="center" p={4}><Loader2 className="animate-spin" /></Box>
       ) : cardapioSelecionado && !erro && (
         <>
-          {/* KPI Cards - Executive Summary */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, bgcolor: 'primary.main', color: 'primary.contrastText', borderRadius: 2, boxShadow: '0 4px 20px rgba(25, 118, 210, 0.2)' }}>
-                 <Typography variant="overline" sx={{ opacity: 0.8, fontWeight: 'bold', letterSpacing: 1 }}>Insumos Mapeados</Typography>
-                 <Typography variant="h3" fontWeight="bold">{resumo?.total_ingredientes ?? 0}</Typography>
-                 <Typography variant="body2" sx={{ opacity: 0.8 }}>Total de itens distintos no ciclo</Typography>
-              </Paper>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, bgcolor: '#ffffff', border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                 <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 'bold', letterSpacing: 1 }}>Orçamento Estimado</Typography>
-                 <Typography variant="h3" fontWeight="bold" color="error.main">
-                   R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                 </Typography>
-                 <Typography variant="body2" color="text.secondary">Baseado no preço da última compra</Typography>
-              </Paper>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, bgcolor: '#ffffff', border: '1px solid #e0e0e0', borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                 <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 'bold', letterSpacing: 1 }}>Peso Logístico Total</Typography>
-                 <Typography variant="h3" fontWeight="bold" color="success.main">
-                   {(resumo?.peso_total_bruto_kg ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} <small style={{ fontSize: '0.5em' }}>kg</small>
-                 </Typography>
-                 <Typography variant="body2" color="text.secondary">Volume bruto para transporte/armazenagem</Typography>
-              </Paper>
-            </Grid>
-          </Grid>
+          {/* Barra de Resumo Minimalista (Auditável) */}
+          <Paper elevation={0} sx={{ 
+            p: 2, 
+            mb: 3, 
+            display: 'flex', 
+            justifyContent: 'space-around', 
+            alignItems: 'center',
+            border: '1px solid #e2e8f0',
+            bgcolor: '#f8fafc',
+            borderRadius: 1
+          }}>
+            <Box textAlign="center">
+              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>INSUMOS NO CICLO</Typography>
+              <Typography variant="h6" fontWeight={800}>{resumo?.total_ingredientes ?? 0} <small style={{ fontWeight: 400, fontSize: '0.7rem' }}>itens</small></Typography>
+            </Box>
+            <Box sx={{ width: '1px', height: '30px', bgcolor: '#cbd5e1' }} />
+            <Box textAlign="center">
+              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>ORÇAMENTO PREVISTO</Typography>
+              <Typography variant="h6" fontWeight={800} color="primary.dark">
+                R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </Typography>
+            </Box>
+            <Box sx={{ width: '1px', height: '30px', bgcolor: '#cbd5e1' }} />
+            <Box textAlign="center">
+              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block', mb: 0.5 }}>PESO BRUTO TOTAL</Typography>
+              <Typography variant="h6" fontWeight={800} color="success.dark">
+                {(resumo?.peso_total_bruto_kg ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} <small style={{ fontWeight: 400, fontSize: '0.7rem' }}>kg</small>
+              </Typography>
+            </Box>
+          </Paper>
 
-          {/* DETALHAMENTO EXECUTIVO POR CATEGORIA */}
-          <Paper elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+          {/* DETALHAMENTO EXECUTIVO ESTILO ERP (Inspirado em image-75) */}
+          <Paper elevation={0} sx={{ border: '1px solid #d1d5db', borderRadius: 1, overflow: 'hidden', bgcolor: '#fff' }}>
             {(() => {
               const grouped = compras.reduce((acc, item) => {
                 const cat = item.nome_grupo || 'Outros';
@@ -198,77 +206,117 @@ export default function ListaComprasUANPage() {
               if (compras.length === 0) {
                 return (
                   <Box p={8} textAlign="center">
-                    <Typography color="text.secondary">O cardápio selecionado não possui preparações planejadas para o período.</Typography>
+                    <Typography color="text.secondary">O cardápio selecionado não possui itens para processamento.</Typography>
                   </Box>
                 );
               }
 
               return (
                 <Box>
-                  <Box sx={{ p: 2, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="subtitle2" fontWeight="bold" color="text.secondary">DETALHAMENTO POR GRUPO DE INSUMOS</Typography>
-                    <Typography variant="caption" color="text.secondary">Valores em Reais (R$) e Quilogramas (kg)</Typography>
+                  <Box sx={{ p: 1.5, bgcolor: '#1e293b', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="caption" sx={{ fontWeight: 800, letterSpacing: 1 }}>DETALHAMENTO TÉCNICO DE INSUMOS</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.8 }}>Relatório Gerencial NutriDev GxP</Typography>
                   </Box>
                   
-                  {categoriasOrdenadas.map(cat => (
-                    <Box key={cat} sx={{ mb: 4 }}>
-                      <Box sx={{ px: 3, py: 1.5, bgcolor: 'rgba(25, 118, 210, 0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 700, color: 'primary.dark' }}>
-                          {cat}
-                        </Typography>
-                        <Chip 
-                          label={`Subtotal: R$ ${grouped[cat].totalCusto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined" 
-                          sx={{ fontWeight: 'bold', bgcolor: 'white' }}
-                        />
-                      </Box>
-                      
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold', color: 'text.secondary', pl: 4 }}>Item / Insumo</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>Nec. Bruta</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>Estoque/Buffer</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>Qtd. Compra</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary' }}>Preço Unit.</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold', color: 'text.secondary', pr: 3 }}>Subtotal</TableCell>
+                <Box sx={{ position: 'relative' }}>
+                  <Table size="small" sx={{ 
+                    '& .MuiTableCell-root': { py: 0.8, borderRight: '1px solid #f3f4f6', fontSize: '0.75rem' },
+                    '& .MuiTableCell-head': { 
+                      bgcolor: '#334155', 
+                      color: '#fff', 
+                      fontWeight: 800, 
+                      textTransform: 'uppercase',
+                      borderBottom: '2px solid #0f172a'
+                    }
+                  }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell width={40}></TableCell>
+                        <TableCell width={300}>Descrição do Insumo</TableCell>
+                        <TableCell align="right" width={100}>Nec. Bruta</TableCell>
+                        <TableCell align="right" width={120}>Estoque/Buffer</TableCell>
+                        <TableCell align="right" width={100}>Qtd. Compra</TableCell>
+                        <TableCell align="right" width={110}>Vlr. Unitário</TableCell>
+                        <TableCell align="right" width={120} sx={{ pr: 2 }}>Vlr. Total</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {categoriasOrdenadas.map(cat => {
+                        const isExpanded = expandedGroups[cat] !== false; // Default expanded
+                        return (
+                        <React.Fragment key={cat}>
+                          {/* Divisor de Grupo de Alto Contraste */}
+                          <TableRow 
+                            onClick={() => toggleGroup(cat)}
+                            sx={{ 
+                              bgcolor: '#f1f5f9', 
+                              cursor: 'pointer',
+                              '&:hover': { bgcolor: '#e2e8f0' },
+                              borderTop: '2px solid #cbd5e1'
+                            }}
+                          >
+                            <TableCell sx={{ pl: 1 }}>
+                              {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </TableCell>
+                            <TableCell colSpan={5} sx={{ fontWeight: 900, color: '#0f172a', py: 1.2 }}>
+                              GRUPO: {cat.toUpperCase()}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 900, color: 'primary.dark', pr: 2 }}>
+                              R$ {grouped[cat].totalCusto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </TableCell>
                           </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {grouped[cat].items.map(c => (
-                            <TableRow key={c.ingrediente_id} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
-                               <TableCell sx={{ pl: 4, py: 1.5 }}>
-                                 <Typography variant="body2" fontWeight={500}>{c.nome_ingrediente}</Typography>
-                               </TableCell>
-                               <TableCell align="right">{c.necessidade_bruta_kg.toFixed(2)} kg</TableCell>
+
+                          {isExpanded && grouped[cat].items.map((c, idx) => (
+                            <TableRow 
+                              key={c.ingrediente_id} 
+                              sx={{ 
+                                bgcolor: idx % 2 === 0 ? '#fff' : '#f8fafc',
+                                '&:hover': { bgcolor: '#f1f5f9' },
+                                '& td': { borderBottom: '1px solid #f1f5f9' }
+                              }}
+                            >
+                               <TableCell></TableCell>
+                               <TableCell sx={{ fontWeight: 600, pl: 2, color: '#334155' }}>{c.nome_ingrediente.toUpperCase()}</TableCell>
+                               <TableCell align="right">{c.necessidade_bruta_kg.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg</TableCell>
                                <TableCell align="right">
                                   {c.estoque_minimo_kg > 0 ? (
-                                    <Typography variant="caption" sx={{ color: 'warning.dark' }}>Min: {c.estoque_minimo_kg} kg</Typography>
+                                    <Typography variant="caption" sx={{ fontSize: '0.65rem', color: '#b45309', fontWeight: 700 }}>
+                                      MÍN: {c.estoque_minimo_kg.toFixed(2)} kg
+                                    </Typography>
                                   ) : '-'}
                                </TableCell>
                                <TableCell align="right">
-                                  <Typography variant="body2" fontWeight="bold" color="primary.main">
-                                     {c.qtd_comprar_kg.toFixed(2)} kg
+                                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 800, color: '#1e40af' }}>
+                                     {c.qtd_comprar_kg.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg
                                   </Typography>
                                </TableCell>
-                               <TableCell align="right" sx={{ color: 'text.secondary' }}>R$ {c.preco_ultima_compra?.toFixed(2) || '0.00'}</TableCell>
-                               <TableCell align="right" sx={{ pr: 3 }}>
-                                  <Typography variant="body2" fontWeight="bold">
+                               <TableCell align="right" sx={{ color: '#64748b' }}>R$ {c.preco_ultima_compra?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}</TableCell>
+                               <TableCell align="right" sx={{ pr: 2 }}>
+                                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 900, color: '#0f172a' }}>
                                     R$ {c.custo_estimado_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                   </Typography>
                                </TableCell>
                             </TableRow>
                           ))}
-                        </TableBody>
-                      </Table>
-                    </Box>
-                  ))}
+                        </React.Fragment>
+                      )})}
+                    </TableBody>
+                  </Table>
                 </Box>
-              );
-            })()}
-          </Paper>
+                
+                {/* Rodapé de Fechamento do Relatório */}
+                <Box sx={{ p: 2, bgcolor: '#0f172a', color: '#fff', textAlign: 'right' }}>
+                  <Typography variant="caption" sx={{ display: 'block', mb: 0.5, opacity: 0.8, fontWeight: 700 }}>
+                    TOTAL GERAL DO CICLO DE CARDÁPIO
+                  </Typography>
+                  <Typography variant="h5" fontWeight={900}>
+                    R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </Typography>
+                </Box>
+              </Box>
+            );
+          })()}
+        </Paper>
         </>
       )}
     </Box>

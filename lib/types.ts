@@ -40,7 +40,7 @@ export interface Profile {
   id: string;
   email: string | null;
   full_name: string | null;
-  company_id: string | null;
+  cliente_id: string | null;
   role: string | null;
   cpf?: string | null;
   registro_profissional?: string | null;

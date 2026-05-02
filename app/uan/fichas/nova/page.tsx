@@ -9,8 +9,8 @@ import {
   Box, Typography, Button, Paper, TextField, MenuItem,
   Grid, Divider, Autocomplete, IconButton, Chip, Table, TableHead,
   TableRow, TableCell, TableBody, InputAdornment,
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  FormControlLabel, Checkbox
+  Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
+  FormControlLabel, Checkbox, ToggleButtonGroup, ToggleButton
 } from '@mui/material';
 import { Save, ArrowLeft, Trash2, PlusCircle, Calculator, ActivitySquare } from 'lucide-react';
 
@@ -67,20 +67,64 @@ export default function NovaFichaUANPage() {
   });
 
   // Linhas da Composição
-  const [linhas, setLinhas] = useState<(Partial<ComposicaoFichaUAN> & { ui_ingrediente?: Ingrediente | null, ui_referencia?: any | null })[]>([]);
+  const [linhas, setLinhas] = useState<(Partial<ComposicaoFichaUAN> & { ui_ingrediente?: Ingrediente | null, ui_referencia?: any | null, searchFonte?: 'TACO' | 'TBCA' | 'TODAS' })[]>([]);
 
+  const [loadingRefs, setLoadingRefs] = useState(false);
+
+  // 1. Carregar Base Científica (TACO/TBCA) - Independente do Cliente
+  // NOTA: O Supabase retorna no máximo 1000 linhas por requisição.
+  // É necessário paginar para carregar todos os ~6265 registros.
   useEffect(() => {
-    async function loadData() {
-      if (!activeClientId) return;
-      
-      // Consultas individuais para evitar "Deep Instantiation" no Promise.all
-      const ingRes = await supabase.from('ingredientes').select('id, nome, preco_ultima_compra, tipo_ingrediente').eq('cliente_id', activeClientId).order('nome');
-      const refRes = await (supabase.from('referencias_nutricionais' as any) as any).select('*').order('nome');
+    async function loadScientificData() {
+      setLoadingRefs(true);
+      try {
+        let allData: any[] = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
 
-      if (ingRes.data) setIngredientesDB(ingRes.data as Ingrediente[]);
-      if (refRes.data) setReferenciasDB(refRes.data);
+        while (hasMore) {
+          const from = page * pageSize;
+          const to = from + pageSize - 1;
+
+          const { data, error } = await (supabase.from('referencias_nutricionais' as any) as any)
+            .select('*')
+            .order('nome')
+            .range(from, to);
+
+          if (error) throw error;
+          if (data && data.length > 0) {
+            allData = allData.concat(data);
+            page++;
+            hasMore = data.length === pageSize;
+          } else {
+            hasMore = false;
+          }
+        }
+
+        console.log(`[Nova Ficha] Referências carregadas: ${allData.length}`);
+        setReferenciasDB(allData);
+      } catch (err) {
+        console.error("Erro ao carregar referências:", err);
+      } finally {
+        setLoadingRefs(false);
+      }
     }
-    loadData();
+    loadScientificData();
+  }, []);
+
+  // 2. Carregar Ingredientes do Cliente - Dependente do activeClientId
+  useEffect(() => {
+    async function loadClientData() {
+      if (!activeClientId) return;
+      const { data } = await supabase
+        .from('ingredientes')
+        .select('id, nome, preco_ultima_compra, tipo_ingrediente')
+        .eq('cliente_id', activeClientId)
+        .order('nome');
+      if (data) setIngredientesDB(data as Ingrediente[]);
+    }
+    loadClientData();
   }, [activeClientId]);
 
   // Handler para Linhas de Composição
@@ -194,7 +238,7 @@ export default function NovaFichaUANPage() {
     }
   };
 
-  const addLine = () => setLinhas(prev => [...prev, { fator_correcao: 1, indice_coccao: 1 }]);
+  const addLine = () => setLinhas(prev => [...prev, { fator_correcao: 1, indice_coccao: 1, searchFonte: 'TACO' }]);
   const removeLine = (idx: number) => setLinhas(prev => prev.filter((_, i) => i !== idx));
 
   const custoPrato = calcCustoTotal();
@@ -429,24 +473,67 @@ export default function NovaFichaUANPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Autocomplete
-                      options={referenciasDB}
-                      getOptionLabel={o => `${o.nome} (${o.fonte})`}
-                      value={row.ui_referencia || null}
-                      onChange={(_, val) => {
-                        updateLinha(index, { 
-                          referencia_id: val?.id, 
-                          ui_referencia: val 
-                        });
-                      }}
-                      renderInput={p => (
-                        <AutocompleteTextField 
-                           {...p} 
-                           placeholder="Referência..." 
-                           helperText={!row.ui_referencia ? "Pendente" : ""}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        <ToggleButtonGroup
+                            size="small"
+                            value={row.searchFonte || 'TACO'}
+                            exclusive
+                            onChange={(_: React.MouseEvent<HTMLElement>, val: 'TACO' | 'TBCA' | 'TODAS' | null) => val && updateLinha(index, { searchFonte: val })}
+                            sx={{ scale: '0.8', transformOrigin: 'left', height: 24, mb: 0.5 }}
+                        >
+                            <ToggleButton value="TACO" sx={{ py: 0, px: 1, fontSize: '10px' }}>TACO</ToggleButton>
+                            <ToggleButton value="TBCA" sx={{ py: 0, px: 1, fontSize: '10px' }}>TBCA</ToggleButton>
+                            <ToggleButton value="TODAS" sx={{ py: 0, px: 1, fontSize: '10px' }}>TODAS</ToggleButton>
+                        </ToggleButtonGroup>
+
+                        <Autocomplete
+                            options={referenciasDB.filter(r => (row.searchFonte === 'TODAS' || !row.searchFonte) ? true : r.fonte === row.searchFonte)}
+                            getOptionLabel={o => o?.nome ? `${o.nome} (${o.fonte || '?'})` : ''}
+                            value={row.ui_referencia || null}
+                            loading={loadingRefs}
+                            onChange={(_, val) => {
+                                updateLinha(index, { 
+                                    referencia_id: val?.id, 
+                                    ui_referencia: val 
+                                });
+                            }}
+                            filterOptions={(options, { inputValue }) => {
+                                const term = inputValue.toLowerCase().trim();
+                                if (!term) return options.slice(0, 50);
+
+                                return options
+                                    .filter(o => o?.nome && o.nome.toLowerCase().includes(term))
+                                    .sort((a, b) => {
+                                        const aName = (a.nome || '').toLowerCase();
+                                        const bName = (b.nome || '').toLowerCase();
+                                        const aStarts = aName.startsWith(term);
+                                        const bStarts = bName.startsWith(term);
+
+                                        if (aStarts && !bStarts) return -1;
+                                        if (!aStarts && bStarts) return 1;
+                                        if (aStarts && bStarts) return aName.length - bName.length;
+                                        return aName.localeCompare(bName);
+                                    })
+                                    .slice(0, 100);
+                            }}
+                            renderInput={p => (
+                                <AutocompleteTextField 
+                                    {...p} 
+                                    placeholder="Referência..." 
+                                    helperText={!row.ui_referencia ? "Pendente" : ""}
+                                    InputProps={{
+                                        ...p.InputProps,
+                                        endAdornment: (
+                                            <>
+                                                {loadingRefs ? <CircularProgress color="inherit" size={16} /> : null}
+                                                {p.InputProps.endAdornment}
+                                            </>
+                                        ),
+                                    }}
+                                />
+                            )}
                         />
-                      )}
-                    />
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <TableInput 

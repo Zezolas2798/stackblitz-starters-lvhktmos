@@ -463,9 +463,16 @@ Deno.serve(async (req: Request) => {
       });
     });
 
-    if (variables.length === 0) {
-      return new Response(JSON.stringify({ error: 'Nenhuma variável para resolver. Verifique perfis e slots.' }),
-        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // --- PRÉ-DIAGNÓSTICO: Verificar se há fichas para todas as categorias necessárias ---
+    for (const v of variables) {
+      if (!v.fixo && (!dominios[v.categoria] || dominios[v.categoria].length === 0)) {
+        return new Response(JSON.stringify({ 
+          error: `Erro de Configuração: Nenhuma ficha técnica encontrada para a categoria "${v.categoria}". Verifique o cadastro de fichas ou o perfil de cardápio.` 
+        }), { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      }
     }
 
     // 3. Initialize population

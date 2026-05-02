@@ -286,6 +286,18 @@ Deno.serve(async (req: Request) => {
     const startTime = Date.now();
     let isStuck = false;
 
+    // --- PRÉ-DIAGNÓSTICO: Verificar se há fichas para todas as categorias necessárias ---
+    for (const v of variables) {
+      if (!v.fixo && (!dominios[v.categoria] || dominios[v.categoria].length === 0)) {
+        return new Response(JSON.stringify({ 
+          error: `Erro de Configuração: Nenhuma ficha técnica encontrada para a categoria "${v.categoria}". Verifique o cadastro de fichas ou o perfil de cardápio.` 
+        }), { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+
     const solve = (varIndex: number): boolean => {
       if (Date.now() - startTime > 9000) { isStuck = true; return false; }
       if (varIndex === variables.length) return true;
