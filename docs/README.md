@@ -95,6 +95,7 @@ Abra [http://localhost:3000](http://localhost:3000) no seu navegador para ver o 
 ## 📂 Governança e Boas Práticas
 
 Este projeto segue rigorosos padrões de documentação e engenharia:
+- Consulte a [[infraestrutura.ambientes|Gestão de Ambientes (DEV & PROD)]] para diretrizes sobre os bancos de dados Supabase e fluxos de deploy.
 - Consulte o [[sistema.map.relatorios|Módulo de Relatórios e Nutrição]] e o [[sistema.calc.rotulagem|Espec. de Rotulagem]] na pasta `docs` para detalhes de compliance.
 - Documentação de GxP e conformidade disponível em `boas_praticas`.
 - Regras de negócio e governança em `governanca`.

@@ -32,6 +32,7 @@ A estrutura dentro de `app/` é organizada de forma modular, representando as ve
 
 O projeto mantém sementes de conhecimento e regras de negócio de forma explícita na raiz e em pastas especializadas:
 
+*   `docs/`: [[infraestrutura.ambientes|Gestão de Ambientes (DEV vs PROD)]] e diretrizes de infraestrutura Supabase.
 *   `docs/`: [[sistema.map.relatorios|Manuais técnicos de cálculos]], modelagem de domínio e nutrição.
 *   `docs/`: [[sistema.calc.rotulagem|Espec. Técnica de Rotulagem]] e regras de conformidade.
 *   `governanca/`: Definições de padrões de banco de dados e arquitetura.

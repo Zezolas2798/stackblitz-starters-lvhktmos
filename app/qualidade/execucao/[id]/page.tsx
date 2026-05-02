@@ -41,6 +41,9 @@ export default function ExecucaoChecklistPage() {
   const [assinaturaUrl, setAssinaturaUrl] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   
+  const [novasAcoes, setNovasAcoes] = useState<Record<string, { descricao: string, acao: string }>>({});
+  const [acoesPendentes, setAcoesPendentes] = useState<any[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingInfo, setUploadingInfo] = useState<string | null>(null); // Mostra qual item está fazendo upload
@@ -149,6 +152,17 @@ export default function ExecucaoChecklistPage() {
         }
         setRespostas(mapaRespostas);
 
+        // Busca acoes corretivas pendentes para esta unidade
+        const { data: acoesPendentesData } = await supabase
+            .from('acoes_corretivas')
+            .select('*, checklist_respostas(item_id)')
+            .eq('unidade_id', auditData.unidade_id)
+            .eq('status', 'PENDENTE');
+            
+        if (acoesPendentesData) {
+            setAcoesPendentes(acoesPendentesData);
+        }
+
         setAssinaturaUrl((auditData as any).assinatura_auditor_url || null);
 
         // 4. Perfil do Usuário
@@ -180,6 +194,23 @@ export default function ExecucaoChecklistPage() {
 
         return { ...prev, [itemId]: { ...atual, [campo]: valor } };
     });
+  };
+
+  const marcarAcaoComoConcluida = async (acaoId: string) => {
+      if (isReadOnly) return;
+      try {
+          const { error } = await supabase.from('acoes_corretivas').update({ 
+              status: 'CONCLUIDO',
+              verificado_em_auditoria_id: auditId
+          }).eq('id', acaoId);
+          
+          if (error) throw error;
+          
+          setAcoesPendentes(prev => prev.filter(a => a.id !== acaoId));
+          alert('Plano de ação verificado e concluído!');
+      } catch (err: any) {
+          alert('Erro ao atualizar ação corretiva: ' + err.message);
+      }
   };
 
   // --- UPLOAD DE FOTOS (MÚLTIPLAS) ---
@@ -272,13 +303,34 @@ export default function ExecucaoChecklistPage() {
         });
 
         if (payload.length > 0) {
-            // Nota: Como estamos fazendo upsert sem o ID da resposta (checklist_respostas.id),
-            // o banco usará a constraint UNIQUE (auditoria_id, item_id) que aplicamos anteriormente
-            // para atualizar ou inserir corretamente.
-            const { error } = await supabase.from('checklist_respostas').upsert(payload, {
+            // Upsert com select para pegar os IDs inseridos/atualizados
+            const { data: insertedRespostas, error } = await supabase.from('checklist_respostas').upsert(payload, {
                 onConflict: 'auditoria_id, item_id'
-            });
+            }).select();
+            
             if (error) throw error;
+
+            // Salvamento das Novas Ações Corretivas (Planos de Ação)
+            const acoesPayload: any[] = [];
+            insertedRespostas?.forEach((r: any) => {
+                const acao = novasAcoes[r.item_id];
+                if (acao && (acao.descricao || acao.acao)) {
+                    acoesPayload.push({
+                        origem_checklist_resposta_id: r.id,
+                        unidade_id: auditoria.unidade_id,
+                        descricao_desvio: acao.descricao || '',
+                        acao_imediata: acao.acao || '',
+                        status: 'PENDENTE'
+                    });
+                }
+            });
+
+            if (acoesPayload.length > 0) {
+                const respsIds = insertedRespostas.map((r: any) => r.id);
+                await supabase.from('acoes_corretivas').delete().in('origem_checklist_resposta_id', respsIds).eq('status', 'PENDENTE');
+                const { error: errAcoes } = await supabase.from('acoes_corretivas').insert(acoesPayload);
+                if (errAcoes) throw errAcoes;
+            }
         }
 
         if (finalizar) {
@@ -538,6 +590,8 @@ export default function ExecucaoChecklistPage() {
                 {secao.checklist_itens.map((item: any) => {
                     const resp = respostas[item.id] || { valor: '', fotos_urls: [] };
                     const isNC = resp.valor === 'NAO_CONFORME';
+                    
+                    const acoesDesteItem = acoesPendentes.filter(a => a.checklist_respostas?.item_id === item.id);
 
                     return (
                         <Card key={item.id} sx={{ mb: 2, border: isNC ? '1px solid #ef5350' : '1px solid #eee', transition: '0.3s' }}>
@@ -602,6 +656,57 @@ export default function ExecucaoChecklistPage() {
                                            onChange={e => handleRespostaChange(item.id, 'valor', e.target.value)}
                                            sx={{ bgcolor: 'white' }}
                                         />
+                                    )}
+
+                                    {acoesDesteItem.length > 0 && (
+                                        <Box sx={{ mt: 3, mb: 1 }}>
+                                            {acoesDesteItem.map((acao: any) => (
+                                                <Alert 
+                                                    key={acao.id} 
+                                                    severity="error" 
+                                                    sx={{ mb: 1, borderRadius: 2, border: '1px solid #ffcdd2' }}
+                                                    action={
+                                                        <Button 
+                                                            color="success" variant="contained" size="small" 
+                                                            onClick={() => marcarAcaoComoConcluida(acao.id)}
+                                                            sx={{ mt: 0.5 }}
+                                                        >
+                                                            Resolvido / Verificado
+                                                        </Button>
+                                                    }
+                                                >
+                                                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                                                        ⚠️ Plano de Ação Pendente da Última Auditoria
+                                                    </Typography>
+                                                    <Typography variant="body2"><strong>Problema:</strong> {acao.descricao_desvio}</Typography>
+                                                    <Typography variant="body2"><strong>Ação Definida:</strong> {acao.acao_imediata}</Typography>
+                                                </Alert>
+                                            ))}
+                                        </Box>
+                                    )}
+
+                                    {isNC && (
+                                        <Paper elevation={0} sx={{ mt: 3, p: 2, bgcolor: alpha(theme.palette.error.main, 0.03), border: `1px solid ${alpha(theme.palette.error.main, 0.2)}`, borderRadius: 2 }}>
+                                            <Typography variant="subtitle2" color="error.main" sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Plus size={16} /> Registrar Plano de Ação para a Não Conformidade
+                                            </Typography>
+                                            <Stack spacing={2}>
+                                                <TextField 
+                                                    size="small" fullWidth label="Descrição do Desvio / Problema" 
+                                                    value={novasAcoes[item.id]?.descricao || ''}
+                                                    onChange={e => setNovasAcoes(prev => ({ ...prev, [item.id]: { ...(prev[item.id] || {}), descricao: e.target.value } }))}
+                                                    sx={{ bgcolor: 'white' }}
+                                                    placeholder="O que estava errado?"
+                                                />
+                                                <TextField 
+                                                    size="small" fullWidth label="Ação Imediata Proposta" 
+                                                    value={novasAcoes[item.id]?.acao || ''}
+                                                    onChange={e => setNovasAcoes(prev => ({ ...prev, [item.id]: { ...(prev[item.id] || {}), acao: e.target.value } }))}
+                                                    sx={{ bgcolor: 'white' }}
+                                                    placeholder="O que o cliente se comprometeu a fazer para resolver?"
+                                                />
+                                            </Stack>
+                                        </Paper>
                                     )}
                                 </Box>
 
