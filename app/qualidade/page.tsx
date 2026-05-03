@@ -111,23 +111,24 @@ export default function DashboardQualidadePage() {
     };
 
     return (
-        <Container maxWidth="xl" sx={{ mt: 4, mb: 8 }}>
+        <Container maxWidth="xl" sx={{ mt: { xs: 2, md: 4 }, mb: 8 }}>
 
             {/* HEADER E AÇÕES RÁPIDAS */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 4, flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
                 <Box>
-                    <Typography variant="h4" fontWeight="800" sx={{ color: 'text.primary', letterSpacing: '-0.02em' }}>
+                    <Typography variant="h4" fontWeight="800" sx={{ color: 'text.primary', letterSpacing: '-0.02em', fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
                         Controle de Qualidade
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                         Gestão de auditorias, checklists e não-conformidades.
                     </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', gap: 2 }}>
+                <Box sx={{ display: 'flex', gap: 1.5, width: { xs: '100%', sm: 'auto' }, flexDirection: { xs: 'column', sm: 'row' } }}>
                     <Button
                         variant="outlined"
                         startIcon={<ClipboardList />}
                         onClick={() => router.push('/qualidade/modelos')}
+                        sx={{ fontSize: { xs: '0.8rem', md: '0.875rem' } }}
                     >
                         Gerenciar Modelos
                     </Button>
@@ -193,8 +194,8 @@ export default function DashboardQualidadePage() {
                             <Button sx={{ mt: 2 }} variant="outlined" onClick={() => router.push('/qualidade/nova')}>Iniciar a Primeira</Button>
                         </Box>
                     ) : (
-                        <TableContainer>
-                            <Table>
+                        <TableContainer sx={{ overflowX: 'auto' }}>
+                            <Table sx={{ minWidth: 700 }}>
                                 <TableHead sx={{ bgcolor: 'grey.50' }}>
                                     <TableRow>
                                         <TableCell>Auditoria / Checklist</TableCell>

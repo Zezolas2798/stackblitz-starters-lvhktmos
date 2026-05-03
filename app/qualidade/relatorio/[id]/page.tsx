@@ -311,8 +311,8 @@ export default function RelatorioAuditoriaPage() {
   // 2. VISUALIZAÇÃO EXECUTIVA (Tabela Formal)
   const ExecutiveView = () => (
       <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', mt: 2 }}>
-          <TableContainer>
-              <Table size="small">
+          <TableContainer sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 600 }}>
                   <TableHead sx={{ bgcolor: 'grey.50' }}>
                       <TableRow>
                           <TableCell sx={{ fontWeight: 'bold' }}>Item da Inspeção</TableCell>
@@ -367,8 +367,8 @@ export default function RelatorioAuditoriaPage() {
           <Typography variant="h6" fontWeight="800" sx={{ mb: 4, color: 'text.secondary', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               Validação e Encerramento
           </Typography>
-          <Grid container spacing={6}>
-              <Grid item xs={12} md={4}>
+          <Grid container spacing={{ xs: 3, md: 6 }}>
+              <Grid item xs={12} sm={4}>
                   <Box sx={{ textAlign: 'center' }}>
                       <Box sx={{ minHeight: 60, borderBottom: '1px solid #000', mb: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                           {(auditoria as any)?.assinatura_auditor_url && (
@@ -381,14 +381,14 @@ export default function RelatorioAuditoriaPage() {
                       </Typography>
                   </Box>
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} sm={4}>
                   <Box sx={{ textAlign: 'center' }}>
                       <Box sx={{ minHeight: 60, borderBottom: '1px solid #000', mb: 1 }} />
                       <Typography variant="body2" fontWeight="bold">Responsável pela Unidade</Typography>
                       <Typography variant="caption" color="text.secondary">Carimbo e Assinatura</Typography>
                   </Box>
               </Grid>
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} sm={4}>
                   <Box sx={{ textAlign: 'center' }}>
                       <Box sx={{ minHeight: 60, borderBottom: '1px solid #000', mb: 1 }} />
                       <Typography variant="body2" fontWeight="bold">Responsável Técnico / Qualidade</Typography>
@@ -488,12 +488,12 @@ export default function RelatorioAuditoriaPage() {
             </Paper>
 
             {/* Conformidade por Seção (Bar Chart) */}
-            <Paper variant="outlined" sx={{ p: 4, borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
-                <Typography variant="h6" fontWeight="800" sx={{ mb: 4 }}>CONFORMIDADE POR CATEGORIA (%)</Typography>
-                <Box sx={{ height: 600, mt: 1 }}>
+            <Paper variant="outlined" sx={{ p: { xs: 2, md: 4 }, borderRadius: 3, position: 'relative', overflow: 'hidden' }}>
+                <Typography variant="h6" fontWeight="800" sx={{ mb: { xs: 2, md: 4 }, fontSize: { xs: '0.9rem', md: '1.25rem' } }}>CONFORMIDADE POR CATEGORIA (%)</Typography>
+                <Box sx={{ height: { xs: 350, md: 600 }, mt: 1 }}>
                     <ChartDefinitions />
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats.sections} margin={{ top: 40, right: 40, left: 20, bottom: 180 }}>
+                        <BarChart data={stats.sections} margin={{ top: 20, right: 10, left: 0, bottom: 120 }}>
                             {/* Faixas de Fundo (Performance Bands - Sincronizado com Central de Consultoria) */}
                             <ReferenceArea y1={90} y2={100} fill="rgba(37, 99, 235, 0.08)" stroke="none" />
                             <ReferenceArea y1={75} y2={90} fill="rgba(22, 163, 74, 0.08)" stroke="none" />
@@ -583,16 +583,16 @@ export default function RelatorioAuditoriaPage() {
   if (!auditoria) return <Alert severity="error">Relatório não encontrado.</Alert>;
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 12 }}>
+    <Container maxWidth="lg" sx={{ mt: { xs: 2, md: 4 }, mb: 12, px: { xs: 1.5, md: 3 } }}>
       
       {/* HEADER DE NAVEGAÇÃO E SELETOR DE VISTA */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4, flexWrap: 'wrap', gap: 2, '@media print': { display: 'none' } }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: { xs: 2, md: 4 }, flexDirection: { xs: 'column', sm: 'row' }, gap: 2, '@media print': { display: 'none' } }}>
         <Box>
             <Button startIcon={<ArrowLeft />} onClick={() => router.back()} sx={{ color: 'text.secondary', mb: 1 }}>Voltar</Button>
-            <Typography variant="h5" fontWeight="900" sx={{ letterSpacing: '-0.02em' }}>Relatório de Auditoria</Typography>
+            <Typography variant="h5" fontWeight="900" sx={{ letterSpacing: '-0.02em', fontSize: { xs: '1.2rem', md: '1.5rem' } }}>Relatório de Auditoria</Typography>
         </Box>
         
-        <Stack direction="row" spacing={2} alignItems="center">
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }} sx={{ width: { xs: '100%', sm: 'auto' } }}>
             <ToggleButtonGroup
                 value={viewMode}
                 exclusive
@@ -600,14 +600,14 @@ export default function RelatorioAuditoriaPage() {
                 size="small"
                 sx={{ bgcolor: 'background.paper', border: '1px solid #ddd' }}
             >
-                <ToggleButton value="PADRAO" sx={{ px: 2, fontWeight: 'bold' }}>
-                    <LayoutList size={18} style={{ marginRight: 8 }}/> Detalhado
+                <ToggleButton value="PADRAO" sx={{ px: { xs: 1.5, md: 2 }, fontWeight: 'bold' }}>
+                    <LayoutList size={18} style={{ marginRight: 4 }}/> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>Detalhado</Box>
                 </ToggleButton>
-                <ToggleButton value="EXECUTIVO" sx={{ px: 2, fontWeight: 'bold' }}>
-                    <FileSpreadsheet size={18} style={{ marginRight: 8 }}/> Executivo
+                <ToggleButton value="EXECUTIVO" sx={{ px: { xs: 1.5, md: 2 }, fontWeight: 'bold' }}>
+                    <FileSpreadsheet size={18} style={{ marginRight: 4 }}/> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>Executivo</Box>
                 </ToggleButton>
-                <ToggleButton value="ANALITICO" sx={{ px: 2, fontWeight: 'bold' }}>
-                    <BarChart3 size={18} style={{ marginRight: 8 }}/> Painel GxP
+                <ToggleButton value="ANALITICO" sx={{ px: { xs: 1.5, md: 2 }, fontWeight: 'bold' }}>
+                    <BarChart3 size={18} style={{ marginRight: 4 }}/> <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>Painel GxP</Box>
                 </ToggleButton>
             </ToggleButtonGroup>
             <Button variant="contained" startIcon={<Printer />} onClick={() => window.print()} sx={{ borderRadius: 2 }}>Imprimir</Button>
@@ -615,20 +615,26 @@ export default function RelatorioAuditoriaPage() {
       </Box>
 
       {/* CABEÇALHO/CAPA DO RELATÓRIO (Visível em todos exceto gráfico as vezes) */}
-      <Paper elevation={0} sx={{ p: 4, mb: 4, border: '1px solid #ddd', borderRadius: 4, bgcolor: 'background.paper' }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <Paper elevation={0} sx={{ p: { xs: 2, md: 4 }, mb: { xs: 2, md: 4 }, border: '1px solid #ddd', borderRadius: { xs: 2, md: 4 }, bgcolor: 'background.paper' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-start' }, flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5 }}>
               <Box>
-                <Typography variant="h4" fontWeight="900" gutterBottom color="primary.main">
+                <Typography variant="h4" fontWeight="900" gutterBottom color="primary.main" sx={{ fontSize: { xs: '1.3rem', md: '2.125rem' } }}>
                     {auditoria.titulo || auditoria.checklist_modelos?.titulo}
                 </Typography>
-                <Typography variant="subtitle1" color="text.secondary" fontWeight="500">
+                <Typography variant="subtitle1" color="text.secondary" fontWeight="500" sx={{ fontSize: { xs: '0.85rem', md: '1rem' } }}>
                     Certificado de Inspeção Técnica • {auditoria.status}
                 </Typography>
               </Box>
               <Chip 
                   label={`${stats.pct}% Conformidade`} 
-                  color={stats.pct > 90 ? "success" : stats.pct > 70 ? "warning" : "error"} 
-                  sx={{ fontWeight: 'bold', px: 1 }}
+                  sx={{ 
+                    fontWeight: 'bold', 
+                    px: 1,
+                    bgcolor: stats.pct >= 90 ? '#1d4ed8' : stats.pct >= 75 ? '#15803d' : stats.pct >= 60 ? '#a16207' : '#ef4444',
+                    color: 'white',
+                    '& .MuiChip-label': { px: 1.5 },
+                    alignSelf: { xs: 'flex-start', sm: 'auto' }
+                  }}
               />
           </Box>
 

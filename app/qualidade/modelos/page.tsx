@@ -41,7 +41,7 @@ export default function ListaModelosPage() {
     setLoading(true);
     const { data, error } = await (supabase as any).from('checklist_modelos')
       .select('*')
-      .eq('cliente_id', activeClientId)
+      .or(`cliente_id.eq.${activeClientId},cliente_id.is.null`)
       .eq('ativo', true) // Filtro de Soft Delete
       .order('created_at', { ascending: false });
 

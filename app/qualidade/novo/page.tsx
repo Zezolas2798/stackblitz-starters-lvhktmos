@@ -35,7 +35,7 @@ export default function NovaAuditoriaPage() {
     setLoading(true);
     const { data } = await (supabase as any).from('checklist_modelos')
       .select('*')
-      .eq('cliente_id', activeClientId)
+      .or(`cliente_id.eq.${activeClientId},cliente_id.is.null`)
       .eq('ativo', true)
       .order('titulo');
       

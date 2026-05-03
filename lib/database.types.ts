@@ -1194,6 +1194,7 @@ export type Database = {
           cor: string | null
           created_at: string | null
           deleted_at: string | null
+          grupo_nome: string | null
           id: string
           modelo_id: string
           ordem: number | null
@@ -1203,6 +1204,7 @@ export type Database = {
           cor?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          grupo_nome?: string | null
           id?: string
           modelo_id: string
           ordem?: number | null
@@ -1212,6 +1214,7 @@ export type Database = {
           cor?: string | null
           created_at?: string | null
           deleted_at?: string | null
+          grupo_nome?: string | null
           id?: string
           modelo_id?: string
           ordem?: number | null

@@ -36,8 +36,14 @@ interface SecaoForm {
     itens: ItemForm[];
 }
 
+interface GrupoForm {
+    tempId: string;
+    nome: string;
+    secoes: SecaoForm[];
+}
+
 // ─── Constante: quantas seções renderizar por batch ───────────────────────────
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 10;
 
 // ─── Estilos estáticos (evita recriar objetos sx a cada render) ───────────────
 const ITEM_ROW_SX = {
@@ -75,16 +81,18 @@ const ColorPickerField = memo(function ColorPickerField({ color, onChange }: { c
 // ─── Item Individual (Memoizado com comparador custom) ────────────────────────
 const ItemRow = memo(({
     item,
+    gIdx,
     sIdx,
     iIdx,
     handleUpdateItem,
     handleRemoveItem,
 }: {
     item: ItemForm;
+    gIdx: number;
     sIdx: number;
     iIdx: number;
-    handleUpdateItem: (sIdx: number, iIdx: number, field: keyof ItemForm, value: any) => void;
-    handleRemoveItem: (sIdx: number, iIdx: number) => void;
+    handleUpdateItem: (gIdx: number, sIdx: number, iIdx: number, field: keyof ItemForm, value: any) => void;
+    handleRemoveItem: (gIdx: number, sIdx: number, iIdx: number) => void;
 }) => {
     const theme = useTheme();
     // Estado local para inputs de texto para não travar a UI ao digitar
@@ -96,27 +104,27 @@ const ItemRow = memo(({
 
     // Handlers locais estáveis — evitam criar closures novas no JSX
     const onTextoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => setLocalTexto(e.target.value), []);
-    const onTextoBlur = useCallback(() => handleUpdateItem(sIdx, iIdx, 'texto_pergunta', localTexto), [sIdx, iIdx, localTexto, handleUpdateItem]);
+    const onTextoBlur = useCallback(() => handleUpdateItem(gIdx, sIdx, iIdx, 'texto_pergunta', localTexto), [gIdx, sIdx, iIdx, localTexto, handleUpdateItem]);
     const onAjudaChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => setLocalAjuda(e.target.value), []);
-    const onAjudaBlur = useCallback(() => handleUpdateItem(sIdx, iIdx, 'ajuda_texto', localAjuda), [sIdx, iIdx, localAjuda, handleUpdateItem]);
+    const onAjudaBlur = useCallback(() => handleUpdateItem(gIdx, sIdx, iIdx, 'ajuda_texto', localAjuda), [gIdx, sIdx, iIdx, localAjuda, handleUpdateItem]);
 
     const onTipoChange = useCallback((e: any) => {
-        startTransition(() => handleUpdateItem(sIdx, iIdx, 'tipo_resposta', e.target.value));
-    }, [sIdx, iIdx, handleUpdateItem]);
+        startTransition(() => handleUpdateItem(gIdx, sIdx, iIdx, 'tipo_resposta', e.target.value));
+    }, [gIdx, sIdx, iIdx, handleUpdateItem]);
 
     const onClassChange = useCallback((e: any) => {
-        startTransition(() => handleUpdateItem(sIdx, iIdx, 'classificacao', e.target.value));
-    }, [sIdx, iIdx, handleUpdateItem]);
+        startTransition(() => handleUpdateItem(gIdx, sIdx, iIdx, 'classificacao', e.target.value));
+    }, [gIdx, sIdx, iIdx, handleUpdateItem]);
 
     const onObrigatorioChange = useCallback((e: any) => {
-        startTransition(() => handleUpdateItem(sIdx, iIdx, 'obrigatorio', e.target.checked));
-    }, [sIdx, iIdx, handleUpdateItem]);
+        startTransition(() => handleUpdateItem(gIdx, sIdx, iIdx, 'obrigatorio', e.target.checked));
+    }, [gIdx, sIdx, iIdx, handleUpdateItem]);
 
     const onFotoChange = useCallback((e: any) => {
-        startTransition(() => handleUpdateItem(sIdx, iIdx, 'requer_foto', e.target.checked));
-    }, [sIdx, iIdx, handleUpdateItem]);
+        startTransition(() => handleUpdateItem(gIdx, sIdx, iIdx, 'requer_foto', e.target.checked));
+    }, [gIdx, sIdx, iIdx, handleUpdateItem]);
 
-    const onRemove = useCallback(() => handleRemoveItem(sIdx, iIdx), [sIdx, iIdx, handleRemoveItem]);
+    const onRemove = useCallback(() => handleRemoveItem(gIdx, sIdx, iIdx), [gIdx, sIdx, iIdx, handleRemoveItem]);
 
     return (
         <Box sx={ITEM_ROW_SX}>
@@ -235,7 +243,7 @@ const ItemRow = memo(({
 }, (prev, next) => {
     // Comparador custom: compara campos individuais ao invés de referência do objeto
     // Isso evita re-render quando outra seção/item muda e cria novo array
-    return prev.sIdx === next.sIdx
+    return prev.gIdx === next.gIdx && prev.sIdx === next.sIdx
         && prev.iIdx === next.iIdx
         && prev.item.tempId === next.item.tempId
         && prev.item.texto_pergunta === next.item.texto_pergunta
@@ -251,6 +259,7 @@ const ItemRow = memo(({
 // ─── Seção do Checklist (Memoizada com comparador custom) ─────────────────────
 const SectionAccordion = memo(({
     secao,
+    gIdx,
     sIdx,
     defaultExpanded,
     handleUpdateSecao,
@@ -260,26 +269,30 @@ const SectionAccordion = memo(({
     handleRemoveItem,
 }: {
     secao: SecaoForm;
+    gIdx: number;
     sIdx: number;
     defaultExpanded: boolean;
-    handleUpdateSecao: (index: number, field: string, value: string) => void;
-    handleRemoveSecao: (index: number) => void;
-    handleAddItem: (secaoIndex: number) => void;
-    handleUpdateItem: (secaoIndex: number, itemIndex: number, field: keyof ItemForm, value: any) => void;
-    handleRemoveItem: (secaoIndex: number, itemIndex: number) => void;
+    handleUpdateSecao: (gIdx: number, sIdx: number, field: string, value: string) => void;
+    handleRemoveSecao: (gIdx: number, sIdx: number) => void;
+    handleAddItem: (gIdx: number, sIdx: number) => void;
+    handleUpdateItem: (gIdx: number, sIdx: number, itemIndex: number, field: keyof ItemForm, value: any) => void;
+    handleRemoveItem: (gIdx: number, sIdx: number, itemIndex: number) => void;
 }) => {
     const theme = useTheme();
-    // Estado local para o título — evita re-render do pai ao digitar
     const [localTitulo, setLocalTitulo] = useState(secao.titulo);
+    
     useEffect(() => { setLocalTitulo(secao.titulo); }, [secao.titulo]);
+    
 
     const onTituloChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => setLocalTitulo(e.target.value), []);
-    const onTituloBlur = useCallback(() => handleUpdateSecao(sIdx, 'titulo', localTitulo), [sIdx, localTitulo, handleUpdateSecao]);
-    const onCorChange = useCallback((newColor: string) => handleUpdateSecao(sIdx, 'cor', newColor), [sIdx, handleUpdateSecao]);
-    const onRemove = useCallback(() => handleRemoveSecao(sIdx), [sIdx, handleRemoveSecao]);
+    const onTituloBlur = useCallback(() => handleUpdateSecao(gIdx, sIdx, 'titulo', localTitulo), [gIdx, sIdx, localTitulo, handleUpdateSecao]);
+    
+    
+    const onCorChange = useCallback((newColor: string) => handleUpdateSecao(gIdx, sIdx, 'cor', newColor), [gIdx, sIdx, handleUpdateSecao]);
+    const onRemove = useCallback(() => handleRemoveSecao(gIdx, sIdx), [gIdx, sIdx, handleRemoveSecao]);
     const onAddItem = useCallback(() => {
-        startTransition(() => handleAddItem(sIdx));
-    }, [sIdx, handleAddItem]);
+        startTransition(() => handleAddItem(gIdx, sIdx));
+    }, [gIdx, sIdx, handleAddItem]);
 
     // Memoiza o estilo do summary para evitar recriar a cada render
     const summarySx = useMemo(() => ({
@@ -304,15 +317,18 @@ const SectionAccordion = memo(({
             <AccordionSummary expandIcon={<ChevronDown />} sx={summarySx}>
                 <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 2 }} onClick={e => e.stopPropagation()}>
                     <GripVertical size={20} color="#999" style={{ cursor: 'move' }} />
-                    <TextField
-                        placeholder="Nome da Seção (Ex: Geladeiras...)" variant="standard" fullWidth
-                        value={localTitulo}
-                        onChange={onTituloChange}
-                        onBlur={onTituloBlur}
-                        sx={{ '& .MuiInput-underline:before': { borderBottom: 'none' } }}
-                        InputProps={{ style: { fontWeight: 'bold', fontSize: '1.1rem', color: theme.palette.primary.dark } }}
-                        onClick={e => e.stopPropagation()}
-                    />
+                    <Box sx={{ flexGrow: 1 }}>
+
+                        <TextField
+                            placeholder="Nome da Seção (Nível 2)" variant="standard" fullWidth
+                            value={localTitulo}
+                            onChange={onTituloChange}
+                            onBlur={onTituloBlur}
+                            sx={{ '& .MuiInput-underline:before': { borderBottom: 'none' } }}
+                            InputProps={{ style: { fontWeight: 'bold', fontSize: '1.1rem', color: theme.palette.primary.dark } }}
+                            onClick={e => e.stopPropagation()}
+                        />
+                    </Box>
                     <Chip
                         label={`${secao.itens.length} ${secao.itens.length === 1 ? 'item' : 'itens'}`}
                         size="small"
@@ -348,6 +364,7 @@ const SectionAccordion = memo(({
                         <ItemRow
                             key={item.tempId}
                             item={item}
+                            gIdx={gIdx}
                             sIdx={sIdx}
                             iIdx={iIdx}
                             handleUpdateItem={handleUpdateItem}
@@ -368,7 +385,7 @@ const SectionAccordion = memo(({
 }, (prev, next) => {
     // Comparador custom: verifica apenas os dados que realmente importam
     // Isso impede que seções não-modificadas re-renderizem
-    return prev.sIdx === next.sIdx
+    return prev.gIdx === next.gIdx && prev.sIdx === next.sIdx
         && prev.defaultExpanded === next.defaultExpanded
         && prev.secao.tempId === next.secao.tempId
         && prev.secao.titulo === next.secao.titulo
@@ -497,7 +514,7 @@ function EditorModeloChecklistContent() {
     const [descricao, setDescricao] = useState('');
     const [frequencia, setFrequencia] = useState('DIARIO');
     const [categoria, setCategoria] = useState('AUDITORIA');
-    const [secoes, setSecoes] = useState<SecaoForm[]>([]);
+    const [grupos, setGrupos] = useState<GrupoForm[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -508,8 +525,8 @@ function EditorModeloChecklistContent() {
     const cancelRef = useRef(false);
 
     // Ref para acessar secoes no save sem depender do state (evita re-renders)
-    const secoesRef = useRef(secoes);
-    secoesRef.current = secoes;
+    const gruposRef = useRef(grupos);
+    gruposRef.current = grupos;
     const nomeRef = useRef(nome);
     nomeRef.current = nome;
     const descricaoRef = useRef(descricao);
@@ -519,6 +536,10 @@ function EditorModeloChecklistContent() {
     const categoriaRef = useRef(categoria);
     categoriaRef.current = categoria;
 
+    const totalItens = useMemo(() => {
+        return grupos.reduce((acc, g) => acc + g.secoes.reduce((accS, s) => accS + s.itens.length, 0), 0);
+    }, [grupos]);
+
     // Carrega dados se for edição
     useEffect(() => {
         cancelRef.current = false;
@@ -526,39 +547,44 @@ function EditorModeloChecklistContent() {
         if (editingId && activeClientId) {
             loadModeloCompleto(editingId);
         } else {
-            setSecoes(prev => prev.length > 0 ? prev : [{
-                tempId: `new_sec_${Date.now()}`,
-                titulo: '',
-                cor: '#1976d2',
-                itens: []
+            setGrupos(prev => prev.length > 0 ? prev : [{
+                tempId: `new_grp_${Date.now()}`,
+                nome: '',
+                secoes: []
             }]);
         }
 
         return () => { cancelRef.current = true; };
     }, [editingId, activeClientId]);
 
+    
+
+    
+
+    
     // Progressive rendering: carrega seções em batches para não travar a UI
+    const totalSecoes = useMemo(() => grupos.flatMap(g => g.secoes).length, [grupos]);
+
     useEffect(() => {
-        if (visibleCount >= secoes.length) return;
+        if (visibleCount >= totalSecoes) return;
 
         const handle = requestAnimationFrame(() => {
             setTimeout(() => {
-                setVisibleCount(prev => Math.min(prev + BATCH_SIZE, secoes.length));
+                setVisibleCount(prev => Math.min(prev + BATCH_SIZE, totalSecoes));
             }, 50);
         });
 
         return () => cancelAnimationFrame(handle);
-    }, [visibleCount, secoes.length]);
+    }, [visibleCount, totalSecoes]);
 
     // Reset do visibleCount quando as seções mudam drasticamente (ex: load)
     const prevSecoesLengthRef = useRef(0);
     useEffect(() => {
-        if (secoes.length > prevSecoesLengthRef.current + BATCH_SIZE) {
+        if (totalSecoes > prevSecoesLengthRef.current + BATCH_SIZE) {
             setVisibleCount(BATCH_SIZE);
         }
-        prevSecoesLengthRef.current = secoes.length;
-    }, [secoes.length]);
-
+        prevSecoesLengthRef.current = totalSecoes;
+    }, [totalSecoes]);
     async function loadModeloCompleto(id: string) {
         if (cancelRef.current) return;
         setLoading(true);
@@ -583,25 +609,37 @@ function EditorModeloChecklistContent() {
 
             if (cancelRef.current) return;
 
-            if (secoesData) {
-                setSecoes(secoesData.map((s: any) => ({
-                    id: s.id,
-                    tempId: s.id,
-                    titulo: s.titulo,
-                    cor: s.cor || '#1976d2',
-                    itens: (s.checklist_itens || [])
-                        .sort((a: any, b: any) => a.ordem - b.ordem)
-                        .map((i: any) => ({
-                            id: i.id,
-                            tempId: i.id,
-                            texto_pergunta: i.texto_pergunta,
-                            tipo_resposta: i.tipo_resposta,
-                            obrigatorio: i.obrigatorio,
-                            requer_foto: i.requer_foto || false,
-                            ajuda_texto: i.ajuda_texto || '',
-                            classificacao: i.classificacao || 'NECESSARIO'
-                        }))
-                })));
+            if (secoesData && secoesData.length > 0) {
+                const mapGrupos = new Map<string, GrupoForm>();
+                secoesData.forEach((s: any) => {
+                    const nomeGrupo = s.grupo_nome || '';
+                    if (!mapGrupos.has(nomeGrupo)) {
+                        mapGrupos.set(nomeGrupo, {
+                            tempId: `grp_${Date.now()}_${Math.random()}`,
+                            nome: nomeGrupo,
+                            secoes: []
+                        });
+                    }
+                    mapGrupos.get(nomeGrupo)!.secoes.push({
+                        id: s.id,
+                        tempId: s.id,
+                        titulo: s.titulo,
+                        cor: s.cor || '#1976d2',
+                        itens: (s.checklist_itens || [])
+                            .sort((a: any, b: any) => a.ordem - b.ordem)
+                            .map((i: any) => ({
+                                id: i.id,
+                                tempId: i.id,
+                                texto_pergunta: i.texto_pergunta,
+                                tipo_resposta: i.tipo_resposta,
+                                obrigatorio: i.obrigatorio,
+                                requer_foto: i.requer_foto || false,
+                                ajuda_texto: i.ajuda_texto || '',
+                                classificacao: i.classificacao || 'NECESSARIO'
+                            }))
+                    });
+                });
+                setGrupos(Array.from(mapGrupos.values()));
             }
         } catch (err) {
             if (!cancelRef.current) console.error('Erro ao carregar modelo:', err);
@@ -611,94 +649,99 @@ function EditorModeloChecklistContent() {
     }
 
     // ─── Handlers memoizados com startTransition para ações não-urgentes ──────
-    const handleAddSecao = useCallback(() => {
+    
+    const handleAddGrupo = useCallback(() => {
         startTransition(() => {
-            setSecoes(prev => [...prev, {
-                tempId: `new_sec_${Date.now()}`,
-                titulo: '',
-                cor: '#1976d2',
-                itens: []
-            }]);
+            setGrupos(prev => [...prev, { tempId: `new_grp_${Date.now()}`, nome: '', secoes: [] }]);
         });
-        setVisibleCount(prev => prev + 1);
     }, []);
 
-    const handleRemoveSecao = useCallback((index: number) => {
+    const handleRemoveGrupo = useCallback((gIdx: number) => {
+        if (!confirm('Remover este grupo apagará todas as seções e perguntas dentro dele. Continuar?')) return;
+        startTransition(() => {
+            setGrupos(prev => { const novas = [...prev]; novas.splice(gIdx, 1); return novas; });
+        });
+    }, []);
+
+    const handleUpdateGrupo = useCallback((gIdx: number, nome: string) => {
+        setGrupos(prev => {
+            const novas = [...prev];
+            novas[gIdx] = { ...novas[gIdx], nome };
+            return novas;
+        });
+    }, []);
+
+    const handleAddSecao = useCallback((gIdx: number) => {
+        startTransition(() => {
+            setGrupos(prev => {
+                const novas = [...prev];
+                novas[gIdx].secoes.push({
+                    tempId: `new_sec_${Date.now()}`,
+                    titulo: '',
+                    cor: '#1976d2',
+                    itens: []
+                });
+                return novas;
+            });
+        });
+    }, []);
+
+    const handleRemoveSecao = useCallback((gIdx: number, sIdx: number) => {
         if (!confirm('Remover esta seção apagará todas as perguntas dentro dela. Continuar?')) return;
         startTransition(() => {
-            setSecoes(prev => {
+            setGrupos(prev => {
                 const novas = [...prev];
-                novas.splice(index, 1);
+                novas[gIdx].secoes.splice(sIdx, 1);
                 return novas;
             });
         });
     }, []);
 
-    const handleUpdateSecao = useCallback((index: number, field: string, value: string) => {
-        startTransition(() => {
-            setSecoes(prev => {
-                const novas = [...prev];
-                novas[index] = { ...novas[index], [field]: value };
-                return novas;
-            });
+    const handleUpdateSecao = useCallback((gIdx: number, sIdx: number, field: string, value: string) => {
+        setGrupos(prev => {
+            const novas = [...prev];
+            novas[gIdx].secoes[sIdx] = { ...novas[gIdx].secoes[sIdx], [field]: value };
+            return novas;
         });
     }, []);
 
-    const handleAddItem = useCallback((secaoIndex: number) => {
-        startTransition(() => {
-            setSecoes(prev => {
-                const novas = [...prev];
-                novas[secaoIndex] = {
-                    ...novas[secaoIndex],
-                    itens: [...novas[secaoIndex].itens, {
-                        tempId: `new_item_${Date.now()}_${Math.random()}`,
-                        texto_pergunta: '',
-                        tipo_resposta: 'CONFORME_NAOCONFORME',
-                        obrigatorio: true,
-                        requer_foto: false,
-                        ajuda_texto: '',
-                        classificacao: 'NECESSARIO'
-                    }]
-                };
-                return novas;
+    const handleAddItem = useCallback((gIdx: number, sIdx: number) => {
+        setGrupos(prev => {
+            const novas = [...prev];
+            novas[gIdx].secoes[sIdx].itens.push({
+                tempId: `new_item_${Date.now()}`,
+                texto_pergunta: '',
+                tipo_resposta: 'CONFORME_NAOCONFORME',
+                obrigatorio: true,
+                requer_foto: false,
+                ajuda_texto: '',
+                classificacao: 'NECESSARIO'
             });
+            return novas;
         });
     }, []);
 
-    const handleRemoveItem = useCallback((secaoIndex: number, itemIndex: number) => {
-        startTransition(() => {
-            setSecoes(prev => {
-                const novas = [...prev];
-                const novosItens = [...novas[secaoIndex].itens];
-                novosItens.splice(itemIndex, 1);
-                novas[secaoIndex] = { ...novas[secaoIndex], itens: novosItens };
-                return novas;
-            });
+    const handleUpdateItem = useCallback((gIdx: number, sIdx: number, iIdx: number, field: keyof ItemForm, value: any) => {
+        setGrupos(prev => {
+            const novas = [...prev];
+            novas[gIdx].secoes[sIdx].itens[iIdx] = { ...novas[gIdx].secoes[sIdx].itens[iIdx], [field]: value };
+            return novas;
         });
     }, []);
 
-    const handleUpdateItem = useCallback((secaoIndex: number, itemIndex: number, field: keyof ItemForm, value: any) => {
-        startTransition(() => {
-            setSecoes(prev => {
-                const novas = [...prev];
-                const novosItens = [...novas[secaoIndex].itens];
-                novosItens[itemIndex] = { ...novosItens[itemIndex], [field]: value };
-                novas[secaoIndex] = { ...novas[secaoIndex], itens: novosItens };
-                return novas;
-            });
+    const handleRemoveItem = useCallback((gIdx: number, sIdx: number, iIdx: number) => {
+        setGrupos(prev => {
+            const novas = [...prev];
+            novas[gIdx].secoes[sIdx].itens.splice(iIdx, 1);
+            return novas;
         });
     }, []);
-
-    // Contadores derivados (memoizados)
-    const totalItens = useMemo(() => secoes.reduce((acc, s) => acc + s.itens.length, 0), [secoes]);
-
-    // ─── Salvar ───────────────────────────────────────────────────────────────
-    const handleSave = useCallback(async () => {
+const handleSave = useCallback(async () => {
         const currentNome = nomeRef.current;
         const currentDescricao = descricaoRef.current;
         const currentFrequencia = frequenciaRef.current;
         const currentCategoria = categoriaRef.current;
-        const currentSecoes = secoesRef.current;
+        const currentSecoes = gruposRef.current.flatMap(g => g.secoes.map(s => ({...s, grupo_nome: g.nome})));
 
         if (!currentNome.trim()) return alert('O modelo precisa de um nome.');
         if (currentSecoes.length === 0) return alert('Adicione pelo menos uma seção.');
@@ -800,6 +843,7 @@ function EditorModeloChecklistContent() {
                     const secaoPayload = {
                         modelo_id: modeloId,
                         titulo: secao.titulo,
+                        grupo_nome: secao.grupo_nome,
                         cor: secao.cor,
                         ordem: i
                     };
@@ -872,12 +916,15 @@ function EditorModeloChecklistContent() {
 
     if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', mt: 10 }}><CircularProgress /></Box>;
 
-    // Para modelos grandes (edição com 3+ seções), começam colapsadas
-    const isLargeModel = !!(editingId && secoes.length >= 3);
 
-    // Seções visíveis para progressive rendering
-    const secoesVisiveis = secoes.slice(0, visibleCount);
-    const hasMoreToLoad = visibleCount < secoes.length;
+
+    
+    // Para modelos grandes (edição com 3+ seções), começam colapsadas
+    const isLargeModel = !!(editingId && totalSecoes >= 3);
+    
+    // Controle de seções renderizadas para performance
+    let renderedSecoes = 0;
+    const hasMoreToLoad = visibleCount < totalSecoes;
 
     return (
         <Container maxWidth="md" sx={{ mt: 4, mb: 12 }}>
@@ -891,7 +938,7 @@ function EditorModeloChecklistContent() {
                     </Typography>
                     {editingId && (
                         <Typography variant="body2" color="text.secondary">
-                            {secoes.length} seções • {totalItens} itens
+                            {grupos.flatMap(g => g.secoes).length} seções â€¢ {totalItens} itens
                         </Typography>
                     )}
                 </Box>
@@ -903,57 +950,85 @@ function EditorModeloChecklistContent() {
                 descricao={descricao} setDescricao={setDescricao}
                 frequencia={frequencia} setFrequencia={setFrequencia}
                 categoria={categoria} setCategoria={setCategoria}
-                totalSecoes={secoes.length} totalItens={totalItens}
+                totalSecoes={grupos.flatMap(g => g.secoes).length} totalItens={totalItens}
             />
 
-            {/* CONSTRUTOR DE SEÇÕES */}
-            <Box sx={{ mb: 4 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h5" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Grip size={24} /> Estrutura
+            {/* 2. ÁREA DE GRUPOS, SEÇÕES E PERGUNTAS */}
+            <Box sx={{ mt: 4, mb: 12 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                    <Typography variant="h5" fontWeight="bold" color="primary.dark">
+                        Estrutura do Diagnóstico
                     </Typography>
-                    <Button variant="contained" color="primary" startIcon={<Plus />} onClick={handleAddSecao}>
-                        Nova Seção (Categoria)
+                    <Button variant="contained" startIcon={<Plus />} onClick={handleAddGrupo} sx={{ borderRadius: 8 }}>
+                        Adicionar Nível 1 (Grupo)
                     </Button>
                 </Box>
 
-                {/* Dica para modelos grandes */}
-                {isLargeModel && (
-                    <Alert severity="info" sx={{ mb: 2 }} icon={false}>
-                        <Typography variant="caption">
-                            💡 As seções estão colapsadas para carregamento rápido. Clique em cada seção para expandir e editar.
-                        </Typography>
-                    </Alert>
-                )}
+                <Stack spacing={4}>
+                    {grupos.map((grupo, gIdx) => (
+                        <Paper key={grupo.tempId} elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'primary.light', borderRadius: 3, bgcolor: alpha('#1976d2', 0.02) }}>
+                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 3 }}>
+                                <GripVertical size={24} color="#999" />
+                                <TextField
+                                    placeholder="Nome do Grupo (Nível 1 - Ex: Edificações)"
+                                    variant="standard"
+                                    fullWidth
+                                    value={grupo.nome}
+                                    onChange={e => handleUpdateGrupo(gIdx, e.target.value)}
+                                    InputProps={{ style: { fontSize: '1.4rem', fontWeight: 'bold', color: '#1976d2' } }}
+                                />
+                                <IconButton color="error" onClick={() => handleRemoveGrupo(gIdx)}>
+                                    <Trash2 size={20} />
+                                </IconButton>
+                            </Box>
 
-                {secoesVisiveis.map((secao, sIdx) => (
-                    <SectionAccordion
-                        key={secao.tempId}
-                        secao={secao}
-                        sIdx={sIdx}
-                        defaultExpanded={!isLargeModel}
-                        handleUpdateSecao={handleUpdateSecao}
-                        handleRemoveSecao={handleRemoveSecao}
-                        handleAddItem={handleAddItem}
-                        handleUpdateItem={handleUpdateItem}
-                        handleRemoveItem={handleRemoveItem}
-                    />
-                ))}
+                            <Stack spacing={2} sx={{ pl: 4, borderLeft: '2px dashed', borderColor: 'primary.light' }}>
+                                {grupo.secoes.map((secao, sIdx) => {
+                                    renderedSecoes++;
+                                    if (renderedSecoes > visibleCount) return null;
+                                    
+                                    return (
+                                        <SectionAccordion
+                                            key={secao.tempId}
+                                            secao={secao}
+                                            gIdx={gIdx}
+                                            sIdx={sIdx}
+                                            defaultExpanded={!isLargeModel}
+                                            handleUpdateSecao={handleUpdateSecao}
+                                            handleRemoveSecao={handleRemoveSecao}
+                                            handleAddItem={handleAddItem}
+                                            handleUpdateItem={handleUpdateItem}
+                                            handleRemoveItem={handleRemoveItem}
+                                        />
+                                    );
+                                })}
 
-                {/* Progressive loading indicator */}
-                {hasMoreToLoad && (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 3, gap: 2, alignItems: 'center' }}>
-                        <CircularProgress size={20} />
-                        <Typography variant="body2" color="text.secondary">
-                            Carregando seções... ({visibleCount} de {secoes.length})
-                        </Typography>
-                    </Box>
-                )}
+                                <Button
+                                    variant="outlined"
+                                    startIcon={<Plus />}
+                                    onClick={() => handleAddSecao(gIdx)}
+                                    sx={{ alignSelf: 'flex-start', mt: 2, borderStyle: 'dashed' }}
+                                >
+                                    Adicionar Nível 2 (Seção) neste Grupo
+                                </Button>
+                            </Stack>
+                        </Paper>
+                    ))}
 
-                {secoes.length === 0 && <Alert severity="info" sx={{ mt: 2 }}>Comece criando categorias para organizar suas perguntas.</Alert>}
+                    {grupos.length === 0 && <Alert severity="info">Clique no botão acima para começar a estruturar seu diagnóstico.</Alert>}
+                    
+                    {/* Progressive loading indicator */}
+                    {hasMoreToLoad && (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3, gap: 2, alignItems: 'center' }}>
+                            <CircularProgress size={20} />
+                            <Typography variant="body2" color="text.secondary">
+                                Carregando estrutura... ({visibleCount} de {totalSecoes})
+                            </Typography>
+                        </Box>
+                    )}
+                </Stack>
             </Box>
-
-            {/* FOOTER ACTIONS */}
+{/* FOOTER ACTIONS */}
             <Paper elevation={4} sx={{ position: 'fixed', bottom: 0, left: { md: 280, xs: 0 }, right: 0, p: 2, bgcolor: 'background.paper', borderTop: '1px solid #ddd', display: 'flex', justifyContent: 'flex-end', gap: 2, zIndex: 1000 }}>
                 <Button variant="text" onClick={() => router.back()}>Cancelar</Button>
                 <Button variant="contained" size="large" startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <Save />} onClick={handleSave} disabled={saving} sx={{ px: 4, fontWeight: 'bold' }}>

@@ -51,21 +51,21 @@ export default function ConsultoriaHubPage() {
   }, [activeClientId]);
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
+    <Container maxWidth="lg" sx={{ mt: { xs: 2, md: 4 }, mb: { xs: 4, md: 8 }, px: { xs: 1.5, md: 3 } }}>
       
       {/* HEADER HERO */}
-      <Box sx={{ mb: 6 }}>
-        <Typography variant="h4" fontWeight="800" sx={{ color: 'text.primary', letterSpacing: '-0.02em', mb: 1 }}>
+      <Box sx={{ mb: { xs: 3, md: 6 } }}>
+        <Typography variant="h4" fontWeight="800" sx={{ color: 'text.primary', letterSpacing: '-0.02em', mb: 1, fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
           Central de Consultoria
         </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 700 }}>
+        <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 700, fontSize: { xs: '0.85rem', md: '1rem' } }}>
           Inteligência em Segurança dos Alimentos. Monitore o desempenho das unidades, gerencie a curadoria de dados e garanta a conformidade técnica.
         </Typography>
       </Box>
 
       {/* DASHBOARD RÁPIDO */}
-      <Grid container spacing={3} sx={{ mb: 6 }}>
-        <Grid item xs={12} md={4}>
+      <Grid container spacing={{ xs: 2, md: 3 }} sx={{ mb: { xs: 3, md: 6 } }}>
+        <Grid item xs={12} sm={6} md={4}>
            <Paper sx={{ p: 3, bgcolor: alpha(theme.palette.info.main, 0.05), border: '1px solid', borderColor: 'info.light', borderRadius: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
                  <Avatar sx={{ bgcolor: 'info.main', width: 32, height: 32 }}><Database size={18} /></Avatar>
@@ -77,7 +77,7 @@ export default function ConsultoriaHubPage() {
               <Typography variant="caption" color="text.secondary">Insumos com cadastro incompleto</Typography>
            </Paper>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} sm={6} md={4}>
            <Paper sx={{ p: 3, bgcolor: alpha(theme.palette.error.main, 0.05), border: '1px solid', borderColor: 'error.light', borderRadius: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
                  <Avatar sx={{ bgcolor: 'error.main', width: 32, height: 32 }}><AlertTriangle size={18} /></Avatar>
@@ -93,7 +93,7 @@ export default function ConsultoriaHubPage() {
         <ShieldCheck className="text-blue-600" /> Ferramentas de Análise e Gestão
       </Typography>
 
-      <Grid container spacing={4}>
+      <Grid container spacing={{ xs: 2, md: 4 }}>
         
         {/* CARD 1: CURADORIA DE INSUMOS */}
         <Grid item xs={12} md={4}>
@@ -173,7 +173,7 @@ export default function ConsultoriaHubPage() {
       </Grid>
 
       {/* OUTRAS FERRAMENTAS */}
-      <Box sx={{ mt: 8 }}>
+      <Box sx={{ mt: { xs: 4, md: 8 } }}>
         <Typography variant="subtitle2" fontWeight="bold" color="text.secondary" sx={{ mb: 2, textTransform: 'uppercase' }}>
           Configurações Técnicas
         </Typography>

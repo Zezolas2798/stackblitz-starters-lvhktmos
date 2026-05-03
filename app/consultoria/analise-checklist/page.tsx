@@ -389,14 +389,14 @@ export default function AnaliseChecklistPage() {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 10 }}>
+    <Container maxWidth="xl" sx={{ mt: { xs: 2, md: 4 }, mb: 10, px: { xs: 1.5, md: 3 } }}>
       {/* HEADER */}
-      <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Box sx={{ mb: { xs: 2, md: 4 }, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box>
             <Link href="/consultoria" passHref style={{ textDecoration: 'none' }}>
                 <Button startIcon={<ChevronLeft size={18}/>} sx={{ mb: 1, color: 'text.secondary' }}>Voltar ao Hub</Button>
             </Link>
-            <Typography variant="h4" fontWeight="800" sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h4" fontWeight="800" sx={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: { xs: '1.3rem', md: '2.125rem' } }}>
                 <BarChart3 size={32} color={theme.palette.info.main} /> Dashboards de Qualidade
             </Typography>
         </Box>
@@ -406,9 +406,9 @@ export default function AnaliseChecklistPage() {
       </Box>
 
       {/* FILTROS */}
-      <Paper sx={{ p: 3, mb: 4, borderRadius: 3 }}>
-        <Grid container spacing={3} alignItems="flex-end">
-          <Grid item xs={12} md={4}>
+      <Paper sx={{ p: { xs: 2, md: 3 }, mb: { xs: 2, md: 4 }, borderRadius: 3 }}>
+        <Grid container spacing={{ xs: 1.5, md: 3 }} alignItems="flex-end">
+          <Grid item xs={12} sm={6} md={4}>
             <FormControl fullWidth size="small">
               <InputLabel>Modelo de Checklist</InputLabel>
               <Select
@@ -423,7 +423,7 @@ export default function AnaliseChecklistPage() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid item xs={6} sm={3} md={3}>
             <TextField
               fullWidth
               size="small"
@@ -434,7 +434,7 @@ export default function AnaliseChecklistPage() {
               onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
             />
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid item xs={6} sm={3} md={3}>
             <TextField
               fullWidth
               size="small"
@@ -445,33 +445,33 @@ export default function AnaliseChecklistPage() {
               onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
             />
           </Grid>
-          <Grid item xs={12} md={2}>
+          <Grid item xs={12} sm={6} md={2}>
             <Button fullWidth variant="contained" startIcon={<Filter size={18}/>}>Aplicar</Button>
           </Grid>
         </Grid>
       </Paper>
 
       {/* KPIS */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={3}>
+      <Grid container spacing={{ xs: 2, md: 3 }} sx={{ mb: { xs: 2, md: 4 } }}>
+        <Grid item xs={6} md={3}>
           <Paper sx={{ p: 4, textAlign: 'center', border: '1px solid #eee', borderRadius: 4 }}>
             <Typography variant="overline" color="text.secondary" fontWeight="700">Média de Conformidade</Typography>
             <Typography variant="h3" fontWeight="900" color="primary.main">{stats.total > 0 ? stats.avg + '%' : '--'}</Typography>
           </Paper>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid item xs={6} md={3}>
           <Paper sx={{ p: 4, textAlign: 'center', border: '1px solid #eee', borderRadius: 4 }}>
             <Typography variant="overline" color="text.secondary" fontWeight="700">Auditorias Realizadas</Typography>
             <Typography variant="h3" fontWeight="900">{stats.total}</Typography>
           </Paper>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid item xs={6} md={3}>
           <Paper sx={{ p: 4, textAlign: 'center', border: '1px solid #eee', bgcolor: alpha(theme.palette.success.main, 0.02), borderRadius: 4 }}>
             <Typography variant="overline" color="success.main" fontWeight="700">Melhor Resultado</Typography>
             <Typography variant="h3" fontWeight="900" color="success.main">{stats.total > 0 ? stats.max + '%' : '--'}</Typography>
           </Paper>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid item xs={6} md={3}>
           <Paper sx={{ p: 4, textAlign: 'center', border: '1px solid #eee', bgcolor: alpha(theme.palette.error.main, 0.02), borderRadius: 4 }}>
             <Typography variant="overline" color="error.main" fontWeight="700">Pior Resultado</Typography>
             <Typography variant="h3" fontWeight="900" color="error.main">{stats.total > 0 ? stats.min + '%' : '--'}</Typography>
@@ -482,8 +482,8 @@ export default function AnaliseChecklistPage() {
       <Grid container spacing={4}>
         {/* GRÁFICO DE TENDÊNCIA */}
         <Grid item xs={12}>
-            <Paper sx={{ p: 4, borderRadius: 4 }}>
-                <Typography variant="h6" fontWeight="bold" sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Paper sx={{ p: { xs: 2, md: 4 }, borderRadius: 4 }}>
+                <Typography variant="h6" fontWeight="bold" sx={{ mb: { xs: 2, md: 4 }, display: 'flex', alignItems: 'center', gap: 1, fontSize: { xs: '0.95rem', md: '1.25rem' } }}>
                     <TrendingUp size={20} color={theme.palette.primary.main} /> Evolução Detalhada da Conformidade
                 </Typography>
                 {loading ? (
@@ -491,7 +491,7 @@ export default function AnaliseChecklistPage() {
                 ) : data.length === 0 ? (
                 <Alert severity="info" variant="outlined">Nenhuma auditoria encontrada para os filtros selecionados.</Alert>
                 ) : (
-                <Box sx={{ height: 450 }}>
+                <Box sx={{ height: { xs: 300, md: 450 } }}>
                 <ChartDefinitions />
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={data} margin={{ top: 30, right: 30, left: 0, bottom: 40 }}>
@@ -548,8 +548,8 @@ export default function AnaliseChecklistPage() {
 
         {/* MATRIZ DE CONFORMIDADE (HEATMAP) */}
         <Grid item xs={12}>
-            <Paper sx={{ p: 4, borderRadius: 4 }}>
-                <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Paper sx={{ p: { xs: 2, md: 4 }, borderRadius: 4 }}>
+                <Box sx={{ mb: { xs: 2, md: 4 }, display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
                     <Typography variant="h6" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <TableIcon size={20} color={theme.palette.secondary.main} /> Matriz de Evolução por Seção (Heatmap)
                     </Typography>
@@ -563,8 +563,8 @@ export default function AnaliseChecklistPage() {
                 ) : heatmapData.rows.length === 0 ? (
                     <Alert severity="info" variant="outlined">Dados insuficientes para gerar a matriz.</Alert>
                 ) : (
-                    <TableContainer sx={{ border: '1px solid #eee', borderRadius: 2 }}>
-                        <Table size="small">
+                    <TableContainer sx={{ border: '1px solid #eee', borderRadius: 2, overflowX: 'auto' }}>
+                        <Table size="small" sx={{ minWidth: 500 }}>
                             <TableHead>
                                 <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
                                     <TableCell sx={{ fontWeight: 'bold', minWidth: 250, py: 2, color: theme.palette.primary.main }}>Seção do Checklist</TableCell>

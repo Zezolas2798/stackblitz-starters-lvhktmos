@@ -163,7 +163,7 @@ export default function ExecucaoChecklistPage() {
             setAcoesPendentes(acoesPendentesData);
         }
 
-        setAssinaturaUrl((auditData as any).assinatura_auditor_url || null);
+        setAssinaturaUrl((auditData as any).assinatura_eletronica_hash || null);
 
         // 4. Perfil do Usuário
         const { data: { user } } = await supabase.auth.getUser();
@@ -361,13 +361,24 @@ export default function ExecucaoChecklistPage() {
                 return;
             }
 
-            await supabase.from('checklist_execucoes').update({
+            const { data: updateData, error: updateError } = await supabase.from('checklist_execucoes').update({
                 status: finalizar ? 'CONCLUIDO' : auditoria.status,
                 data_fim: finalizar ? getNowISO() : auditoria.data_fim,
-                assinatura_auditor_url: assinaturaUrl
-            }).eq('id', auditId);
+                assinatura_eletronica_hash: assinaturaUrl
+            }).eq('id', auditId).select();
+            
+            if (updateError) {
+                console.error("Erro no update da auditoria:", updateError);
+                throw new Error('Falha ao atualizar o status da auditoria. Verifique sua conexão e permissões.');
+            }
+
+            if (finalizar && (!updateData || updateData.length === 0)) {
+                console.error("Auditoria não encontrada ou sem permissão de atualização.", updateData);
+                throw new Error('Não foi possível finalizar a auditoria. Nenhuma linha foi alterada. Verifique se você tem permissão de edição (RLS).');
+            }
             
             alert('Auditoria finalizada com sucesso!');
+            router.refresh();
             router.push('/qualidade'); 
         } else {
             // Recarrega para pegar os IDs que acabaram de ser gerados pelo banco
@@ -542,19 +553,35 @@ export default function ExecucaoChecklistPage() {
         </Box>
       </Paper>
 
-      {/* LISTA DE ITENS POR SEÇÃO (ACCORDIONS) */}
-      <Stack spacing={2}>
-        {secoes.map((secao) => {
-          const totalItems = secao.checklist_itens?.length || 0;
-          const answeredItems = secao.checklist_itens?.filter((item: any) => {
-            const r = respostas[item.id];
-            return r && (r.valor || r.nao_se_aplica);
-          }).length || 0;
-          const isCompleted = totalItems > 0 && answeredItems === totalItems;
+      {/* LISTA DE ITENS POR SEÇÃO (ACCORDIONS) AGRUPADOS POR GRUPO (Nível 1) */}
+      <Stack spacing={3}>
+        {(() => {
+          const grupos: Record<string, any[]> = {};
+          secoes.forEach(secao => {
+            const g = secao.grupo_nome || 'Outros';
+            if (!grupos[g]) grupos[g] = [];
+            grupos[g].push(secao);
+          });
 
-          return (
-            <Accordion 
-              key={secao.id} 
+          return Object.entries(grupos).map(([grupoNome, secoesGrupo]) => (
+            <Box key={grupoNome}>
+              {grupoNome !== 'Outros' && (
+                <Typography variant="h6" fontWeight="bold" color="primary.main" sx={{ mb: 2, mt: 1, borderBottom: '2px solid', borderColor: alpha(theme.palette.primary.main, 0.2), pb: 1 }}>
+                  {grupoNome}
+                </Typography>
+              )}
+              <Stack spacing={2}>
+                {secoesGrupo.map((secao) => {
+                  const totalItems = secao.checklist_itens?.length || 0;
+                  const answeredItems = secao.checklist_itens?.filter((item: any) => {
+                    const r = respostas[item.id];
+                    return r && (r.valor || r.nao_se_aplica);
+                  }).length || 0;
+                  const isCompleted = totalItems > 0 && answeredItems === totalItems;
+
+                  return (
+                    <Accordion 
+                      key={secao.id} 
               TransitionProps={{ timeout: 300 }}
               sx={{ 
                 borderRadius: '12px !important', 
@@ -783,6 +810,10 @@ export default function ExecucaoChecklistPage() {
             </Accordion>
           );
         })}
+              </Stack>
+            </Box>
+          ));
+        })()}
       </Stack>
 
       {/* SEÇÃO DE ASSINATURA NO FINAL */}
