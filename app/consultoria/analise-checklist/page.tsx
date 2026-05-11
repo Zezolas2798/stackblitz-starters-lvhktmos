@@ -36,16 +36,40 @@ export default function AnaliseChecklistPage() {
   const [rawAudits, setRawAudits] = useState<any[]>([]);
 
   useEffect(() => {
-    async function loadModelos() {
+    async function loadModelosAplicados() {
       if (!activeClientId) return;
-      const { data: res } = await supabase
-        .from('checklist_modelos')
-        .select('id, titulo')
-        .eq('cliente_id', activeClientId);
-      setModelos(res || []);
+      
+      // Buscar apenas modelos que possuem auditorias concluídas
+      let query = supabase
+        .from('checklist_execucoes')
+        .select('modelo_id, modelo:checklist_modelos(id, titulo)')
+        .eq('cliente_id', activeClientId)
+        .eq('status', 'CONCLUIDO');
+
+      if (unidadeId) {
+        query = query.eq('unidade_id', unidadeId);
+      }
+
+      const { data: res } = await query;
+
+      // Extrair modelos únicos (deduplicar por modelo_id)
+      const modelosMap = new Map<string, { id: string; titulo: string }>();
+      (res || []).forEach((exec: any) => {
+        if (exec.modelo && !modelosMap.has(exec.modelo_id)) {
+          modelosMap.set(exec.modelo_id, { id: exec.modelo.id, titulo: exec.modelo.titulo });
+        }
+      });
+
+      const modelosUnicos = Array.from(modelosMap.values());
+      setModelos(modelosUnicos);
+
+      // Pré-selecionar o primeiro modelo disponível (se nenhum selecionado ainda)
+      if (modelosUnicos.length > 0 && selectedModelo === 'all') {
+        setSelectedModelo(modelosUnicos[0].id);
+      }
     }
-    loadModelos();
-  }, [activeClientId]);
+    loadModelosAplicados();
+  }, [activeClientId, unidadeId]);
 
   useEffect(() => {
     async function fetchData() {
@@ -416,7 +440,6 @@ export default function AnaliseChecklistPage() {
                 label="Modelo de Checklist"
                 onChange={(e) => setSelectedModelo(e.target.value)}
               >
-                <MenuItem value="all">Todos os Modelos</MenuItem>
                 {modelos.map(m => (
                   <MenuItem key={m.id} value={m.id}>{m.titulo}</MenuItem>
                 ))}

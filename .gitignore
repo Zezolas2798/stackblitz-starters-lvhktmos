@@ -42,14 +42,24 @@ tsc_output*.txt
 # backups
 *.bak
 
-# assistant
-temp*.js
+# assistant and AI tools
 .gemini/
+.windsurf/
+.cursor/
+.continue/
+.kiro/
+.agents/
 brain/
+skills-lock.json
 
-# development debris
+# development debris and scripts
 tmp/
+scratch/
 *.mjs
 replace*.js
 rewrite*.js
+check_rls.js
+get_images.py
+test_mammoth*.md
+*.tsbuildinfo
 

@@ -11,10 +11,14 @@
             "id": "f2a9bef9d2231cb5",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "HYPOTHESES.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "Nova aba"
+              "title": "HYPOTHESES"
             }
           }
         ]
@@ -181,6 +185,8 @@
   },
   "active": "f2a9bef9d2231cb5",
   "lastOpenFiles": [
+    "EXPERIMENT-CANDIDATES.md",
+    "sistema.registry.md",
     "uan-knowledge/14_gestao_regras_variedade_uan.md",
     "categorias.md",
     "suprimentos.fornecedores.md",
@@ -204,9 +210,7 @@
     "estoque.lotes.md",
     "setores_producao.md",
     "equipamentos.md",
-    "sistema.registry.md",
     "equipamentos_config.md",
-    "modulo.uan_compras.md",
     "uan-knowledge",
     "governanca",
     "conceptual",

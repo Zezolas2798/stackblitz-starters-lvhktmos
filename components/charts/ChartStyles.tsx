@@ -1,11 +1,14 @@
 'use client';
 
 import React from 'react';
-import { useTheme, alpha, lighten, darken } from '@mui/material';
+import { useTheme, alpha } from '@mui/material';
 
 /**
- * Componente que injeta definições globais de SVG (gradientes e filtros)
+ * Componente que injeta definições globais de SVG (gradientes)
  * para serem usados pelos gráficos do Recharts.
+ * 
+ * Design: Flat, limpo, profissional — sem efeitos 3D.
+ * Ref: _knowledge/financeiro/Design de Dashboards Financeiros para Restaurantes.md
  */
 export const ChartDefinitions = () => {
     const theme = useTheme();
@@ -13,129 +16,101 @@ export const ChartDefinitions = () => {
     return (
         <svg style={{ height: 0, width: 0, position: 'absolute' }}>
             <defs>
-                {/* Gradiente Primário (Efeito Premium) */}
+                {/* Gradiente Primário (Sutil) */}
                 <linearGradient id="gradientPrimary" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={theme.palette.primary.main} />
-                    <stop offset="100%" stopColor={theme.palette.primary.dark} />
+                    <stop offset="0%" stopColor={theme.palette.primary.main} stopOpacity={0.9} />
+                    <stop offset="100%" stopColor={theme.palette.primary.main} stopOpacity={0.7} />
                 </linearGradient>
 
                 {/* Gradiente de Sucesso (Conforme) */}
                 <linearGradient id="gradientSuccess" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" />
-                    <stop offset="100%" stopColor="#059669" />
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.75} />
                 </linearGradient>
 
                 {/* Gradiente de Erro (Não Conforme) */}
                 <linearGradient id="gradientError" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ef4444" />
-                    <stop offset="100%" stopColor="#dc2626" />
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="#ef4444" stopOpacity={0.75} />
                 </linearGradient>
 
                 {/* Gradiente de Alerta (Warning) */}
                 <linearGradient id="gradientWarning" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f59e0b" />
-                    <stop offset="100%" stopColor="#d97706" />
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.95} />
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.75} />
                 </linearGradient>
 
-                {/* Filtro de Sombra (Depth) */}
-                <filter id="shadowDepth" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur" />
-                    <feOffset in="blur" dx="3" dy="3" result="offsetBlur" />
-                    <feComponentTransfer>
-                        <feFuncA type="linear" slope="0.4" />
-                    </feComponentTransfer>
-                    <feMerge>
-                        <feMergeNode />
-                        <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                </filter>
+                {/* === GRADIENTES DO DONUT CHART (Paleta Profissional) === */}
+                <linearGradient id="gradientDonutConforme" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#2E865F" />
+                    <stop offset="100%" stopColor="#34A06B" />
+                </linearGradient>
+
+                <linearGradient id="gradientDonutNaoConforme" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#D35400" />
+                    <stop offset="100%" stopColor="#E67E22" />
+                </linearGradient>
+
+                {/* Gradiente de preenchimento para AreaChart */}
+                <linearGradient id="gradientAreaFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={theme.palette.primary.main} stopOpacity={0.25} />
+                    <stop offset="100%" stopColor={theme.palette.primary.main} stopOpacity={0.02} />
+                </linearGradient>
             </defs>
         </svg>
     );
 };
 
 /**
- * Forma customizada para a Barra que simula um efeito isometrico 3D Real
+ * Forma customizada para Barra Moderna — Flat com cantos arredondados no topo.
+ * Sem efeitos 3D, sem sombras, sem contornos pretos.
+ * Ref: "Elimine efeitos 3D, sombras, degradês excessivos" — §7 Don'ts
  */
-export const PremiumBar = (props: any) => {
+export const ModernBar = (props: any) => {
     const { fill, x, y, width, height } = props;
     if (!height || height <= 0) return null;
 
-    // Extrair cor base para as faces 3D
-    let baseColor = fill;
-    if (typeof fill === 'string' && fill.startsWith('url')) {
-        const id = fill.match(/#(.+)\)/)?.[1];
-        if (id === 'gradientSuccess') baseColor = '#10b981';
-        else if (id === 'gradientError') baseColor = '#ef4444';
-        else if (id === 'gradientWarning') baseColor = '#f59e0b';
-        else baseColor = '#3b82f6'; // Primary fallback
-    }
-    
-    const depth = 10; // Profundidade ligeiramente maior para destaque
-    
-    // Cores das faces baseadas na iluminação (Top clara, Side escura)
-    const topColor = lighten(baseColor, 0.2);
-    const sideColor = darken(baseColor, 0.25);
-    const strokeColor = '#000000'; // Contorno preto como na imagem
+    const radius = Math.min(6, width / 2); // Raio proporcional, max 6px
 
     return (
         <g>
-            {/* Sombra de projeção suave */}
-            <path 
-                d={`M ${x + depth},${y + height} 
-                   L ${x + width + depth},${y + height} 
-                   L ${x + width + depth},${y - depth} 
-                   L ${x + width},${y} 
-                   L ${x + width},${y + height} 
-                   Z`} 
-                fill="rgba(0,0,0,0.08)"
-            />
-
-            {/* Face Superior (Top) */}
-            <path 
-                d={`M ${x},${y} 
-                   L ${x + depth},${y - depth} 
-                   L ${x + width + depth},${y - depth} 
-                   L ${x + width},${y} 
-                   Z`} 
-                fill={topColor} 
-                stroke={strokeColor}
-                strokeWidth={0.8}
-            />
-
-            {/* Face Lateral (Side) */}
-            <path 
-                d={`M ${x + width},${y} 
-                   L ${x + width + depth},${y - depth} 
-                   L ${x + width + depth},${y + height - depth} 
-                   L ${x + width},${y + height} 
-                   Z`} 
-                fill={sideColor} 
-                stroke={strokeColor}
-                strokeWidth={0.8}
-            />
-
-            {/* Face Frontal (Front) */}
-            <path 
-                d={`M ${x},${y} 
-                   L ${x + width},${y} 
-                   L ${x + width},${y + height} 
-                   L ${x},${y + height} 
-                   Z`} 
-                fill={fill} 
-                stroke={strokeColor}
-                strokeWidth={0.8}
+            <path
+                d={`
+                    M ${x},${y + height}
+                    L ${x},${y + radius}
+                    Q ${x},${y} ${x + radius},${y}
+                    L ${x + width - radius},${y}
+                    Q ${x + width},${y} ${x + width},${y + radius}
+                    L ${x + width},${y + height}
+                    Z
+                `}
+                fill={fill}
             />
         </g>
     );
 };
 
 /**
- * Helper para converter cores Hex do MUI em IDs de gradiente
+ * @deprecated Use ModernBar em vez disso. Mantido temporariamente para compatibilidade.
+ */
+export const PremiumBar = ModernBar;
+
+/**
+ * Helper para converter cores em IDs de gradiente
  */
 export const getGradientUrl = (color: string) => {
     if (color === '#10b981' || color.toLowerCase() === 'success') return 'url(#gradientSuccess)';
     if (color === '#ef4444' || color.toLowerCase() === 'error') return 'url(#gradientError)';
     if (color.toLowerCase() === 'warning') return 'url(#gradientWarning)';
     return 'url(#gradientPrimary)';
+};
+
+/**
+ * Paleta profissional para o Donut Chart de conformidade.
+ * Baseada na paleta semântica acessível do documento de design.
+ */
+export const DONUT_COLORS = {
+    conforme: '#2E865F',      // Verde Petróleo/Sálvia
+    naoConforme: '#D35400',   // Laranja Queimado
+    na: '#95A5A6',            // Cinza Frio (Contexto)
 };

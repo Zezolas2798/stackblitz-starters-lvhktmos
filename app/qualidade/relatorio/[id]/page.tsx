@@ -16,7 +16,7 @@ import {
     PieChart, Pie, Cell, ResponsiveContainer, 
     BarChart, Bar, XAxis, YAxis, Tooltip as ChartTooltip, Legend, ReferenceArea, ReferenceLine 
 } from 'recharts';
-import { ChartDefinitions, PremiumBar, getGradientUrl } from '@/components/charts/ChartStyles';
+import { ChartDefinitions, ModernBar, getGradientUrl, DONUT_COLORS } from '@/components/charts/ChartStyles';
 
 type ViewMode = 'PADRAO' | 'EXECUTIVO' | 'ANALITICO';
 
@@ -53,6 +53,7 @@ export default function RelatorioAuditoriaPage() {
   const [secoes, setSecoes] = useState<any[]>([]);
   const [respostas, setRespostas] = useState<Record<string, any>>({});
   const [unidade, setUnidade] = useState<any>(null);
+  const [acoesCorretivas, setAcoesCorretivas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -91,6 +92,16 @@ export default function RelatorioAuditoriaPage() {
             respData.forEach((r: any) => mapa[r.item_id] = r);
         }
         setRespostas(mapa);
+
+        // 3.1 Planos de Ação (Ações Corretivas) vinculados às respostas desta auditoria
+        if (respData && respData.length > 0) {
+            const respIds = respData.map((r: any) => r.id);
+            const { data: acoesData } = await supabase
+                .from('acoes_corretivas')
+                .select('*')
+                .in('origem_checklist_resposta_id', respIds);
+            setAcoesCorretivas(acoesData || []);
+        }
 
         // 2. Estrutura (Perguntas) - COM DEDUPLICAÇÃO VIA FRONTEND
         const { data: secoesRaw, error: secoesErr } = await supabase
@@ -193,20 +204,21 @@ export default function RelatorioAuditoriaPage() {
               }
               sTotal++;
           });
-          if (sTotal > 0) {
-              sectionStats.push({
-                  name: s.titulo,
-                  compliance: Math.round((sConform / sTotal) * 100),
-                  color: s.cor || theme.palette.primary.main
-              });
-          }
+            if (sTotal > 0) {
+                sectionStats.push({
+                    name: s.titulo,
+                    compliance: parseFloat(((sConform / sTotal) * 100).toFixed(1)),
+                    color: s.cor || theme.palette.primary.main
+                });
+            }
       });
 
       // Ordenar por conformidade decrescente conforme solicitado
       sectionStats.sort((a, b) => b.compliance - a.compliance);
 
       const total = conform + nonConform;
-      const pct = total > 0 ? Math.round((conform / total) * 100) : 0;
+      const pctValue = total > 0 ? (conform / total) * 100 : 0;
+      const pct = parseFloat(pctValue.toFixed(1));
 
       return {
           overall: [
@@ -228,12 +240,14 @@ export default function RelatorioAuditoriaPage() {
               const resp = item.ids_originais?.map((id: string) => respostas[id]).find((r: any) => r !== undefined);
               // Inclui itens explicitamente marcados como NC OU itens obrigatórios sem resposta em nenhum dos IDs
               if (resp?.resposta_valor === 'NAO_CONFORME' || (item.obrigatorio && !resp)) {
-                  ncs.push({ ...item, resp: resp || { comentario: 'ITEM OBRIGATÓRIO NÃO RESPONDIDO' }, secao: s.titulo });
+                  // Busca ações corretivas vinculadas a esta resposta
+                  const acoes = resp?.id ? acoesCorretivas.filter(a => a.origem_checklist_resposta_id === resp.id) : [];
+                  ncs.push({ ...item, resp: resp || { comentario: 'ITEM OBRIGATÓRIO NÃO RESPONDIDO' }, secao: s.titulo, acoes });
               }
           });
       });
       return ncs;
-  }, [secoes, respostas]);
+  }, [secoes, respostas, acoesCorretivas]);
 
   // --- COMPONENTES DE VISUALIZAÇÃO ---
 
@@ -415,72 +429,128 @@ export default function RelatorioAuditoriaPage() {
   );
 
   // 3. VISUALIZAÇÃO ANALÍTICA (Gráficos)
+  // Tooltip customizado para mostrar faixa de desempenho
+  const CustomBarTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const val = payload[0].value;
+      let faixa = "";
+      let corFaixa = "";
+
+      if (val >= 90) { faixa = "Excelente"; corFaixa = "#1d4ed8"; }
+      else if (val >= 75) { faixa = "Bom"; corFaixa = "#15803d"; }
+      else if (val >= 60) { faixa = "Regular"; corFaixa = "#a16207"; }
+      else { faixa = "Insatisfatório"; corFaixa = "#b91c1c"; }
+
+      return (
+        <Paper elevation={3} sx={{ p: 1.5, borderRadius: 2, border: 'none', bgcolor: 'background.paper' }}>
+          <Typography variant="subtitle2" fontWeight="bold" gutterBottom>{label}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: payload[0].fill }} />
+            <Typography variant="body2" color="text.secondary">
+              Conformidade: <strong>{val}%</strong>
+            </Typography>
+          </Box>
+          <Typography variant="caption" sx={{ color: corFaixa, fontWeight: 'bold', mt: 0.5, display: 'block' }}>
+            Desempenho: {faixa}
+          </Typography>
+        </Paper>
+      );
+    }
+    return null;
+  };
+
+  const donutData = [
+      { name: 'Conforme', value: stats.conform, color: DONUT_COLORS.conforme },
+      { name: 'Não Conforme', value: stats.nonConform, color: DONUT_COLORS.naoConforme },
+  ];
+
   const AnalyticView = () => (
     <Box mt={2}>
         <Stack spacing={3} mb={4}>
-            {/* Resumo Geral (Donut Chart) */}
+            {/* Resumo Geral (Donut Chart Moderno) */}
             <Paper variant="outlined" sx={{ p: 4, borderRadius: 3 }}>
-                <Typography variant="h6" fontWeight="800" gutterBottom align="center">CONFORMIDADE GERAL</Typography>
+                <Typography variant="h6" fontWeight="800" gutterBottom align="center" sx={{ letterSpacing: '0.05em', color: 'text.primary' }}>CONFORMIDADE GERAL</Typography>
+                {stats.na > 0 && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                        <Chip 
+                            icon={<MinusCircle size={14} />}
+                            label={`${stats.na} ${stats.na === 1 ? 'item não se aplica' : 'itens não se aplicam'} (excluídos do cálculo)`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontSize: '0.75rem', color: 'text.secondary', borderColor: 'divider' }}
+                        />
+                    </Box>
+                )}
                 
                 <Grid container spacing={2} alignItems="center">
                     <Grid item xs={12} md={6}>
-                        <Box sx={{ height: 220, position: 'relative' }}>
+                        <Box sx={{ height: 260, position: 'relative' }}>
                             <ChartDefinitions />
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie 
-                                        data={stats.overall} 
-                                        outerRadius={90} 
-                                        paddingAngle={0} 
+                                        data={donutData} 
+                                        innerRadius={65}
+                                        outerRadius={100} 
+                                        paddingAngle={3} 
                                         dataKey="value"
+                                        cornerRadius={6}
                                         animationBegin={0}
-                                        animationDuration={1500}
+                                        animationDuration={1200}
+                                        stroke="none"
                                     >
-                                        {stats.overall.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={getGradientUrl(entry.color)} filter="url(#shadowDepth)" />
+                                        {donutData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    <ChartTooltip />
+                                    <ChartTooltip 
+                                        contentStyle={{ 
+                                            borderRadius: 12, 
+                                            border: 'none', 
+                                            boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
+                                            fontSize: 13,
+                                            fontWeight: 600
+                                        }} 
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
+                            {/* Label Central do Donut */}
+                            <Box sx={{ 
+                                position: 'absolute', 
+                                top: '50%', left: '50%', 
+                                transform: 'translate(-50%, -50%)', 
+                                textAlign: 'center',
+                                pointerEvents: 'none',
+                                width: '100%' // Garante centralização sem overflow
+                            }}>
+                                <Typography variant="h4" fontWeight="900" color="text.primary" sx={{ lineHeight: 1 }}>
+                                    {stats.pct}%
+                                </Typography>
+                                <Typography variant="caption" fontWeight="700" color="text.secondary" sx={{ letterSpacing: 1, textTransform: 'uppercase', mt: 0.5, display: 'block' }}>
+                                    Conforme
+                                </Typography>
+                            </Box>
                         </Box>
                     </Grid>
                     
                     <Grid item xs={12} md={6}>
                         <Box sx={{ textAlign: 'left', pl: { md: 4 } }}>
-                            <Box sx={{ mb: 3 }}>
-                                <Typography variant="h2" fontWeight="900" color="primary" sx={{ lineHeight: 1 }}>
-                                    {stats.pct}%
-                                </Typography>
-                                <Typography variant="h6" color="text.secondary" fontWeight="bold" sx={{ letterSpacing: 1 }}>
-                                    CONFORME
-                                </Typography>
-                            </Box>
-                            
-                            <Stack direction="column" spacing={2}>
+                            <Stack direction="column" spacing={2.5}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#10b981' }} />
+                                    <Box sx={{ width: 14, height: 14, borderRadius: 1.5, bgcolor: DONUT_COLORS.conforme }} />
                                     <Box>
-                                        <Typography variant="h6" fontWeight="900" color="#10b981" sx={{ lineHeight: 1 }}>{stats.conform}</Typography>
+                                        <Typography variant="h5" fontWeight="900" sx={{ lineHeight: 1, color: DONUT_COLORS.conforme }}>{stats.conform}</Typography>
                                         <Typography variant="caption" color="text.secondary" fontWeight="bold">ITENS CONFORMES</Typography>
                                     </Box>
                                 </Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#ef4444' }} />
+                                    <Box sx={{ width: 14, height: 14, borderRadius: 1.5, bgcolor: DONUT_COLORS.naoConforme }} />
                                     <Box>
-                                        <Typography variant="h6" fontWeight="900" color="#ef4444" sx={{ lineHeight: 1 }}>{stats.nonConform}</Typography>
+                                        <Typography variant="h5" fontWeight="900" sx={{ lineHeight: 1, color: DONUT_COLORS.naoConforme }}>{stats.nonConform}</Typography>
                                         <Typography variant="caption" color="text.secondary" fontWeight="bold">NÃO CONFORMES</Typography>
                                     </Box>
                                 </Box>
-                                {stats.na > 0 && (
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: 'text.disabled' }} />
-                                        <Box>
-                                            <Typography variant="h6" fontWeight="900" color="text.disabled" sx={{ lineHeight: 1 }}>{stats.na}</Typography>
-                                            <Typography variant="caption" color="text.secondary" fontWeight="bold">NÃO SE APLICA</Typography>
-                                        </Box>
-                                    </Box>
-                                )}
+
                             </Stack>
                         </Box>
                     </Grid>
@@ -493,7 +563,7 @@ export default function RelatorioAuditoriaPage() {
                 <Box sx={{ height: { xs: 350, md: 600 }, mt: 1 }}>
                     <ChartDefinitions />
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats.sections} margin={{ top: 20, right: 10, left: 0, bottom: 120 }}>
+                        <BarChart data={stats.sections} margin={{ top: 20, right: 55, left: 60, bottom: 150 }}>
                             {/* Faixas de Fundo (Performance Bands - Sincronizado com Central de Consultoria) */}
                             <ReferenceArea y1={90} y2={100} fill="rgba(37, 99, 235, 0.08)" stroke="none" />
                             <ReferenceArea y1={75} y2={90} fill="rgba(22, 163, 74, 0.08)" stroke="none" />
@@ -509,23 +579,26 @@ export default function RelatorioAuditoriaPage() {
                                 dataKey="name" 
                                 interval={0}
                                 tick={<CustomXAxisTick />}
-                                height={100}
+                                height={130}
                             />
                             <YAxis 
                                 domain={[0, 100]}
                                 tickFormatter={(val) => `${val}%`}
                                 tick={{ fontSize: 12, fontWeight: 'bold' }}
                             />
-                            <ChartTooltip cursor={{ fill: alpha(theme.palette.primary.main, 0.05) }} />
+                            <ChartTooltip 
+                                content={<CustomBarTooltip />}
+                                cursor={{ fill: alpha(theme.palette.primary.main, 0.05) }} 
+                            />
                             
                             {/* A Bar deve vir por ÚLTIMO para sobrepor as linhas e áreas */}
                             <Bar 
                                 dataKey="compliance" 
-                                shape={<PremiumBar />}
+                                shape={<ModernBar />}
                                 barSize={40}
                                 label={{ 
                                     position: 'top', 
-                                    formatter: (val: any) => `${val}%`,
+                                    formatter: (val: any) => `${parseFloat(parseFloat(val).toFixed(1))}%`,
                                     fontSize: 12,
                                     fontWeight: '900',
                                     fill: theme.palette.text.primary
@@ -568,6 +641,42 @@ export default function RelatorioAuditoriaPage() {
                                         <Avatar key={i} src={url} variant="rounded" sx={{ width: 80, height: 80, border: '1px solid #ddd', boxShadow: 1 }} />
                                     ))}
                                 </Stack>
+                            )}
+
+                            {/* PLANO DE AÇÃO REGISTRADO */}
+                            {nc.acoes && nc.acoes.length > 0 && (
+                                <Box sx={{ mt: 2 }}>
+                                    {nc.acoes.map((acao: any) => (
+                                        <Paper 
+                                            key={acao.id} 
+                                            elevation={0} 
+                                            sx={{ 
+                                                p: 2, mb: 1, 
+                                                bgcolor: alpha(theme.palette.warning.main, 0.05), 
+                                                border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`, 
+                                                borderRadius: 2 
+                                            }}
+                                        >
+                                            <Typography variant="subtitle2" fontWeight="800" sx={{ mb: 1, color: 'warning.dark', display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                📋 Plano de Ação
+                                                <Chip 
+                                                    label={acao.status === 'CONCLUIDO' ? 'Resolvido' : 'Pendente'} 
+                                                    size="small" 
+                                                    color={acao.status === 'CONCLUIDO' ? 'success' : 'warning'}
+                                                    sx={{ height: 20, fontSize: '0.65rem', fontWeight: 'bold' }}
+                                                />
+                                            </Typography>
+                                            <Stack spacing={0.5}>
+                                                <Typography variant="body2">
+                                                    <strong>Problema:</strong> {acao.descricao_desvio}
+                                                </Typography>
+                                                <Typography variant="body2">
+                                                    <strong>Ação Imediata:</strong> {acao.acao_imediata}
+                                                </Typography>
+                                            </Stack>
+                                        </Paper>
+                                    ))}
+                                </Box>
                             )}
                         </Paper>
                     </Grid>

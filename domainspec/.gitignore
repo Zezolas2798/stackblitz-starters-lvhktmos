@@ -1,0 +1,8 @@
+.DS_Store
+.claude/settings.local.json
+node_modules/
+dist/
+.pnpm-store/
+.env
+.env.*
+governance/tags/code-tags.json
