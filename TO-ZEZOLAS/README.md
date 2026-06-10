@@ -19,7 +19,16 @@ no concreto.
 
 ## Como ler
 
-- **`TO-ZEZOLAS.md`** — o memorando principal. Comece por ele.
+- **`TO-ZEZOLAS.md`** — primeiro passe. Sobre **arrumação**: tirar as regras de negócio
+  do esconderijo (regras ANVISA dentro do código, resíduo escondido em `// TODO`,
+  dashboard com número chumbado, transições proibidas). Comece por ele.
+- **`TO-ZEZOLAS2.md`** — segundo passe, mais fundo e mais duro. Sobre **risco**: o motor
+  de cardápio nunca foi provado, o vazamento de dados entre clientes, e a assinatura
+  eletrônica que é figura, não prova. Inclui uma seção honesta de onde o primeiro passe
+  foi generoso demais.
+- **`refs/`** — documentos de referência curtos e práticos (modelos mentais e templates
+  destilados do Arcanum e do DomainSpec, adaptados ao seu domínio). Veja
+  [refs/README.md](refs/README.md).
 - Cada achado segue a mesma forma: **afirmação simples → evidência no seu código →
   por que isso importa para o negócio → o que fazer.**
 - Nenhuma matemática. Onde aparece "regra", leia "regra de negócio". Onde aparece
