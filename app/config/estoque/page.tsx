@@ -8,10 +8,11 @@ import {
     Box, Typography, Button, Paper, TextField,
     List, ListItem, ListItemText, ListItemSecondaryAction, IconButton,
     Alert, CircularProgress, Snackbar, Container, InputAdornment,
-    Divider, useTheme, alpha, ListItemIcon, MenuItem, Checkbox, 
+    Divider, useTheme, alpha, ListItemIcon, MenuItem, Checkbox,
     FormControl, InputLabel, Select, Chip, OutlinedInput,
     Dialog, DialogTitle, DialogContent, DialogActions,
-    Accordion, AccordionSummary, AccordionDetails
+    Accordion, AccordionSummary, AccordionDetails,
+    Switch, FormControlLabel, Tooltip
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import {
@@ -27,7 +28,8 @@ import {
     ChevronDown,
     ChevronRight,
     Building2,
-    Layers
+    Layers,
+    ToggleLeft
 } from 'lucide-react';
 
 export default function ConfiguracaoEstoquePage() {
@@ -55,11 +57,15 @@ export default function ConfiguracaoEstoquePage() {
     const [gruposIngredientes, setGruposIngredientes] = useState<any[]>([]);
     const [setores, setSetores] = useState<any[]>([]);
     const [equipamentos, setEquipamentos] = useState<any[]>([]);
+    const [gruposPreferencias, setGruposPreferencias] = useState<Record<string, boolean>>({});
+    const [subgruposPreferencias, setSubgruposPreferencias] = useState<Record<string, boolean>>({});
+    const [savingPrefs, setSavingPrefs] = useState(false);
 
     // Inputs
     const [novoLocal, setNovoLocal] = useState('');
     const [novaCategoria, setNovaCategoria] = useState('');
     const [novoSetor, setNovoSetor] = useState('');
+    const [novoSetorTipo, setNovoSetorTipo] = useState('PRODUCAO');
     const [novoGrupoEquip, setNovoGrupoEquip] = useState('');
     const [novaCategoriaEquip, setNovaCategoriaEquip] = useState('');
     const [novaSubCategoriaEquip, setNovaSubCategoriaEquip] = useState('');
@@ -89,7 +95,9 @@ export default function ConfiguracaoEstoquePage() {
     const [editEquipTempMin, setEditEquipTempMin] = useState<string>('');
     const [editEquipTempMax, setEditEquipTempMax] = useState<string>('');
     const [editEquipHorarios, setEditEquipHorarios] = useState<string[]>([]);
-    
+    const [editEquipTipo, setEditEquipTipo] = useState<string>('');
+    const [editEquipGrupos, setEditEquipGrupos] = useState<string[]>([]);
+
     // Quick Add Equipamento
     const [quickAddOpen, setQuickAddOpen] = useState(false);
     const [qaGrupo, setQaGrupo] = useState('Temperaturas');
@@ -101,19 +109,37 @@ export default function ConfiguracaoEstoquePage() {
         if (!activeClientId || !ctxUnidadeId) return;
         setLoading(true);
         try {
-            const [localesRes, catRes, setoresRes, equipRes, gruposRes] = await Promise.all([
+            // Buscar grupos globais (ALIMENTOS, cliente_id IS NULL) + grupos por cliente (outras modalidades)
+            const [localesRes, globalGruposRes, clientGruposRes, setoresRes, equipRes, globalSubgruposRes, clientSubgruposRes, grupoPrefsRes, subgrupoPrefsRes] = await Promise.all([
                 (supabase as any).from('estoque_locais').select('*').eq('unidade_id', ctxUnidadeId).order('nome'),
+                (supabase as any).from('grupos_produto').select('*').is('cliente_id', null).eq('modalidade', 'ALIMENTOS').order('nome'),
                 (supabase as any).from('grupos_produto').select('*').eq('cliente_id', activeClientId).order('nome'),
                 (supabase as any).from('setores_producao').select('*').eq('unidade_id', ctxUnidadeId).order('nome'),
                 (supabase as any).from('equipamentos_config').select('*').eq('unidade_id', ctxUnidadeId).order('grupo, nome'),
-                (supabase as any).from('subgrupos_produto').select('*').eq('cliente_id', activeClientId).order('nome')
+                (supabase as any).from('subgrupos_produto').select('*').is('cliente_id', null).order('nome'),
+                (supabase as any).from('subgrupos_produto').select('*').eq('cliente_id', activeClientId).order('nome'),
+                (supabase as any).from('cliente_grupos_preferencias').select('*').eq('cliente_id', activeClientId),
+                (supabase as any).from('cliente_subgrupos_preferencias').select('*').eq('cliente_id', activeClientId)
             ]);
 
+            // Combinar grupos globais + por cliente
+            const allCategorias = [...(globalGruposRes.data || []), ...(clientGruposRes.data || [])];
+            const allSubgrupos = [...(globalSubgruposRes.data || []), ...(clientSubgruposRes.data || [])];
+
             setLocais(localesRes.data || []);
-            setCategorias(catRes.data || []);
-            setGruposIngredientes(gruposRes.data || []);
+            setCategorias(allCategorias);
+            setGruposIngredientes(allSubgrupos);
             setSetores(setoresRes.data || []);
             setEquipamentos(equipRes.data || []);
+
+            // Carregar preferências: se não tem registro, está ativo (padrão)
+            const gPrefs: Record<string, boolean> = {};
+            (grupoPrefsRes.data || []).forEach((p: any) => { gPrefs[p.grupo_id] = p.ativo; });
+            setGruposPreferencias(gPrefs);
+
+            const sPrefs: Record<string, boolean> = {};
+            (subgrupoPrefsRes.data || []).forEach((p: any) => { sPrefs[p.subgrupo_id] = p.ativo; });
+            setSubgruposPreferencias(sPrefs);
         } catch (err: any) {
             console.error(err);
             setMsg({ open: true, text: 'Erro ao carregar dados.', type: 'error' });
@@ -174,8 +200,8 @@ export default function ConfiguracaoEstoquePage() {
         try {
             const { error } = await (supabase as any)
                 .from('estoque_locais')
-                .update({ 
-                    nome: editNome.trim(), 
+                .update({
+                    nome: editNome.trim(),
                     grupos_permitidos_ids: editCategorias,
                     equipamento_config_id: editEquipamentoConfigId
                 })
@@ -189,15 +215,182 @@ export default function ConfiguracaoEstoquePage() {
         }
     };
 
+    // --- FUNÇÕES DE PREFERÊNCIAS (TOGGLE GRUPOS GLOBAIS) ---
+    const isGrupoAtivo = (grupoId: string): boolean => {
+        // Se não tem registro de preferência, está ativo por padrão
+        return gruposPreferencias[grupoId] !== false;
+    };
+
+    const isSubgrupoAtivo = (subgrupoId: string): boolean => {
+        return subgruposPreferencias[subgrupoId] !== false;
+    };
+
+    const handleToggleGrupo = async (grupoId: string, novoEstado: boolean) => {
+        if (!activeClientId) return;
+        setSavingPrefs(true);
+        try {
+            const { error } = await (supabase as any)
+                .from('cliente_grupos_preferencias')
+                .upsert({
+                    cliente_id: activeClientId,
+                    grupo_id: grupoId,
+                    ativo: novoEstado
+                }, { onConflict: 'cliente_id,grupo_id' });
+            if (error) throw error;
+
+            setGruposPreferencias(prev => ({ ...prev, [grupoId]: novoEstado }));
+
+            // Se desativou o grupo, desativar também todos os subgrupos desse grupo
+            if (!novoEstado) {
+                const subgruposDoGrupo = gruposIngredientes.filter(s => s.grupo_id === grupoId);
+                for (const sg of subgruposDoGrupo) {
+                    await (supabase as any)
+                        .from('cliente_subgrupos_preferencias')
+                        .upsert({
+                            cliente_id: activeClientId,
+                            subgrupo_id: sg.id,
+                            ativo: false
+                        }, { onConflict: 'cliente_id,subgrupo_id' });
+                    setSubgruposPreferencias(prev => ({ ...prev, [sg.id]: false }));
+                }
+            }
+
+            setMsg({ open: true, text: novoEstado ? 'Grupo ativado!' : 'Grupo desativado!', type: 'success' });
+        } catch (err: any) {
+            setMsg({ open: true, text: 'Erro ao atualizar preferência: ' + err.message, type: 'error' });
+        } finally {
+            setSavingPrefs(false);
+        }
+    };
+
+    const handleToggleSubgrupo = async (subgrupoId: string, novoEstado: boolean) => {
+        if (!activeClientId) return;
+        setSavingPrefs(true);
+        try {
+            const { error } = await (supabase as any)
+                .from('cliente_subgrupos_preferencias')
+                .upsert({
+                    cliente_id: activeClientId,
+                    subgrupo_id: subgrupoId,
+                    ativo: novoEstado
+                }, { onConflict: 'cliente_id,subgrupo_id' });
+            if (error) throw error;
+
+            setSubgruposPreferencias(prev => ({ ...prev, [subgrupoId]: novoEstado }));
+            setMsg({ open: true, text: novoEstado ? 'Subgrupo ativado!' : 'Subgrupo desativado!', type: 'success' });
+        } catch (err: any) {
+            setMsg({ open: true, text: 'Erro ao atualizar preferência: ' + err.message, type: 'error' });
+        } finally {
+            setSavingPrefs(false);
+        }
+    };
+
+    const handleSelectAllGroups = async (novoEstado: boolean) => {
+        if (!activeClientId) return;
+        setSavingPrefs(true);
+        try {
+            const alimentosGroups = categorias.filter(c => c.modalidade === 'ALIMENTOS');
+            const updates = alimentosGroups.map(c => ({
+                cliente_id: activeClientId,
+                grupo_id: c.id,
+                ativo: novoEstado
+            }));
+
+            const { error } = await (supabase as any)
+                .from('cliente_grupos_preferencias')
+                .upsert(updates, { onConflict: 'cliente_id,grupo_id' });
+            if (error) throw error;
+
+            const nextPrefs = { ...gruposPreferencias };
+            alimentosGroups.forEach(c => {
+                nextPrefs[c.id] = novoEstado;
+            });
+            setGruposPreferencias(nextPrefs);
+
+            // Se desativou tudo, desativar todos os subgrupos de ALIMENTOS
+            if (!novoEstado) {
+                const alimentosSubgroups = gruposIngredientes.filter(s =>
+                    alimentosGroups.some(g => g.id === s.grupo_id)
+                );
+                const subUpdates = alimentosSubgroups.map(s => ({
+                    cliente_id: activeClientId,
+                    subgrupo_id: s.id,
+                    ativo: false
+                }));
+                if (subUpdates.length > 0) {
+                    const { error: subErr } = await (supabase as any)
+                        .from('cliente_subgrupos_preferencias')
+                        .upsert(subUpdates, { onConflict: 'cliente_id,subgrupo_id' });
+                    if (subErr) throw subErr;
+                }
+                const nextSubPrefs = { ...subgruposPreferencias };
+                alimentosSubgroups.forEach(s => {
+                    nextSubPrefs[s.id] = false;
+                });
+                setSubgruposPreferencias(nextSubPrefs);
+            }
+
+            setMsg({
+                open: true,
+                text: novoEstado ? 'Todos os grupos ativados!' : 'Todos os grupos desativados!',
+                type: 'success'
+            });
+        } catch (err: any) {
+            setMsg({ open: true, text: 'Erro ao atualizar preferências: ' + err.message, type: 'error' });
+        } finally {
+            setSavingPrefs(false);
+        }
+    };
+
+    const handleSelectAllSubgroups = async (grupoId: string, novoEstado: boolean) => {
+        if (!activeClientId) return;
+        setSavingPrefs(true);
+        try {
+            const subgDoGrupo = gruposIngredientes.filter(g => g.grupo_id === grupoId);
+            const updates = subgDoGrupo.map(s => ({
+                cliente_id: activeClientId,
+                subgrupo_id: s.id,
+                ativo: novoEstado
+            }));
+
+            if (updates.length > 0) {
+                const { error } = await (supabase as any)
+                    .from('cliente_subgrupos_preferencias')
+                    .upsert(updates, { onConflict: 'cliente_id,subgrupo_id' });
+                if (error) throw error;
+            }
+
+            const nextSubPrefs = { ...subgruposPreferencias };
+            subgDoGrupo.forEach(s => {
+                nextSubPrefs[s.id] = novoEstado;
+            });
+            setSubgruposPreferencias(nextSubPrefs);
+
+            setMsg({
+                open: true,
+                text: novoEstado ? 'Todos os subgrupos deste grupo ativados!' : 'Todos os subgrupos deste grupo desativados!',
+                type: 'success'
+            });
+        } catch (err: any) {
+            setMsg({ open: true, text: 'Erro ao atualizar preferências: ' + err.message, type: 'error' });
+        } finally {
+            setSavingPrefs(false);
+        }
+    };
+
+    const isGlobalGroup = (cat: any): boolean => {
+        return cat.cliente_id === null && cat.modalidade === 'ALIMENTOS';
+    };
+
     // --- FUNÇÕES DE CATEGORIAS ---
     const handleAddCategoria = async (modality: string) => {
         if (!novaCategoria.trim() || !activeClientId) return;
         try {
             const { error } = await (supabase as any).from('grupos_produto')
-                .insert({ 
-                    cliente_id: activeClientId, 
+                .insert({
+                    cliente_id: activeClientId,
                     nome: novaCategoria.trim(),
-                    modalidade: modality 
+                    modalidade: modality
                 });
             if (error) throw error;
             setMsg({ open: true, text: 'Categoria adicionada!', type: 'success' });
@@ -223,10 +416,10 @@ export default function ConfiguracaoEstoquePage() {
         if (!novaSubCategoriaIngrediente.trim() || !activeClientId) return;
         try {
             const { error } = await (supabase as any).from('subgrupos_produto')
-                .insert({ 
-                    cliente_id: activeClientId, 
+                .insert({
+                    cliente_id: activeClientId,
                     grupo_id: categoriaId,
-                    nome: novaSubCategoriaIngrediente.trim() 
+                    nome: novaSubCategoriaIngrediente.trim()
                 });
             if (error) throw error;
             setMsg({ open: true, text: 'Subcategoria adicionada!', type: 'success' });
@@ -250,14 +443,30 @@ export default function ConfiguracaoEstoquePage() {
     };
 
     // --- FUNÇÕES DE SETORES ---
+    const TIPOS_SETOR = [
+        { value: 'PRODUCAO', label: 'Produção', color: 'warning' },
+        { value: 'LIMPEZA', label: 'Limpeza', color: 'success' },
+        { value: 'RECEBIMENTO', label: 'Recebimento', color: 'info' },
+        { value: 'ESTOQUE', label: 'Estoque', color: 'secondary' },
+        { value: 'LIXO', label: 'Depósito de Lixo', color: 'error' },
+        { value: 'TRANSITO', label: 'Trânsito', color: 'primary' },
+        { value: 'BANHEIROS', label: 'Banheiros', color: 'info' },
+        { value: 'VESTIARIOS', label: 'Vestiários', color: 'info' },
+        { value: 'REFEITORIO', label: 'Refeitório', color: 'warning' },
+        { value: 'ADMINISTRATIVO', label: 'Administrativo', color: 'primary' },
+    ] as const;
+    const getSetorTipoLabel = (tipo: string) => TIPOS_SETOR.find(t => t.value === tipo)?.label || tipo;
+    const getSetorTipoColor = (tipo: string) => (TIPOS_SETOR.find(t => t.value === tipo)?.color || 'default') as any;
+
     const handleAddSetor = async () => {
         if (!novoSetor.trim() || !activeClientId) return;
         try {
             const { error } = await (supabase as any).from('setores_producao')
-                .insert({ 
-                    cliente_id: activeClientId, 
+                .insert({
+                    cliente_id: activeClientId,
                     unidade_id: ctxUnidadeId,
-                    nome: novoSetor.trim() 
+                    nome: novoSetor.trim(),
+                    tipo: novoSetorTipo
                 });
             if (error) throw error;
             setMsg({ open: true, text: 'Setor adicionado!', type: 'success' });
@@ -283,17 +492,17 @@ export default function ConfiguracaoEstoquePage() {
     const handleAddEquipamento = async (grupoNome?: string, parentId?: string) => {
         const grupo = grupoNome || novoGrupoEquip.trim();
         const nome = parentId ? novaSubCategoriaEquip.trim() : (grupoEquipParaAdicionar === grupo ? novaCategoriaEquip.trim() : novaCategoriaEquip.trim());
-        
+
         const finalNome = parentId ? novaSubCategoriaEquip.trim() : novaCategoriaEquip.trim();
 
         if (!grupo || !finalNome || !activeClientId) return;
-        
+
         try {
             const { error } = await (supabase as any).from('equipamentos_config')
-                .insert({ 
-                    cliente_id: activeClientId, 
+                .insert({
+                    cliente_id: activeClientId,
                     unidade_id: ctxUnidadeId,
-                    grupo, 
+                    grupo,
                     nome: finalNome,
                     parent_id: parentId || null
                 });
@@ -309,15 +518,15 @@ export default function ConfiguracaoEstoquePage() {
     };
 
     const toggleExpandCategoria = (id: string) => {
-        setExpandedCategorias((prev: string[]) => 
+        setExpandedCategorias((prev: string[]) =>
             prev.includes(id) ? prev.filter((i: string) => i !== id) : [...prev, id]
         );
     };
-    
+
     const toggleModality = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        setExpandedModalityIds(prev => 
+        setExpandedModalityIds(prev =>
             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
         );
     };
@@ -340,6 +549,8 @@ export default function ConfiguracaoEstoquePage() {
         setEditEquipTempMin(equip.temp_ideal_min?.toString() || '');
         setEditEquipTempMax(equip.temp_ideal_max?.toString() || '');
         setEditEquipHorarios(equip.horarios_afericao || []);
+        setEditEquipTipo(equip.tipo_equipamento || '');
+        setEditEquipGrupos(equip.grupos_permitidos_ids || []);
         setEditEquipDialogOpen(true);
     };
 
@@ -348,12 +559,14 @@ export default function ConfiguracaoEstoquePage() {
         try {
             const { error } = await (supabase as any)
                 .from('equipamentos_config')
-                .update({ 
+                .update({
                     nome: editNome.trim(),
                     frequencia_diaria: editEquipFrequencia,
                     temp_ideal_min: editEquipTempMin === '' ? null : parseFloat(editEquipTempMin),
                     temp_ideal_max: editEquipTempMax === '' ? null : parseFloat(editEquipTempMax),
-                    horarios_afericao: editEquipHorarios
+                    horarios_afericao: editEquipHorarios,
+                    tipo_equipamento: editEquipTipo || null,
+                    grupos_permitidos_ids: editEquipGrupos
                 })
                 .eq('id', equipamentoParaEditar.id);
 
@@ -381,17 +594,17 @@ export default function ConfiguracaoEstoquePage() {
                     .eq('nome', qaCategoria)
                     .is('parent_id', null)
                     .single();
-                
+
                 if (catExistente) {
                     paiId = catExistente.id;
                 } else {
                     const { data: novaCat, error: errCat } = await (supabase as any)
                         .from('equipamentos_config')
-                        .insert({ 
-                            cliente_id: activeClientId, 
+                        .insert({
+                            cliente_id: activeClientId,
                             unidade_id: ctxUnidadeId,
-                            grupo: qaGrupo, 
-                            nome: qaCategoria 
+                            grupo: qaGrupo,
+                            nome: qaCategoria
                         })
                         .select()
                         .single();
@@ -404,10 +617,10 @@ export default function ConfiguracaoEstoquePage() {
             if (qaSub.trim()) {
                 const { data: novaSub, error: errSub } = await (supabase as any)
                     .from('equipamentos_config')
-                    .insert({ 
-                        cliente_id: activeClientId, 
+                    .insert({
+                        cliente_id: activeClientId,
                         unidade_id: ctxUnidadeId,
-                        grupo: qaGrupo, 
+                        grupo: qaGrupo,
                         nome: qaSub.trim(),
                         parent_id: paiId
                     })
@@ -434,7 +647,7 @@ export default function ConfiguracaoEstoquePage() {
 
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
-            
+
             {/* HEADER SIMPLIFICADO */}
             <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
                 <IconButton onClick={() => router.back()} sx={{ bgcolor: alpha(theme.palette.action.hover, 0.5) }}>
@@ -452,7 +665,7 @@ export default function ConfiguracaoEstoquePage() {
 
             {/* SEÇÕES EM ACCORDIONS VERTICAIS */}
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                
+
                 {/* 1. LOCAIS DE ESTOQUE */}
                 <Accordion defaultExpanded elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '16px !important', overflow: 'hidden' }}>
                     <AccordionSummary expandIcon={<ChevronDown size={20} />} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.03), py: 1 }}>
@@ -482,12 +695,12 @@ export default function ConfiguracaoEstoquePage() {
                                             onChange={(e) => {
                                                 const val = typeof e.target.value === 'string' ? e.target.value.split(',') : (e.target.value as string[]);
                                                 const filteredVal = val.filter(v => v !== '');
-                                                
+
                                                 // Lógica de "Selecionar Tudo"
-                                                const lastSelected = filteredVal.length > categoriasSelecionadas.length 
+                                                const lastSelected = filteredVal.length > categoriasSelecionadas.length
                                                     ? filteredVal.find(v => !categoriasSelecionadas.includes(v))
                                                     : categoriasSelecionadas.find(v => !filteredVal.includes(v));
-                                                
+
                                                 const modality = CATEGORIAS_COMPRAS.find(m => m.id === lastSelected);
                                                 if (modality) {
                                                     const childrenIds = categorias.filter(c => c.modalidade === modality.id || (modality.id === 'ALIMENTOS' && !c.modalidade)).map(c => c.id);
@@ -506,24 +719,24 @@ export default function ConfiguracaoEstoquePage() {
                                             renderValue={(selected) => (
                                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                                                     {selected.map((val) => (
-                                                        <Chip 
-                                                            key={val} 
-                                                            label={CATEGORIAS_COMPRAS.find(c => c.id === val)?.nome || categorias.find(c => c.id === val)?.nome || val} 
-                                                            size="small" 
+                                                        <Chip
+                                                            key={val}
+                                                            label={CATEGORIAS_COMPRAS.find(c => c.id === val)?.nome || categorias.find(c => c.id === val)?.nome || val}
+                                                            size="small"
                                                         />
                                                     ))}
                                                 </Box>
                                             )}
                                         >
                                             {CATEGORIAS_COMPRAS.map((mod) => [
-                                                <MenuItem 
-                                                    key={`header-add-${mod.id}`} 
+                                                <MenuItem
+                                                    key={`header-add-${mod.id}`}
                                                     value=""
                                                     onClick={(e) => toggleModality(mod.id, e)}
-                                                    sx={{ 
-                                                        px: 2, py: 1, 
-                                                        bgcolor: alpha(mod.color, 0.05), 
-                                                        borderBottom: '1px solid', 
+                                                    sx={{
+                                                        px: 2, py: 1,
+                                                        bgcolor: alpha(mod.color, 0.05),
+                                                        borderBottom: '1px solid',
                                                         borderColor: alpha(mod.color, 0.1),
                                                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                                         '&:hover': { bgcolor: alpha(mod.color, 0.1) },
@@ -543,7 +756,7 @@ export default function ConfiguracaoEstoquePage() {
                                                         <ListItemText primary={`Selecionar Tudo de ${mod.nome}`} primaryTypographyProps={{ variant: 'body2', fontWeight: 'bold' }} />
                                                     </MenuItem>
                                                 ),
-                                                ...((expandedModalityIds.includes(mod.id)) 
+                                                ...((expandedModalityIds.includes(mod.id))
                                                     ? categorias.filter(c => c.modalidade === mod.id || (mod.id === 'ALIMENTOS' && !c.modalidade)).map(cat => (
                                                         <MenuItem key={cat.id} value={cat.id} sx={{ pl: 6 }}>
                                                             <Checkbox checked={categoriasSelecionadas.includes(cat.id)} />
@@ -579,24 +792,24 @@ export default function ConfiguracaoEstoquePage() {
                                                 <MapPin size={18} />
                                             </Box>
                                         </ListItemIcon>
-                                        <ListItemText 
+                                        <ListItemText
                                             primary={local.nome}
                                             secondary={
                                                 <Box>
                                                     <Typography variant="caption" display="block">
-                                                        {local.grupos_permitidos_ids?.length > 0 
-                                                            ? local.grupos_permitidos_ids.map((id: string) => 
-                                                                CATEGORIAS_COMPRAS.find(c => c.id === id)?.nome || 
-                                                                categorias.find(c => c.id === id)?.nome || 
+                                                        {local.grupos_permitidos_ids?.length > 0
+                                                            ? local.grupos_permitidos_ids.map((id: string) =>
+                                                                CATEGORIAS_COMPRAS.find(c => c.id === id)?.nome ||
+                                                                categorias.find(c => c.id === id)?.nome ||
                                                                 id
-                                                            ).join(' • ') 
+                                                            ).join(' • ')
                                                             : 'Acesso Global'}
                                                     </Typography>
                                                     {local.equipamento_config_id && (
-                                                        <Chip 
-                                                            size="small" 
-                                                            icon={<Settings size={12} />} 
-                                                            label={`Monitorado: ${equipamentos.find(e => e.id === local.equipamento_config_id)?.nome || 'Equipamento'}`} 
+                                                        <Chip
+                                                            size="small"
+                                                            icon={<Settings size={12} />}
+                                                            label={`Monitorado: ${equipamentos.find(e => e.id === local.equipamento_config_id)?.nome || 'Equipamento'}`}
                                                             sx={{ height: 20, fontSize: '0.65rem', mt: 0.5, color: 'info.main', borderColor: alpha(theme.palette.info.main, 0.3) }}
                                                             variant="outlined"
                                                         />
@@ -632,90 +845,209 @@ export default function ConfiguracaoEstoquePage() {
                     </AccordionSummary>
                     <AccordionDetails sx={{ p: 2 }}>
                         <Grid container spacing={2}>
-                            {CATEGORIAS_COMPRAS.map((mod) => (
-                                <Grid item xs={12} md={6} lg={4} key={mod.id}>
-                                    <Paper variant="outlined" sx={{ borderRadius: 3, overflow: 'hidden' }}>
-                                        <Box sx={{ p: 1.5, bgcolor: alpha(mod.color, 0.05), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: mod.color }} />
-                                                <Typography variant="body2" fontWeight="700">{mod.nome}</Typography>
-                                            </Box>
-                                            <Chip label={categorias.filter(c => c.modalidade === mod.id || (mod.id === 'ALIMENTOS' && !c.modalidade)).length} size="small" sx={{ height: 18, fontSize: '0.65rem' }} />
-                                        </Box>
-                                        <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', gap: 1 }}>
-                                            <TextField 
-                                                size="small" 
-                                                fullWidth 
-                                                placeholder={mod.id === 'ALIMENTOS' ? "Novo Grupo (Ex: Farinhas...)" : "Adicionar..."} 
-                                                value={modalidadeParaNovaCategoria === mod.id ? novaCategoria : ''} 
-                                                onChange={e => { setModalidadeParaNovaCategoria(mod.id); setNovaCategoria(e.target.value); }}
-                                                onKeyDown={e => e.key === 'Enter' && handleAddCategoria(mod.id)}
-                                            />
-                                            <Button variant="contained" size="small" onClick={() => handleAddCategoria(mod.id)} sx={{ minWidth: 36, bgcolor: mod.color, '&:hover': { bgcolor: mod.color, opacity: 0.9 } }}>
-                                                <Plus size={16} />
-                                            </Button>
-                                        </Box>
-                                        <List dense sx={{ maxHeight: mod.id === 'ALIMENTOS' ? 400 : 200, overflow: 'auto' }}>
-                                            {categorias.filter(c => c.modalidade === mod.id || (mod.id === 'ALIMENTOS' && !c.modalidade)).map(cat => (
-                                                <Box key={cat.id}>
-                                                    <ListItem sx={{ py: 0.5 }}>
-                                                        {mod.id === 'ALIMENTOS' && (
-                                                            <IconButton size="small" onClick={() => toggleExpandCategoria(cat.id)} sx={{ mr: 1, p: 0.5 }}>
-                                                                {expandedCategorias.includes(cat.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                                            </IconButton>
-                                                        )}
-                                                        <ListItemText 
-                                                            primary={cat.nome} 
-                                                            primaryTypographyProps={{ variant: 'caption', fontWeight: 600, color: mod.id === 'ALIMENTOS' ? 'primary.main' : 'text.primary' }} 
+                            {CATEGORIAS_COMPRAS.map((mod) => {
+                                const isAlimentos = mod.id === 'ALIMENTOS';
+                                const modCategorias = categorias.filter(c => c.modalidade === mod.id);
+                                const ativosCount = isAlimentos
+                                    ? modCategorias.filter(c => isGrupoAtivo(c.id)).length
+                                    : modCategorias.length;
+
+                                return (
+                                    <Grid item xs={12} md={isAlimentos ? 12 : 6} lg={isAlimentos ? 12 : 4} key={mod.id}>
+                                        <Paper variant="outlined" sx={{ borderRadius: 3, overflow: 'hidden' }}>
+                                            <Box sx={{ p: 1.5, bgcolor: alpha(mod.color, 0.05), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: mod.color }} />
+                                                    <Typography variant="body2" fontWeight="700">{mod.nome}</Typography>
+                                                    {isAlimentos && (
+                                                        <Chip
+                                                            label="Padrão Global"
+                                                            size="small"
+                                                            sx={{
+                                                                height: 20, fontSize: '0.6rem', fontWeight: 700,
+                                                                bgcolor: alpha(mod.color, 0.1), color: mod.color
+                                                            }}
                                                         />
-                                                        <ListItemSecondaryAction>
-                                                            <IconButton size="small" onClick={() => handleRemoveCategoria(cat.id)}><Trash2 size={12} /></IconButton>
-                                                        </ListItemSecondaryAction>
-                                                    </ListItem>
-                                                    
-                                                    {mod.id === 'ALIMENTOS' && expandedCategorias.includes(cat.id) && (
-                                                        <Box sx={{ pl: 4, pr: 1, pb: 1 }}>
-                                                            <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-                                                                <Typography variant="caption" fontWeight="bold" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>Subcategorias (Nível 3)</Typography>
-                                                                <List dense>
-                                                                    {gruposIngredientes.filter(g => g.grupo_id === cat.id).map(grp => (
-                                                                        <ListItem key={grp.id} sx={{ py: 0, px: 1 }}>
-                                                                            <ListItemIcon sx={{ minWidth: 20 }}>
-                                                                                <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: 'primary.main' }} />
-                                                                            </ListItemIcon>
-                                                                            <ListItemText primary={grp.nome} primaryTypographyProps={{ variant: 'caption', fontSize: '0.7rem' }} />
-                                                                            <ListItemSecondaryAction>
-                                                                                <IconButton size="small" onClick={() => handleRemoveSubCategoriaIngrediente(grp.id)}><Trash2 size={10} /></IconButton>
-                                                                            </ListItemSecondaryAction>
-                                                                        </ListItem>
-                                                                    ))}
-                                                                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                                                                        <TextField 
-                                                                            size="small" 
-                                                                            fullWidth 
-                                                                            placeholder="Nova Subcategoria..." 
-                                                                            value={categoriaPaiSubIngrediente === cat.id ? novaSubCategoriaIngrediente : ''}
-                                                                            onChange={e => { setCategoriaPaiSubIngrediente(cat.id); setNovaSubCategoriaIngrediente(e.target.value); }}
-                                                                            onKeyDown={e => e.key === 'Enter' && handleAddSubCategoriaIngrediente(cat.id)}
-                                                                            inputProps={{ style: { fontSize: '0.7rem', padding: '4px 8px' } }}
-                                                                        />
-                                                                        <Button variant="contained" size="small" onClick={() => handleAddSubCategoriaIngrediente(cat.id)} sx={{ minWidth: 28, height: 28 }}>
-                                                                            <Plus size={14} />
-                                                                        </Button>
-                                                                    </Box>
-                                                                </List>
-                                                            </Box>
-                                                        </Box>
                                                     )}
                                                 </Box>
-                                            ))}
-                                            {categorias.filter(c => c.modalidade === mod.id || (mod.id === 'ALIMENTOS' && !c.modalidade)).length === 0 && (
-                                                <Typography variant="caption" color="text.disabled" sx={{ p: 2, display: 'block', textAlign: 'center' }}>Vazio</Typography>
+                                                <Chip
+                                                    label={isAlimentos ? `${ativosCount}/${modCategorias.length} ativos` : modCategorias.length}
+                                                    size="small"
+                                                    sx={{ height: 18, fontSize: '0.65rem' }}
+                                                />
+                                            </Box>
+
+                                            {/* Input para adicionar - apenas para modalidades não-globais */}
+                                            {!isAlimentos && (
+                                                <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', gap: 1 }}>
+                                                    <TextField
+                                                        size="small"
+                                                        fullWidth
+                                                        placeholder="Adicionar..."
+                                                        value={modalidadeParaNovaCategoria === mod.id ? novaCategoria : ''}
+                                                        onChange={e => { setModalidadeParaNovaCategoria(mod.id); setNovaCategoria(e.target.value); }}
+                                                        onKeyDown={e => e.key === 'Enter' && handleAddCategoria(mod.id)}
+                                                    />
+                                                    <Button variant="contained" size="small" onClick={() => handleAddCategoria(mod.id)} sx={{ minWidth: 36, bgcolor: mod.color, '&:hover': { bgcolor: mod.color, opacity: 0.9 } }}>
+                                                        <Plus size={16} />
+                                                    </Button>
+                                                </Box>
                                             )}
-                                        </List>
-                                    </Paper>
-                                </Grid>
-                            ))}
+
+                                            {/* Info para ALIMENTOS */}
+                                            {isAlimentos && (
+                                                <Alert severity="info" sx={{ borderRadius: 0, py: 0.5, '& .MuiAlert-message': { fontSize: '0.7rem' } }}>
+                                                    Grupos padrão compartilhados entre todos os clientes. Ative/desative os que esta unidade utiliza.
+                                                </Alert>
+                                            )}
+
+                                            {isAlimentos && (
+                                                <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha(theme.palette.primary.main, 0.01) }}>
+                                                    <Typography variant="caption" fontWeight="bold" color="text.secondary">Ativar/Desativar Grupos</Typography>
+                                                    <Box sx={{ display: 'flex', gap: 1 }}>
+                                                        <Button
+                                                            size="small"
+                                                            variant="text"
+                                                            onClick={() => handleSelectAllGroups(true)}
+                                                            disabled={savingPrefs}
+                                                            sx={{ fontSize: '0.65rem', py: 0.2, fontWeight: 'bold' }}
+                                                        >
+                                                            Ativar Todos
+                                                        </Button>
+                                                        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+                                                        <Button
+                                                            size="small"
+                                                            variant="text"
+                                                            color="error"
+                                                            onClick={() => handleSelectAllGroups(false)}
+                                                            disabled={savingPrefs}
+                                                            sx={{ fontSize: '0.65rem', py: 0.2, fontWeight: 'bold' }}
+                                                        >
+                                                            Desativar Todos
+                                                        </Button>
+                                                    </Box>
+                                                </Box>
+                                            )}
+
+                                            <List dense sx={{ maxHeight: isAlimentos ? 500 : 200, overflow: 'auto', columns: isAlimentos ? 2 : 1, columnGap: 0 }}>
+                                                {modCategorias.map(cat => (
+                                                    <Box key={cat.id} sx={{ breakInside: 'avoid' }}>
+                                                        <ListItem sx={{ py: 0.5, opacity: isAlimentos && !isGrupoAtivo(cat.id) ? 0.45 : 1 }}>
+                                                            {/* Toggle para ALIMENTOS, expand para subgrupos */}
+                                                            {isAlimentos && (
+                                                                <>
+                                                                    <Switch
+                                                                        size="small"
+                                                                        checked={isGrupoAtivo(cat.id)}
+                                                                        onChange={(e) => handleToggleGrupo(cat.id, e.target.checked)}
+                                                                        disabled={savingPrefs}
+                                                                        sx={{ mr: 0.5 }}
+                                                                    />
+                                                                    <IconButton size="small" onClick={() => toggleExpandCategoria(cat.id)} sx={{ mr: 0.5, p: 0.5 }}>
+                                                                        {expandedCategorias.includes(cat.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                                                    </IconButton>
+                                                                </>
+                                                            )}
+                                                            <ListItemText
+                                                                primary={cat.nome}
+                                                                secondary={isAlimentos ? `${gruposIngredientes.filter(g => g.grupo_id === cat.id).length} subgrupos` : undefined}
+                                                                primaryTypographyProps={{
+                                                                    variant: 'caption',
+                                                                    fontWeight: 600,
+                                                                    color: isAlimentos ? (isGrupoAtivo(cat.id) ? 'primary.main' : 'text.disabled') : 'text.primary',
+                                                                    sx: { textDecoration: isAlimentos && !isGrupoAtivo(cat.id) ? 'line-through' : 'none' }
+                                                                }}
+                                                                secondaryTypographyProps={{ variant: 'caption', fontSize: '0.6rem' }}
+                                                            />
+                                                            {/* Delete apenas para não-globais */}
+                                                            {!isAlimentos && (
+                                                                <ListItemSecondaryAction>
+                                                                    <IconButton size="small" onClick={() => handleRemoveCategoria(cat.id)}><Trash2 size={12} /></IconButton>
+                                                                </ListItemSecondaryAction>
+                                                            )}
+                                                        </ListItem>
+
+                                                        {/* Subgrupos expandidos - com toggle para ALIMENTOS */}
+                                                        {isAlimentos && expandedCategorias.includes(cat.id) && (
+                                                            <Box sx={{ pl: 6, pr: 1, pb: 1 }}>
+                                                                <Box sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+                                                                    <Typography variant="caption" fontWeight="bold" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>Subcategorias (Nível 3)</Typography>
+                                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, borderBottom: '1px dashed', borderColor: 'divider', pb: 0.5 }}>
+                                                                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Subgrupos</Typography>
+                                                                        <Box sx={{ display: 'flex', gap: 1 }}>
+                                                                            <Button
+                                                                                size="small"
+                                                                                variant="text"
+                                                                                onClick={() => handleSelectAllSubgroups(cat.id, true)}
+                                                                                disabled={savingPrefs || !isGrupoAtivo(cat.id)}
+                                                                                sx={{ fontSize: '0.6rem', py: 0.1, px: 0.5, minWidth: 'auto', fontWeight: 'bold' }}
+                                                                            >
+                                                                                Ativar Todos
+                                                                            </Button>
+                                                                            <Button
+                                                                                size="small"
+                                                                                variant="text"
+                                                                                color="error"
+                                                                                onClick={() => handleSelectAllSubgroups(cat.id, false)}
+                                                                                disabled={savingPrefs || !isGrupoAtivo(cat.id)}
+                                                                                sx={{ fontSize: '0.6rem', py: 0.1, px: 0.5, minWidth: 'auto', fontWeight: 'bold' }}
+                                                                            >
+                                                                                Desativar Todos
+                                                                            </Button>
+                                                                        </Box>
+                                                                    </Box>
+                                                                    <List dense>
+                                                                        {gruposIngredientes.filter(g => g.grupo_id === cat.id).map(grp => (
+                                                                            <ListItem key={grp.id} sx={{ py: 0, px: 1, opacity: !isSubgrupoAtivo(grp.id) ? 0.45 : 1 }}>
+                                                                                {grp.cliente_id === null ? (
+                                                                                    <Switch
+                                                                                        size="small"
+                                                                                        checked={isSubgrupoAtivo(grp.id)}
+                                                                                        onChange={(e) => handleToggleSubgrupo(grp.id, e.target.checked)}
+                                                                                        disabled={savingPrefs || !isGrupoAtivo(cat.id)}
+                                                                                        sx={{ mr: 0.5 }}
+                                                                                    />
+                                                                                ) : (
+                                                                                    <ListItemIcon sx={{ minWidth: 20 }}>
+                                                                                        <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: 'primary.main' }} />
+                                                                                    </ListItemIcon>
+                                                                                )}
+                                                                                <ListItemText primary={grp.nome} primaryTypographyProps={{ variant: 'caption', fontSize: '0.7rem' }} />
+                                                                                {grp.cliente_id !== null && (
+                                                                                    <ListItemSecondaryAction>
+                                                                                        <IconButton size="small" onClick={() => handleRemoveSubCategoriaIngrediente(grp.id)}><Trash2 size={10} /></IconButton>
+                                                                                    </ListItemSecondaryAction>
+                                                                                )}
+                                                                            </ListItem>
+                                                                        ))}
+                                                                        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                                                            <TextField
+                                                                                size="small"
+                                                                                fullWidth
+                                                                                placeholder="Nova Subcategoria..."
+                                                                                value={categoriaPaiSubIngrediente === cat.id ? novaSubCategoriaIngrediente : ''}
+                                                                                onChange={e => { setCategoriaPaiSubIngrediente(cat.id); setNovaSubCategoriaIngrediente(e.target.value); }}
+                                                                                onKeyDown={e => e.key === 'Enter' && handleAddSubCategoriaIngrediente(cat.id)}
+                                                                                inputProps={{ style: { fontSize: '0.7rem', padding: '4px 8px' } }}
+                                                                            />
+                                                                            <Button variant="contained" size="small" onClick={() => handleAddSubCategoriaIngrediente(cat.id)} sx={{ minWidth: 28, height: 28 }}>
+                                                                                <Plus size={14} />
+                                                                            </Button>
+                                                                        </Box>
+                                                                    </List>
+                                                                </Box>
+                                                            </Box>
+                                                        )}
+                                                    </Box>
+                                                ))}
+                                                {modCategorias.length === 0 && (
+                                                    <Typography variant="caption" color="text.disabled" sx={{ p: 2, display: 'block', textAlign: 'center' }}>Vazio</Typography>
+                                                )}
+                                            </List>
+                                        </Paper>
+                                    </Grid>
+                                );
+                            })}
                         </Grid>
                     </AccordionDetails>
                 </Accordion>
@@ -729,41 +1061,70 @@ export default function ConfiguracaoEstoquePage() {
                             </Box>
                             <Box>
                                 <Typography variant="subtitle1" fontWeight="800">Setores de Operação</Typography>
-                                <Typography variant="caption" color="text.secondary">Defina as origens/destinos internos das saídas de estoque</Typography>
+                                <Typography variant="caption" color="text.secondary">Setores de produção, limpeza, recebimento, banheiros e outras áreas</Typography>
                             </Box>
                         </Box>
                     </AccordionSummary>
                     <AccordionDetails sx={{ p: 2 }}>
-                        <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
-                            <TextField fullWidth size="small" placeholder="Novo Setor (Ex: Cozinha, Salão, Delivery...)" value={novoSetor} onChange={e => setNovoSetor(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddSetor()} />
-                            <Button variant="contained" color="warning" onClick={handleAddSetor} disabled={!novoSetor.trim()}>Adicionar</Button>
+                        <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
+                            <TextField
+                                select
+                                size="small"
+                                value={novoSetorTipo}
+                                onChange={e => setNovoSetorTipo(e.target.value)}
+                                sx={{ minWidth: 180 }}
+                                label="Tipo"
+                            >
+                                {TIPOS_SETOR.map(t => (
+                                    <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+                                ))}
+                            </TextField>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                placeholder="Nome do Setor (Ex: Cozinha Quente, Banheiro Feminino...)"
+                                value={novoSetor}
+                                onChange={e => setNovoSetor(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleAddSetor()}
+                            />
+                            <Button variant="contained" color="warning" onClick={handleAddSetor} disabled={!novoSetor.trim()} sx={{ whiteSpace: 'nowrap' }}>Adicionar</Button>
                         </Box>
-                        <Grid container spacing={1}>
-                            {setores.map(s => (
-                                <Grid item key={s.id}>
-                                    <Chip 
-                                        label={s.nome} 
-                                        onDelete={() => handleRemoveSetor(s.id)} 
-                                        sx={{ 
-                                            fontWeight: 600, 
-                                            bgcolor: alpha(theme.palette.warning.main, 0.1),
-                                            color: 'warning.dark',
-                                            border: '1px solid',
-                                            borderColor: alpha(theme.palette.warning.main, 0.2)
-                                        }} 
-                                    />
-                                </Grid>
-                            ))}
-                            {setores.length === 0 && (
-                                <Box sx={{ p: 2, width: '100%', textAlign: 'center', opacity: 0.5 }}>
-                                    <Typography variant="body2">Nenhum setor cadastrado.</Typography>
+
+                        {/* Agrupados por tipo */}
+                        {TIPOS_SETOR.map(tipoObj => {
+                            const setoresTipo = setores.filter((s: any) => (s.tipo || 'PRODUCAO') === tipoObj.value);
+                            if (setoresTipo.length === 0) return null;
+                            return (
+                                <Box key={tipoObj.value} sx={{ mb: 2 }}>
+                                    <Typography variant="caption" fontWeight="700" color={`${tipoObj.color}.main`} sx={{ mb: 0.5, display: 'block', textTransform: 'uppercase', letterSpacing: 1 }}>
+                                        {tipoObj.label}
+                                    </Typography>
+                                    <Grid container spacing={1}>
+                                        {setoresTipo.map((s: any) => (
+                                            <Grid item key={s.id}>
+                                                <Chip
+                                                    label={s.nome}
+                                                    onDelete={() => handleRemoveSetor(s.id)}
+                                                    color={tipoObj.color as any}
+                                                    variant="outlined"
+                                                    sx={{ fontWeight: 600 }}
+                                                />
+                                            </Grid>
+                                        ))}
+                                    </Grid>
                                 </Box>
-                            )}
-                        </Grid>
+                            );
+                        })}
+
+                        {setores.length === 0 && (
+                            <Box sx={{ p: 2, width: '100%', textAlign: 'center', opacity: 0.5 }}>
+                                <Typography variant="body2">Nenhum setor cadastrado.</Typography>
+                            </Box>
+                        )}
                     </AccordionDetails>
                 </Accordion>
 
-                {/* 4. EQUIPAMENTOS (TEMPERATURAS & REGULAGEM) */}
+                {/* 4. EQUIPAMENTOS (TEMPERATURAS & CALIBRAÇÃO) */}
                 <Accordion elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '16px !important', overflow: 'hidden' }}>
                     <AccordionSummary expandIcon={<ChevronDown size={20} />} sx={{ bgcolor: alpha(theme.palette.info.main, 0.03), py: 1 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -772,7 +1133,7 @@ export default function ConfiguracaoEstoquePage() {
                             </Box>
                             <Box>
                                 <Typography variant="subtitle1" fontWeight="800">Equipamentos</Typography>
-                                <Typography variant="caption" color="text.secondary">Gerencie grupos e categorias de equipamentos (Temperaturas, Regulagem, etc)</Typography>
+                                <Typography variant="caption" color="text.secondary">Gerencie grupos e categorias de equipamentos (Temperaturas, Calibração, etc)</Typography>
                             </Box>
                         </Box>
                     </AccordionSummary>
@@ -797,11 +1158,11 @@ export default function ConfiguracaoEstoquePage() {
                                             <Chip label={equipamentos.filter(e => e.grupo === grupo).length} size="small" sx={{ height: 18, fontSize: '0.65rem' }} />
                                         </Box>
                                         <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', gap: 1 }}>
-                                            <TextField 
-                                                size="small" 
-                                                fullWidth 
-                                                placeholder="Nova Categoria..." 
-                                                value={grupoEquipParaAdicionar === grupo ? novaCategoriaEquip : ''} 
+                                            <TextField
+                                                size="small"
+                                                fullWidth
+                                                placeholder="Nova Categoria..."
+                                                value={grupoEquipParaAdicionar === grupo ? novaCategoriaEquip : ''}
                                                 onChange={e => { setGrupoEquipParaAdicionar(grupo); setNovaCategoriaEquip(e.target.value); }}
                                                 onKeyDown={e => e.key === 'Enter' && handleAddEquipamento(grupo)}
                                             />
@@ -816,16 +1177,16 @@ export default function ConfiguracaoEstoquePage() {
                                                         <IconButton size="small" onClick={() => toggleExpandCategoria(cat.id)} sx={{ mr: 1, p: 0.5 }}>
                                                             {expandedCategorias.includes(cat.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                                         </IconButton>
-                                                        <ListItemText 
-                                                            primary={cat.nome} 
-                                                            primaryTypographyProps={{ variant: 'body2', fontWeight: 600, color: 'text.primary' }} 
+                                                        <ListItemText
+                                                            primary={cat.nome}
+                                                            primaryTypographyProps={{ variant: 'body2', fontWeight: 600, color: 'text.primary' }}
                                                         />
                                                         <ListItemSecondaryAction>
                                                             <IconButton size="small" onClick={() => handleOpenEditEquipamento(cat)} sx={{ mr: 1, color: 'primary.main' }}><Edit size={12} /></IconButton>
                                                             <IconButton size="small" onClick={() => handleRemoveEquipamento(cat.id)}><Trash2 size={12} /></IconButton>
                                                         </ListItemSecondaryAction>
                                                     </ListItem>
-                                                    
+
                                                     {expandedCategorias.includes(cat.id) && (
                                                         <Box sx={{ pl: 4, mb: 1, mt: 0.5 }}>
                                                             <List dense sx={{ bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 2, border: '1px solid', borderColor: alpha(theme.palette.info.main, 0.1) }}>
@@ -834,9 +1195,9 @@ export default function ConfiguracaoEstoquePage() {
                                                                         <ListItemIcon sx={{ minWidth: 20 }}>
                                                                             <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: 'info.main' }} />
                                                                         </ListItemIcon>
-                                                                        <ListItemText 
-                                                                            primary={sub.nome} 
-                                                                            primaryTypographyProps={{ variant: 'caption', fontWeight: 600, color: 'info.dark' }} 
+                                                                        <ListItemText
+                                                                            primary={sub.nome}
+                                                                            primaryTypographyProps={{ variant: 'caption', fontWeight: 600, color: 'info.dark' }}
                                                                         />
                                                                         <ListItemSecondaryAction>
                                                                             <IconButton size="small" onClick={() => handleOpenEditEquipamento(sub)} sx={{ mr: 1, color: 'primary.main' }}><Edit size={10} /></IconButton>
@@ -845,14 +1206,14 @@ export default function ConfiguracaoEstoquePage() {
                                                                     </ListItem>
                                                                 ))}
                                                                 <Box sx={{ p: 1, display: 'flex', gap: 1 }}>
-                                                                    <TextField 
-                                                                        size="small" 
-                                                                        fullWidth 
-                                                                        placeholder="Nova Sub-categoria..." 
+                                                                    <TextField
+                                                                        size="small"
+                                                                        fullWidth
+                                                                        placeholder="Nova Sub-categoria..."
                                                                         value={categoriaPaiId === cat.id ? novaSubCategoriaEquip : ''}
                                                                         onChange={e => { setCategoriaPaiId(cat.id); setNovaSubCategoriaEquip(e.target.value); }}
                                                                         onKeyDown={e => e.key === 'Enter' && handleAddEquipamento(grupo, cat.id)}
-                                                                        sx={{ 
+                                                                        sx={{
                                                                             '& .MuiOutlinedInput-root': { bgcolor: 'white' }
                                                                         }}
                                                                         inputProps={{ style: { fontSize: '0.75rem' } }}
@@ -884,18 +1245,18 @@ export default function ConfiguracaoEstoquePage() {
                         <TextField label="Nome do Local" fullWidth size="small" value={editNome} onChange={(e) => setEditNome(e.target.value)} autoFocus />
                         <FormControl fullWidth size="small">
                             <InputLabel>Categorias Permitidas</InputLabel>
-                            <Select 
-                                multiple 
-                                value={editCategorias} 
+                            <Select
+                                multiple
+                                value={editCategorias}
                                 onChange={(e) => {
                                     const val = typeof e.target.value === 'string' ? e.target.value.split(',') : (e.target.value as string[]);
                                     const filteredVal = val.filter(v => v !== '');
-                                    
+
                                     // Lógica de "Selecionar Tudo"
-                                    const lastSelected = filteredVal.length > editCategorias.length 
+                                    const lastSelected = filteredVal.length > editCategorias.length
                                         ? filteredVal.find(v => !editCategorias.includes(v))
                                         : editCategorias.find(v => !filteredVal.includes(v));
-                                    
+
                                     const modality = CATEGORIAS_COMPRAS.find(m => m.id === lastSelected);
                                     if (modality) {
                                         const childrenIds = categorias.filter(c => c.modalidade === modality.id || (modality.id === 'ALIMENTOS' && !c.modalidade)).map(c => c.id);
@@ -909,29 +1270,29 @@ export default function ConfiguracaoEstoquePage() {
                                     } else {
                                         setEditCategorias(filteredVal);
                                     }
-                                }} 
-                                input={<OutlinedInput label="Categorias Permitidas" />} 
+                                }}
+                                input={<OutlinedInput label="Categorias Permitidas" />}
                                 renderValue={(selected) => (
                                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                                         {selected.map((val) => (
-                                            <Chip 
-                                                key={val} 
-                                                label={CATEGORIAS_COMPRAS.find(c => c.id === val)?.nome || categorias.find(c => c.id === val)?.nome || val} 
-                                                size="small" 
+                                            <Chip
+                                                key={val}
+                                                label={CATEGORIAS_COMPRAS.find(c => c.id === val)?.nome || categorias.find(c => c.id === val)?.nome || val}
+                                                size="small"
                                             />
                                         ))}
                                     </Box>
                                 )}
                             >
                                 {CATEGORIAS_COMPRAS.map((mod) => [
-                                    <MenuItem 
-                                        key={`header-${mod.id}`} 
+                                    <MenuItem
+                                        key={`header-${mod.id}`}
                                         value=""
                                         onClick={(e) => toggleModality(mod.id, e)}
-                                        sx={{ 
-                                            px: 2, py: 1, 
-                                            bgcolor: alpha(mod.color, 0.05), 
-                                            borderBottom: '1px solid', 
+                                        sx={{
+                                            px: 2, py: 1,
+                                            bgcolor: alpha(mod.color, 0.05),
+                                            borderBottom: '1px solid',
                                             borderColor: alpha(mod.color, 0.1),
                                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                             '&:hover': { bgcolor: alpha(mod.color, 0.1) },
@@ -950,7 +1311,7 @@ export default function ConfiguracaoEstoquePage() {
                                             <ListItemText primary={`Selecionar Tudo de ${mod.nome}`} primaryTypographyProps={{ variant: 'body2', fontWeight: 'bold' }} />
                                         </MenuItem>
                                     ),
-                                    ...((expandedModalityIds.includes(mod.id)) 
+                                    ...((expandedModalityIds.includes(mod.id))
                                         ? categorias.filter(c => c.modalidade === mod.id || (mod.id === 'ALIMENTOS' && !c.modalidade)).map(cat => (
                                             <MenuItem key={cat.id} value={cat.id} sx={{ pl: 6 }}>
                                                 <Checkbox checked={editCategorias.includes(cat.id)} />
@@ -970,8 +1331,8 @@ export default function ConfiguracaoEstoquePage() {
                                     Cadastrar Novo
                                 </Button>
                             </Box>
-                            <Select 
-                                value={editEquipamentoConfigId || ''} 
+                            <Select
+                                value={editEquipamentoConfigId || ''}
                                 onChange={(e) => {
                                     const newVal = e.target.value || null;
                                     if (originalEquipId && newVal !== originalEquipId) {
@@ -980,7 +1341,7 @@ export default function ConfiguracaoEstoquePage() {
                                         }
                                     }
                                     setEditEquipamentoConfigId(newVal);
-                                }} 
+                                }}
                                 input={<OutlinedInput />}
                                 displayEmpty
                             >
@@ -1018,7 +1379,7 @@ export default function ConfiguracaoEstoquePage() {
                 <DialogContent>
                     <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <Typography variant="caption" color="text.secondary">Crie uma nova categoria de temperatura para vincular a este local.</Typography>
-                        
+
                         <FormControl fullWidth size="small">
                             <InputLabel>Grupo</InputLabel>
                             <Select value={qaGrupo} label="Grupo" onChange={e => setQaGrupo(e.target.value)}>
@@ -1031,9 +1392,9 @@ export default function ConfiguracaoEstoquePage() {
 
                         <FormControl fullWidth size="small">
                             <InputLabel>Categoria (Pai)</InputLabel>
-                            <Select 
-                                value={qaCategoriaPaiId || ''} 
-                                label="Categoria (Pai)" 
+                            <Select
+                                value={qaCategoriaPaiId || ''}
+                                label="Categoria (Pai)"
                                 onChange={e => {
                                     const val = e.target.value;
                                     setQaCategoriaPaiId(val || null);
@@ -1051,32 +1412,32 @@ export default function ConfiguracaoEstoquePage() {
                         </FormControl>
 
                         {!qaCategoriaPaiId && (
-                            <TextField 
-                                label="Nome da Nova Categoria" 
-                                fullWidth 
-                                size="small" 
+                            <TextField
+                                label="Nome da Nova Categoria"
+                                fullWidth
+                                size="small"
                                 placeholder="Ex: Refrigerados, Congelados..."
-                                value={qaCategoria} 
-                                onChange={e => setQaCategoria(e.target.value)} 
+                                value={qaCategoria}
+                                onChange={e => setQaCategoria(e.target.value)}
                             />
                         )}
 
-                        <TextField 
-                            label="Nome da Sub-categoria (Opcional)" 
-                            fullWidth 
-                            size="small" 
+                        <TextField
+                            label="Nome da Sub-categoria (Opcional)"
+                            fullWidth
+                            size="small"
                             placeholder="Ex: Geladeira 01, Câmara 05..."
-                            value={qaSub} 
-                            onChange={e => setQaSub(e.target.value)} 
+                            value={qaSub}
+                            onChange={e => setQaSub(e.target.value)}
                         />
                     </Box>
                 </DialogContent>
                 <DialogActions sx={{ p: 3, pt: 0 }}>
                     <Button onClick={() => setQuickAddOpen(false)} color="inherit">Cancelar</Button>
-                    <Button 
-                        onClick={handleQuickAddEquip} 
-                        variant="contained" 
-                        color="info" 
+                    <Button
+                        onClick={handleQuickAddEquip}
+                        variant="contained"
+                        color="info"
                         disabled={!qaGrupo || (!qaCategoriaPaiId && !qaCategoria.trim())}
                     >
                         Criar e Vincular
@@ -1088,27 +1449,80 @@ export default function ConfiguracaoEstoquePage() {
             <Dialog open={editEquipDialogOpen} onClose={() => setEditEquipDialogOpen(false)} fullWidth maxWidth="xs" PaperProps={{ sx: { borderRadius: 4 } }}>
                 <DialogTitle sx={{ fontWeight: 'bold' }}>Configurar Equipamento</DialogTitle>
                 <DialogContent>
-                    <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <TextField 
-                            label="Nome do Equipamento" 
-                            fullWidth 
-                            size="small" 
-                            value={editNome} 
-                            onChange={(e) => setEditNome(e.target.value)} 
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+                        <TextField
+                            label="Nome do Equipamento"
+                            fullWidth
+                            size="small"
+                            value={editNome}
+                            onChange={(e) => setEditNome(e.target.value)}
                         />
-                        
+
+                        <FormControl fullWidth size="small">
+                            <InputLabel>Tipo de Equipamento</InputLabel>
+                            <Select
+                                value={editEquipTipo}
+                                onChange={(e) => setEditEquipTipo(e.target.value as string)}
+                                input={<OutlinedInput label="Tipo de Equipamento" />}
+                            >
+                                <MenuItem value=""><em>Não especificado</em></MenuItem>
+                                <MenuItem value="CAMARA_FRIA_RESFRIADOS">Câmara Fria (Resfriados)</MenuItem>
+                                <MenuItem value="CAMARA_FRIA_CONGELADOS">Câmara Fria (Congelados)</MenuItem>
+                                <MenuItem value="REFRIGERADOR_COMERCIAL">Refrigerador Comercial</MenuItem>
+                                <MenuItem value="FREEZER_VERTICAL">Freezer Vertical</MenuItem>
+                                <MenuItem value="FREEZER_HORIZONTAL">Freezer Horizontal</MenuItem>
+                                <MenuItem value="BALCAO_REFRIGERADO">Balcão Refrigerado</MenuItem>
+                                <MenuItem value="VITRINE_REFRIGERADA">Vitrine Refrigerada</MenuItem>
+                                <MenuItem value="ULTRACONGELADOR">Ultracongelador</MenuItem>
+                                <MenuItem value="ESTUFA">Estufa</MenuItem>
+                                <MenuItem value="BANHO_MARIA">Banho Maria</MenuItem>
+                                <MenuItem value="BALCAO_AQUECIDO">Balcão Aquecido</MenuItem>
+                                <MenuItem value="PASS_THROUGH_QUENTE">Pass-Through Quente</MenuItem>
+                                <MenuItem value="OUTRO">Outro</MenuItem>
+                            </Select>
+                        </FormControl>
+
+                        <FormControl fullWidth size="small">
+                            <InputLabel>Alimentos Armazenados (Opcional)</InputLabel>
+                            <Select
+                                multiple
+                                value={editEquipGrupos}
+                                onChange={(e) => setEditEquipGrupos(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+                                input={<OutlinedInput label="Alimentos Armazenados (Opcional)" />}
+                                renderValue={(selected) => (
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                        {selected.map((val) => {
+                                            const g = categorias.find((x: any) => x.id === val) || gruposIngredientes.find((x: any) => x.id === val);
+                                            return <Chip key={val} label={g ? g.nome : val} size="small" />;
+                                        })}
+                                    </Box>
+                                )}
+                            >
+                                {[...categorias.filter((c: any) => c.modalidade === 'ALIMENTOS' || !c.modalidade), ...gruposIngredientes].map((g: any) => {
+                                    const isGrupo = categorias.some((c: any) => c.id === g.id);
+                                    return (
+                                        <MenuItem key={g.id} value={g.id} sx={{ pl: isGrupo ? 2 : 4 }}>
+                                            <Checkbox checked={editEquipGrupos.indexOf(g.id) > -1} size="small" />
+                                            <ListItemText primary={isGrupo ? `[Grupo] ${g.nome}` : `[Subgrupo] ${g.nome}`} />
+                                        </MenuItem>
+                                    );
+                                })}
+                            </Select>
+                        </FormControl>
+
                         <Divider>
                             <Chip label="Monitoramento" size="small" variant="outlined" />
                         </Divider>
 
-                        <TextField 
-                            label="Frequência Diária (Vezes)" 
+                        <TextField
+                            label="Frequência Diária (Vezes)"
                             type="number"
-                            fullWidth 
-                            size="small" 
-                            value={editEquipFrequencia} 
+                            fullWidth
+                            size="small"
+                            value={editEquipFrequencia}
+                            inputProps={{ min: 2 }}
                             onChange={(e) => {
-                                const newFreq = Math.max(0, parseInt(e.target.value) || 0);
+                                const newFreq = Math.max(2, parseInt(e.target.value) || 2);
                                 setEditEquipFrequencia(newFreq);
                                 // Ajustar array de horários
                                 setEditEquipHorarios(prev => {
@@ -1130,7 +1544,7 @@ export default function ConfiguracaoEstoquePage() {
                                 <Grid container spacing={1}>
                                     {editEquipHorarios.map((horario, idx) => (
                                         <Grid item xs={6} key={idx}>
-                                            <TextField 
+                                            <TextField
                                                 label={`Aferição ${idx + 1}`}
                                                 type="time"
                                                 fullWidth
@@ -1149,29 +1563,6 @@ export default function ConfiguracaoEstoquePage() {
                             </Box>
                         )}
 
-                        <Box sx={{ display: 'flex', gap: 2 }}>
-                            <TextField 
-                                label="Temp. Ideal Mín." 
-                                type="number"
-                                fullWidth 
-                                size="small" 
-                                value={editEquipTempMin} 
-                                onChange={(e) => setEditEquipTempMin(e.target.value)}
-                                InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
-                            />
-                            <TextField 
-                                label="Temp. Ideal Máx." 
-                                type="number"
-                                fullWidth 
-                                size="small" 
-                                value={editEquipTempMax} 
-                                onChange={(e) => setEditEquipTempMax(e.target.value)}
-                                InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
-                            />
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                            Esses valores serão usados para validar os registros na produção.
-                        </Typography>
                     </Box>
                 </DialogContent>
                 <DialogActions sx={{ p: 3, pt: 0 }}>

@@ -82,21 +82,19 @@ export function ClientProvider({ children }: { children: ReactNode }) {
       // 1. Verificar se o usuário é Super Admin (legacy role no profiles)
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, cliente_id')
         .eq('id', user.id)
         .single();
 
       const isSoftwareAdmin = profile?.role === 'super_admin';
       const isCompanyOwner = profile?.role === 'company_owner';
+      const userClienteId = profile?.cliente_id;
       const isAdminGroup = isSoftwareAdmin || isCompanyOwner;
 
       let unidadesCarregadas: ClienteUnidade[] = [];
 
       if (isAdminGroup) {
-        // Se for Admin (Global ou de Empresa), busca TODAS as unidades de TODOS os clientes 
-        // Nota: Company Owner tecnicamente deveria ver só um cliente, mas mantemos o poder de Admin aqui
-        // se o sistema permitir múltiplos. Caso contrário, a query de perfil filtraria.
-        const { data: allUnits, error: unitError } = await (supabase as any)
+        let query = (supabase as any)
           .from('cliente_unidades')
           .select(`
             id,
@@ -117,6 +115,13 @@ export function ClientProvider({ children }: { children: ReactNode }) {
               cep
             )
           `);
+        
+        // Se for dono de empresa e não for super admin, filtra pelo cliente da empresa logada
+        if (isCompanyOwner && !isSoftwareAdmin && userClienteId) {
+          query = query.eq('cliente_id', userClienteId);
+        }
+
+        const { data: allUnits, error: unitError } = await query;
         
         if (unitError) throw unitError;
         unidadesCarregadas = (allUnits || []).map((u: any) => ({ ...u, _role: 'ADMIN' }));

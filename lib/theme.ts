@@ -1,10 +1,10 @@
 'use client';
 import { createTheme, alpha } from '@mui/material/styles';
 
-// --- CONCEITO NUTRITHEME: "Córtex Brand" ---
-// Córtex Cyan (#66c8c7): Ação principal, logo e destaque.
-// Dark Mode: Fundo #050505, cards #111111, textos #fefefe e secundários #c8c8c9.
-// Light Mode: Fundo #F8FAFC, cards #FFFFFF, textos escuros para leitura limpa.
+// --- CONCEITO NUTRITHEME: "Zelus Brand" ---
+// Zelus Coral (#FE615E): Ação principal, logo e destaque.
+// Dark Mode: Fundo #080808, cards #121212, textos #fefefe e secundários #c8c8c9.
+// Light Mode (Default): Fundo #faf9f5, cards #FFFFFF, textos escuros para leitura limpa.
 
 export const getTheme = (mode: 'light' | 'dark') => {
   const isDark = mode === 'dark';
@@ -13,16 +13,16 @@ export const getTheme = (mode: 'light' | 'dark') => {
     palette: {
       mode,
       primary: {
-        main: '#66c8c7', // Córtex Cyan
-        light: '#88d7d6',
-        dark: '#4ca5a4',
-        contrastText: isDark ? '#050505' : '#FFFFFF',
+        main: '#FE615E', // Zelus Coral
+        light: '#ff8a88',
+        dark: '#c42b29',
+        contrastText: '#FFFFFF',
       },
       secondary: {
-        main: isDark ? '#c8c8c9' : '#334155', // Deixed Light secondary darker for contrast vs white
+        main: isDark ? '#c8c8c9' : '#334155',
         light: isDark ? '#fefefe' : '#64748b',
         dark: isDark ? '#a0a0a0' : '#1e293b',
-        contrastText: isDark ? '#050505' : '#FFFFFF',
+        contrastText: isDark ? '#080808' : '#FFFFFF',
       },
       success: {
         main: '#059669', // Emerald 600 (Conformidade Sanitária)
@@ -41,8 +41,8 @@ export const getTheme = (mode: 'light' | 'dark') => {
         dark: '#991B1B',
       },
       background: {
-        default: isDark ? '#050505' : '#F1F5F9', // Fundo principal
-        paper: isDark ? '#111111' : '#FFFFFF',   // Fundo de cards/menus
+        default: isDark ? '#080808' : '#faf9f5', // Fundo principal
+        paper: isDark ? '#121212' : '#FFFFFF',   // Fundo de cards/menus
       },
       text: {
         primary: isDark ? '#fefefe' : '#0F172A',
@@ -72,8 +72,8 @@ export const getTheme = (mode: 'light' | 'dark') => {
       MuiCssBaseline: {
         styleOverrides: {
           body: {
-            backgroundColor: isDark ? '#050505' : '#F1F5F9',
-            scrollbarColor: isDark ? '#475569 #050505' : '#94a3b8 #f1f5f9',
+            backgroundColor: isDark ? '#080808' : '#faf9f5',
+            scrollbarColor: isDark ? '#475569 #080808' : '#94a3b8 #faf9f5',
             '&::-webkit-scrollbar, & *::-webkit-scrollbar': {
               width: '8px',
               height: '8px',
@@ -106,16 +106,16 @@ export const getTheme = (mode: 'light' | 'dark') => {
             boxShadow: 'none',
             padding: '8px 20px',
             '&:hover': {
-              boxShadow: isDark ? '0px 4px 10px rgba(102, 200, 199, 0.15)' : '0px 4px 6px -1px rgba(0, 0, 0, 0.1)',
+              boxShadow: isDark ? '0px 4px 10px rgba(254, 97, 94, 0.15)' : '0px 4px 6px -1px rgba(0, 0, 0, 0.1)',
               transform: 'translateY(-1px)',
             },
             transition: 'all 0.2s ease-in-out',
           },
           containedPrimary: {
             background: isDark
-              ? 'linear-gradient(180deg, #88d7d6 0%, #66c8c7 100%)'
-              : 'linear-gradient(180deg, #66c8c7 0%, #4ca5a4 100%)',
-            color: '#050505', // Sempre texto escuro no botão primário para alto contraste
+              ? 'linear-gradient(135deg, #FE615E 0%, #ff8a88 100%)'
+              : 'linear-gradient(135deg, #FE615E 0%, #c42b29 100%)',
+            color: '#FFFFFF', // Texto claro no botão primário
           }
         },
       },
@@ -126,19 +126,19 @@ export const getTheme = (mode: 'light' | 'dark') => {
             margin: '4px 12px',
             padding: '10px 16px',
             '&.Mui-selected': {
-              backgroundColor: isDark ? alpha('#66c8c7', 0.25) : alpha('#66c8c7', 0.85),
-              color: isDark ? '#ffffff' : '#050505',
-              borderLeft: `4px solid ${isDark ? '#88d7d6' : '#2d7a79'}`, // Darker border in light mode for contrast
+              backgroundColor: isDark ? alpha('#FE615E', 0.25) : alpha('#FE615E', 0.15),
+              color: isDark ? '#ffffff' : '#080808',
+              borderLeft: `4px solid ${isDark ? '#ff8a88' : '#FE615E'}`, // Darker border in light mode for contrast
               fontWeight: 'bold',
               '&:hover': {
-                backgroundColor: isDark ? alpha('#66c8c7', 0.35) : alpha('#66c8c7', 0.95),
+                backgroundColor: isDark ? alpha('#FE615E', 0.35) : alpha('#FE615E', 0.25),
               },
               '& .MuiListItemIcon-root': {
-                color: isDark ? '#ffffff' : '#050505',
+                color: isDark ? '#ffffff' : '#080808',
               },
               // Forçamos a cor do texto para o ListItemText quando está selecionado
               '& .MuiTypography-root': {
-                color: isDark ? '#ffffff' : '#050505',
+                color: isDark ? '#ffffff' : '#080808',
                 fontWeight: 700,
               }
             },
@@ -158,8 +158,8 @@ export const getTheme = (mode: 'light' | 'dark') => {
           root: {
             borderBottom: `1px solid ${isDark ? 'rgba(200, 200, 201, 0.1)' : '#E2E8F0'}`,
             boxShadow: 'none',
-            backgroundColor: isDark ? 'rgba(17, 17, 17, 0.85)' : 'rgba(255, 255, 255, 0.8)',
-            backdropFilter: 'blur(8px)',
+            backgroundColor: isDark ? 'rgba(18, 18, 18, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+            backdropFilter: 'blur(10px)',
           }
         }
       }

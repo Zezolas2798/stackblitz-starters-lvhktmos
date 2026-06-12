@@ -69,16 +69,16 @@ export default function MateriaisPage() {
     try {
       setLoadingData(true);
       
-      const [matRes, catRes] = await Promise.all([
+      const [matRes, catGlobalRes, catClientRes] = await Promise.all([
         (supabase as any).from('materiais').select('*').eq('cliente_id', unidadeSelecionada.cliente_id).order('nome'),
+        (supabase as any).from('grupos_produto').select('*').is('cliente_id', null).order('nome'),
         (supabase as any).from('grupos_produto').select('*').eq('cliente_id', unidadeSelecionada.cliente_id).order('nome')
       ]);
 
       if (matRes.error) throw matRes.error;
-      if (catRes.error) throw catRes.error;
 
       setMateriais(matRes.data || []);
-      setCategorias(catRes.data || []);
+      setCategorias([...(catGlobalRes.data || []), ...(catClientRes.data || [])]);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {

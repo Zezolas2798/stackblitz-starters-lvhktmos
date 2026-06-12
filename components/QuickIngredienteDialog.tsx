@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
   TextField, Box, Tabs, Tab, InputAdornment, MenuItem,
-  FormControlLabel, Checkbox, Autocomplete, Chip, Alert, IconButton, Typography,
+  FormControlLabel, Checkbox, Radio, RadioGroup, Autocomplete, Chip, Alert, IconButton, Typography,
   createFilterOptions, Accordion, AccordionSummary, AccordionDetails
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
@@ -22,15 +22,13 @@ interface QuickIngredienteDialogProps {
   onClose: () => void;
   onSuccess: (novoItem: any, categoriaSugerida?: string) => void;
   nomeSugerido?: string;
-  categoriaPrincipal?: 'ALIMENTOS' | 'EMBALAGENS' | 'LIMPEZA' | 'MANUTENCAO' | 'UTENSILIOS' | 'EPI_EPC' | 'UNIFORMES' | 'PRIMEIROS_SOCORROS';
 }
 
 export default function QuickIngredienteDialog({ 
   open, 
   onClose, 
   onSuccess, 
-  nomeSugerido,
-  categoriaPrincipal = 'ALIMENTOS'
+  nomeSugerido
 }: QuickIngredienteDialogProps) {
   const { activeClientId } = useClient();
   const [tabIndex, setTabIndex] = useState(0);
@@ -86,6 +84,7 @@ export default function QuickIngredienteDialog({
     const { data: catData } = await (supabase as any).from('grupos_produto')
       .select('id, nome')
       .eq('cliente_id', activeClientId!)
+      .eq('modalidade', 'ALIMENTOS')
       .order('nome');
     if (catData) setCategoriasMestre(catData);
   }, [activeClientId]);
@@ -106,35 +105,6 @@ export default function QuickIngredienteDialog({
 
     setLoading(true);
     try {
-      if (categoriaPrincipal !== 'ALIMENTOS') {
-        const tipoMaterialMap = {
-          'EMBALAGENS': 'EMBALAGEM',
-          'LIMPEZA': 'LIMPEZA',
-          'MANUTENCAO': 'MANUTENCAO',
-          'UTENSILIOS': 'UTENSILIO',
-          'EPI_EPC': 'EPI_EPC',
-          'UNIFORMES': 'UNIFORME',
-          'PRIMEIROS_SOCORROS': 'PRIMEIROS_SOCORROS',
-          'OUTROS': 'OUTROS'
-        };
-
-        const { data: material, error: errMat } = await (supabase as any).from('materiais').insert({
-          cliente_id: activeClientId,
-          nome,
-          marca,
-          tipo_material: (tipoMaterialMap as any)[categoriaPrincipal] || 'OUTROS',
-          ativo: true,
-          unidade_medida: 'UNID' // Padrão para pré-cadastro de material
-        }).select().single();
-
-        if (errMat) throw errMat;
-
-        onSuccess(material);
-        resetForm();
-        onClose();
-        return;
-      }
-
       // 1. Categoria (Apenas para Alimentos)
       let nomeCategoriaFinal = '';
       let categoriaParams: any = null;
@@ -165,7 +135,7 @@ export default function QuickIngredienteDialog({
       const payloadIngrediente = {
         cliente_id: activeClientId,
         nome,
-        fonte: marca,
+        marca: marca,
         tipo_ingrediente: 'COMPOSTO',
         declaracao_ingredientes_fornecedor: listaIngredientes,
         contem_gluten: contemGluten,
@@ -185,6 +155,7 @@ export default function QuickIngredienteDialog({
       if (errIng) throw errIng;
 
       // 3. Alergênicos
+      // @biz-mutation(ingredientes.LinkAlergenicos)
       if (alergenicosSelecionados.length > 0) {
         const links: any[] = alergenicosSelecionados.map(a => ({ ingrediente_id: ing.id, alergenico_id: a.id, contem: true, contem_derivado: false }));
         await (supabase as any).from('ingrediente_alergenicos').insert(links);
@@ -227,21 +198,19 @@ export default function QuickIngredienteDialog({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Tag className="text-blue-600" />
           <Typography variant="h6" fontWeight="bold">
-            {categoriaPrincipal === 'ALIMENTOS' ? 'Cadastro Mestre de Ingrediente' : `Cadastro de ${categoriaPrincipal.charAt(0) + categoriaPrincipal.slice(1).toLowerCase()}`}
+            Cadastro Mestre de Ingrediente
           </Typography>
         </Box>
         <IconButton onClick={onClose} size="small"><X /></IconButton>
       </DialogTitle>
 
-      {categoriaPrincipal === 'ALIMENTOS' && (
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tabIndex} onChange={(_, v) => setTabIndex(v)} variant="fullWidth" indicatorColor="primary">
-            <Tab icon={<Leaf size={18} />} label="Identificação" />
-            <Tab icon={<Activity size={18} />} label="Nutricional (Completo)" />
-            <Tab icon={<AlertTriangle size={18} />} label="Alergênicos" />
-          </Tabs>
-        </Box>
-      )}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs value={tabIndex} onChange={(_, v) => setTabIndex(v)} variant="fullWidth" indicatorColor="primary">
+          <Tab icon={<Leaf size={18} />} label="Identificação" />
+          <Tab icon={<Activity size={18} />} label="Nutricional (Completo)" />
+          <Tab icon={<AlertTriangle size={18} />} label="Alergênicos" />
+        </Tabs>
+      </Box>
 
       <DialogContent sx={{ pt: 3 }}>
 
@@ -252,85 +221,82 @@ export default function QuickIngredienteDialog({
               <TextField label="Nome do Produto *" fullWidth value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Biscoito Maria" />
             </Grid>
             <Grid item xs={12} md={4}>
-              <TextField label="Marca / Fonte" fullWidth value={marca} onChange={e => setMarca(e.target.value)} />
+              <TextField label="Marca" fullWidth value={marca} onChange={e => setMarca(e.target.value)} />
             </Grid>
 
-            {categoriaPrincipal === 'ALIMENTOS' && (
-              <>
-                <Grid item xs={12} md={6}>
-                  <Autocomplete
-                    value={categoriaValue}
-                    onChange={(event, newValue) => {
-                      if (typeof newValue === 'string') setCategoriaValue({ nome: newValue });
-                      else if (newValue && newValue.inputValue) setCategoriaValue({ nome: newValue.inputValue, inputValue: newValue.inputValue });
-                      else setCategoriaValue(newValue);
-                    }}
-                    filterOptions={(options, params) => {
-                      const filtered = filter(options, params);
-                      if (params.inputValue !== '' && !options.some((o) => params.inputValue.toLowerCase() === o.nome.toLowerCase())) {
-                        filtered.push({ inputValue: params.inputValue, nome: `Adicionar "${params.inputValue}"` });
-                      }
-                      return filtered;
-                    }}
-                    selectOnFocus clearOnBlur handleHomeEndKeys freeSolo
-                    options={categoriasMestre}
-                    getOptionLabel={(option) => typeof option === 'string' ? option : option.inputValue || option.nome}
-                    renderOption={(props, option) => {
-                      const { key, ...otherProps } = props;
-                      return (
-                        <li key={key} {...otherProps}>
-                          {option.nome.startsWith('Adicionar "') ? (
-                            <Box sx={{ color: 'primary.main', display: 'flex', alignItems: 'center', gap: 1, fontWeight: 'bold' }}>
-                              <Plus size={16} /> {option.nome}
-                            </Box>
-                          ) : option.nome}
-                        </li>
-                      );
-                    }}
-                    renderInput={(params) => <TextField {...params} label="Categoria" placeholder="Selecione ou crie..." />}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    select
-                    label="Classificação NOVA"
-                    fullWidth
-                    value={classificacaoNova ?? ''}
-                    onChange={e => setClassificacaoNova(e.target.value === '' ? null : Number(e.target.value))}
-                    helperText="Grau de processamento (USP/Nupens)"
-                  >
-                    <MenuItem value=""><em>Não classificado</em></MenuItem>
-                    <MenuItem value={1}>
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#4CAF50' }} />
-                        G1 — In Natura / Minimamente Processado
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value={2}>
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#2196F3' }} />
-                        G2 — Ingrediente Culinário Processado
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value={3}>
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#FF9800' }} />
-                        G3 — Alimento Processado
-                      </Box>
-                    </MenuItem>
-                    <MenuItem value={4}>
-                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                        <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#F44336' }} />
-                        G4 — Ultraprocessado
-                      </Box>
-                    </MenuItem>
-                  </TextField>
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField label="Lista de Ingredientes (Rótulo)" multiline rows={6} fullWidth value={listaIngredientes} onChange={e => setListaIngredientes(e.target.value)} />
-                </Grid>
-              </>
-            )}
+            <Grid item xs={12} md={6}>
+              <Autocomplete
+                value={categoriaValue}
+                onChange={(event, newValue) => {
+                  if (typeof newValue === 'string') setCategoriaValue({ nome: newValue });
+                  else if (newValue && newValue.inputValue) setCategoriaValue({ nome: newValue.inputValue, inputValue: newValue.inputValue });
+                  else setCategoriaValue(newValue);
+                }}
+                filterOptions={(options, params) => {
+                  const filtered = filter(options, params);
+                  if (params.inputValue !== '' && !options.some((o) => params.inputValue.toLowerCase() === o.nome.toLowerCase())) {
+                    filtered.push({ inputValue: params.inputValue, nome: `Adicionar "${params.inputValue}"` });
+                  }
+                  return filtered;
+                }}
+                selectOnFocus clearOnBlur handleHomeEndKeys freeSolo
+                options={categoriasMestre}
+                getOptionLabel={(option) => typeof option === 'string' ? option : option.inputValue || option.nome}
+                renderOption={(props, option) => {
+                  const { key, ...otherProps } = props;
+                  return (
+                    <li key={key} {...otherProps}>
+                      {option.nome.startsWith('Adicionar "') ? (
+                        <Box sx={{ color: 'primary.main', display: 'flex', alignItems: 'center', gap: 1, fontWeight: 'bold' }}>
+                          <Plus size={16} /> {option.nome}
+                        </Box>
+                      ) : option.nome}
+                    </li>
+                  );
+                }}
+                renderInput={(params) => <TextField {...params} label="Categoria" placeholder="Selecione ou crie..." />}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                select
+                required
+                label="Classificação NOVA"
+                fullWidth
+                value={classificacaoNova ?? ''}
+                onChange={e => setClassificacaoNova(e.target.value === '' ? null : Number(e.target.value))}
+                helperText="Grau de processamento (USP/Nupens)"
+              >
+                <MenuItem value=""><em>Não classificado</em></MenuItem>
+                <MenuItem value={1}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#4CAF50' }} />
+                    G1 — In Natura / Minimamente Processado
+                  </Box>
+                </MenuItem>
+                <MenuItem value={2}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#2196F3' }} />
+                    G2 — Ingrediente Culinário Processado
+                  </Box>
+                </MenuItem>
+                <MenuItem value={3}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#FF9800' }} />
+                    G3 — Alimento Processado
+                  </Box>
+                </MenuItem>
+                <MenuItem value={4}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: '#F44336' }} />
+                    G4 — Ultraprocessado
+                  </Box>
+                </MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField label="Lista de Ingredientes (Rótulo)" multiline rows={6} fullWidth value={listaIngredientes} onChange={e => setListaIngredientes(e.target.value)} />
+            </Grid>
           </Grid>
         )}
 
@@ -447,9 +413,17 @@ export default function QuickIngredienteDialog({
         {/* ABA 3: Alergênicos (Mantida) */}
         {tabIndex === 2 && (
           <Box>
-            <Box sx={{ display: 'flex', gap: 3, mb: 3 }}>
-              <FormControlLabel control={<Checkbox checked={contemGluten} onChange={e => setContemGluten(e.target.checked)} color="error" />} label={<Typography sx={{ fontWeight: 'bold', color: 'error.main' }}>CONTÉM GLÚTEN</Typography>} />
-              <FormControlLabel control={<Checkbox checked={contemLactose} onChange={e => setContemLactose(e.target.checked)} color="warning" />} label={<Typography sx={{ fontWeight: 'bold', color: 'warning.main' }}>CONTÉM LACTOSE</Typography>} />
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', color: 'error.main', mb: 1 }}>
+                Declaração de Glúten (Lei 10674/2003)
+              </Typography>
+              <RadioGroup row value={contemGluten} onChange={e => setContemGluten(e.target.value === 'true')}>
+                <FormControlLabel value={true} control={<Radio color="error" />} label={<Typography sx={{ fontWeight: 'bold', color: 'error.main' }}>CONTÉM GLÚTEN</Typography>} />
+                <FormControlLabel value={false} control={<Radio color="success" />} label={<Typography sx={{ fontWeight: 'bold', color: 'success.main' }}>NÃO CONTÉM GLÚTEN</Typography>} />
+              </RadioGroup>
+              <Box sx={{ mt: 2, display: 'flex', gap: 3 }}>
+                <FormControlLabel control={<Checkbox checked={contemLactose} onChange={e => setContemLactose(e.target.checked)} color="warning" />} label={<Typography sx={{ fontWeight: 'bold', color: 'warning.main' }}>CONTÉM LACTOSE</Typography>} />
+              </Box>
             </Box>
             <Autocomplete multiple options={alergenicosMestre} getOptionLabel={(option) => option.nome} value={alergenicosSelecionados} onChange={(_, newVal) => setAlergenicosSelecionados(newVal)} renderInput={(params) => <TextField {...params} label="Alergênicos" />} renderTags={(value, getTagProps) => value.map((option, index) => { const { key, ...tagProps } = getTagProps({ index }); return (<Chip variant="outlined" label={option.nome} color="warning" key={key} {...tagProps} />); })} />
           </Box>

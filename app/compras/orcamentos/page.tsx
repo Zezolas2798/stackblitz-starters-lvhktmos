@@ -1,18 +1,20 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   Container, Typography, Box, Paper, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, IconButton, Button, Dialog, 
   DialogTitle, DialogContent, DialogActions, TextField, MenuItem, 
   CircularProgress, Alert, Snackbar, InputAdornment, Chip, Tooltip,
   Switch, FormControlLabel, Tabs, Tab, useTheme, alpha, Divider,
-  Accordion, AccordionSummary, AccordionDetails
+  Accordion, AccordionSummary, AccordionDetails, Autocomplete, LinearProgress,
+  Stepper, Step, StepLabel
 } from '@mui/material';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
-import { Search, Plus, Trash2, Edit, AlertCircle, TrendingUp, Anchor, AlertTriangle, CheckCircle, Grid as GridIcon, List as ListIcon, HelpCircle, ChevronDown, FolderOpen, Layers } from 'lucide-react';
+import { Search, Plus, Trash2, Edit, AlertCircle, TrendingUp, Anchor, AlertTriangle, CheckCircle, Grid as GridIcon, List as ListIcon, HelpCircle, ChevronDown, FolderOpen, Layers, Upload, FileText, Sparkles, RotateCcw } from 'lucide-react';
 import { differenceInDays, parseISO, format } from 'date-fns';
+import { parseCotacaoFile, fuzzyMatchIngrediente, matchFornecedor, calcularPrecoPorKg, type CotacaoParsed, type CotacaoItemParsed } from '@/lib/utils/cotacao-parser';
 
 export default function OrcamentosPage() {
   const theme = useTheme();
@@ -34,6 +36,28 @@ export default function OrcamentosPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState<{open: boolean, msg: string, type: 'success'|'error'}>({open: false, msg: '', type: 'success'});
+
+  // === UPLOAD DE COTAÇÃO ===
+  const [uploadStep, setUploadStep] = useState(0); // 0=upload, 1=revisão, 2=concluído
+  const [uploadParsing, setUploadParsing] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [cotacaoParsed, setCotacaoParsed] = useState<CotacaoParsed | null>(null);
+  const [uploadFornecedorId, setUploadFornecedorId] = useState('');
+  const [uploadItensRevisados, setUploadItensRevisados] = useState<Array<{
+    descricao_original: string;
+    marca: string;
+    unidade: string;
+    quantidade_embalagem: number;
+    peso_liquido_kg: number;
+    preco_unitario: number;
+    preco_por_kg: number;
+    ingrediente_id: string;
+    sugestoes: Array<{ ingrediente_id: string; ingrediente_nome: string; score: number }>;
+    incluir: boolean;
+  }>>([]);
+  const [uploadSaving, setUploadSaving] = useState(false);
+  const [uploadSavedCount, setUploadSavedCount] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Formulário
   const [form, setForm] = useState({
@@ -58,7 +82,7 @@ export default function OrcamentosPage() {
     setLoading(true);
     setModifications({}); // Limpa modificações ao recarregar
     try {
-      const [resOrcamentos, resFornecedores, resIngredientes, resGrupos, resCategorias] = await Promise.all([
+      const [resOrcamentos, resFornecedores, resIngredientes, resGruposGlobal, resGruposClient, resCatsGlobal, resCatsClient] = await Promise.all([
         (supabase as any).from('compras_orcamentos').select(`
           *,
           fornecedor:fornecedores(id, razao_social, lead_time_dias),
@@ -69,16 +93,18 @@ export default function OrcamentosPage() {
         
         (supabase as any).from('ingredientes').select('id, nome, subgrupo_id, grupo_id').eq('cliente_id', activeClientId).is('deleted_at', null),
         
+        (supabase as any).from('subgrupos_produto').select('id, nome, categoria_id').is('cliente_id', null),
         (supabase as any).from('subgrupos_produto').select('id, nome, categoria_id').eq('cliente_id', activeClientId),
         
+        (supabase as any).from('grupos_produto').select('id, nome, modalidade').is('cliente_id', null),
         (supabase as any).from('grupos_produto').select('id, nome, modalidade').eq('cliente_id', activeClientId)
       ]);
 
       setOrcamentos(resOrcamentos.data || []);
       setFornecedores(resFornecedores.data || []);
       setIngredientes(resIngredientes.data || []);
-      setGruposInsumos(resGrupos.data || []);
-      setCategoriasMacro(resCategorias.data || []);
+      setGruposInsumos([...(resGruposGlobal.data || []), ...(resGruposClient.data || [])]);
+      setCategoriasMacro([...(resCatsGlobal.data || []), ...(resCatsClient.data || [])]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -179,6 +205,113 @@ export default function OrcamentosPage() {
       });
     }
     setDialogOpen(true);
+  };
+
+  // === UPLOAD COTAÇÃO HANDLERS ===
+  const handleUploadFile = async (file: File) => {
+    setUploadError('');
+    setUploadParsing(true);
+
+    try {
+      const result = await parseCotacaoFile(file);
+
+      if (!result || !result.itens || result.itens.length === 0) {
+        setUploadError('Não foi possível extrair dados do arquivo. Verifique se é uma cotação válida.');
+        setUploadParsing(false);
+        return;
+      }
+
+      setCotacaoParsed(result);
+
+      // Auto-match fornecedor
+      const fornMatch = matchFornecedor(
+        result.fornecedor_nome,
+        result.fornecedor_cnpj,
+        fornecedores.map(f => ({ id: f.id, razao_social: f.razao_social, cnpj: f.cnpj }))
+      );
+      setUploadFornecedorId(fornMatch?.id || '');
+
+      // Preparar itens com fuzzy matching
+      const subgruposParaMatch = gruposInsumos.map((s: any) => ({ id: s.id, nome: s.nome }));
+      const ingredientesParaMatch = ingredientes.map((i: any) => ({ id: i.id, nome: i.nome, subgrupo_id: i.subgrupo_id || '' }));
+
+      const itensRevisados = result.itens.map(item => {
+        const matches = fuzzyMatchIngrediente(
+          item.descricao_original,
+          item.sugestao_subgrupo,
+          ingredientesParaMatch,
+          subgruposParaMatch,
+          5
+        );
+
+        return {
+          descricao_original: item.descricao_original,
+          marca: item.marca,
+          unidade: item.unidade,
+          quantidade_embalagem: item.quantidade_embalagem,
+          peso_liquido_kg: item.peso_liquido_kg,
+          preco_unitario: item.preco_unitario,
+          preco_por_kg: item.preco_por_kg,
+          ingrediente_id: matches.length > 0 && matches[0].score > 0.35 ? matches[0].ingrediente_id : '',
+          sugestoes: matches.map(m => ({
+            ingrediente_id: m.ingrediente_id,
+            ingrediente_nome: m.ingrediente_nome,
+            score: m.score
+          })),
+          incluir: true
+        };
+      });
+
+      setUploadItensRevisados(itensRevisados);
+      setUploadStep(1);
+    } catch (err: any) {
+      console.error('Erro no upload:', err);
+      setUploadError(err.message || 'Erro inesperado ao processar o arquivo.');
+    } finally {
+      setUploadParsing(false);
+    }
+  };
+
+  const handleSaveCotacaoUpload = async () => {
+    setUploadSaving(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const itensParaSalvar = uploadItensRevisados
+        .filter(item => item.incluir && item.ingrediente_id)
+        .map(item => ({
+          cliente_id: activeClientId,
+          unidade_id: unidadeId,
+          fornecedor_id: uploadFornecedorId,
+          ingrediente_id: item.ingrediente_id,
+          data_orcamento: cotacaoParsed?.data_cotacao || today,
+          preco_por_kg_l: item.preco_por_kg,
+          is_embalagem: item.peso_liquido_kg !== 1 || item.quantidade_embalagem !== 1,
+          unidades_por_embalagem: item.quantidade_embalagem,
+          peso_volume_por_unidade: item.peso_liquido_kg,
+          preco_embalagem: item.preco_unitario,
+          peso_embalagem_kg: item.peso_liquido_kg * item.quantidade_embalagem,
+          marca_cotada: item.marca || null,
+          descricao_fornecedor: item.descricao_original || null
+        }));
+
+      if (itensParaSalvar.length === 0) {
+        setSnackbar({ open: true, msg: 'Nenhum item válido para salvar.', type: 'error' });
+        setUploadSaving(false);
+        return;
+      }
+
+      const { error } = await (supabase as any).from('compras_orcamentos').insert(itensParaSalvar);
+      if (error) throw error;
+
+      setUploadSavedCount(itensParaSalvar.length);
+      setUploadStep(2);
+      setSnackbar({ open: true, msg: `${itensParaSalvar.length} orçamentos importados!`, type: 'success' });
+    } catch (err: any) {
+      console.error('Erro ao salvar cotação:', err);
+      setSnackbar({ open: true, msg: 'Erro ao salvar cotação: ' + (err.message || ''), type: 'error' });
+    } finally {
+      setUploadSaving(false);
+    }
   };
 
   // Conversão Implícita para Embalagem
@@ -390,6 +523,7 @@ export default function OrcamentosPage() {
         >
           <Tab icon={<ListIcon size={18} />} iconPosition="start" label="Lista de Cotações" />
           <Tab icon={<GridIcon size={18} />} iconPosition="start" label="Quadro Comparativo" />
+          <Tab icon={<Upload size={18} />} iconPosition="start" label="Upload de Cotação" />
         </Tabs>
 
         <Box sx={{ p: 3 }}>
@@ -618,6 +752,252 @@ export default function OrcamentosPage() {
                     </Accordion>
                   ))}
                 </Box>
+              )}
+            </Box>
+          )}
+
+          {tabValue === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Stepper */}
+              <Stepper activeStep={uploadStep} alternativeLabel>
+                <Step><StepLabel>Upload do Arquivo</StepLabel></Step>
+                <Step><StepLabel>Revisão IA</StepLabel></Step>
+                <Step><StepLabel>Confirmação</StepLabel></Step>
+              </Stepper>
+
+              {/* ETAPA 0: Upload */}
+              {uploadStep === 0 && (
+                <Box>
+                  {uploadError && (
+                    <Alert severity="error" sx={{ mb: 2 }} onClose={() => setUploadError('')}>{uploadError}</Alert>
+                  )}
+                  <Paper 
+                    variant="outlined" 
+                    sx={{ 
+                      p: 6, textAlign: 'center', cursor: 'pointer',
+                      border: '2px dashed', borderColor: 'divider',
+                      bgcolor: alpha(theme.palette.primary.main, 0.02),
+                      transition: 'all 0.2s',
+                      '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.05) }
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => {
+                      e.preventDefault(); e.stopPropagation();
+                      const f = e.dataTransfer.files[0];
+                      if (f) handleUploadFile(f);
+                    }}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      hidden
+                      accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.webp"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleUploadFile(f);
+                      }}
+                    />
+                    {uploadParsing ? (
+                      <Box>
+                        <CircularProgress size={48} sx={{ mb: 2 }} />
+                        <Typography variant="h6" color="primary">Analisando documento com IA...</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Extraindo fornecedor, itens, marcas e preços.</Typography>
+                        <LinearProgress sx={{ mt: 3, mx: 'auto', maxWidth: 300 }} />
+                      </Box>
+                    ) : (
+                      <Box>
+                        <Box sx={{ mx: 'auto', mb: 2, width: 72, height: 72, borderRadius: '50%', bgcolor: alpha(theme.palette.primary.main, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FileText size={36} color={theme.palette.primary.main} />
+                        </Box>
+                        <Typography variant="h6" sx={{ mb: 0.5 }}>Arraste o arquivo de cotação aqui</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>ou clique para selecionar</Typography>
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+                          {['PDF', 'Excel', 'CSV', 'Imagem'].map(t => (
+                            <Chip key={t} label={t} size="small" variant="outlined" />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </Paper>
+                </Box>
+              )}
+
+              {/* ETAPA 1: Revisão IA */}
+              {uploadStep === 1 && cotacaoParsed && (
+                <Box>
+                  {/* Fornecedor */}
+                  <Paper variant="outlined" sx={{ p: 2.5, mb: 3, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                    <Sparkles size={20} color={theme.palette.primary.main} />
+                    <Typography variant="body2" fontWeight="bold">Fornecedor detectado:</Typography>
+                    <Chip label={cotacaoParsed.fornecedor_nome} color="primary" variant="outlined" />
+                    <Box sx={{ flex: 1, minWidth: 250 }}>
+                      <TextField
+                        select size="small" fullWidth
+                        label="Confirmar/Corrigir Fornecedor"
+                        value={uploadFornecedorId}
+                        onChange={(e) => setUploadFornecedorId(e.target.value)}
+                      >
+                        {fornecedores.map(f => <MenuItem key={f.id} value={f.id}>{f.razao_social}</MenuItem>)}
+                      </TextField>
+                    </Box>
+                  </Paper>
+
+                  {/* Tabela de Itens */}
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
+                        <TableRow>
+                          <TableCell padding="checkbox" sx={{ width: 40 }}>
+                            <Tooltip title="Incluir/excluir item"><CheckCircle size={16} /></Tooltip>
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Descrição do Fornecedor</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold', width: 120 }}>Marca</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold', width: 100 }}>Peso (Kg)</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold', width: 110 }}>Preço Unit.</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold', width: 110, bgcolor: alpha(theme.palette.success.main, 0.08) }}>R$/Kg</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold', minWidth: 250 }}>Ingrediente Vinculado</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {uploadItensRevisados.map((item, idx) => (
+                          <TableRow key={idx} hover sx={{ opacity: item.incluir ? 1 : 0.4 }}>
+                            <TableCell padding="checkbox">
+                              <Switch
+                                size="small"
+                                checked={item.incluir}
+                                onChange={(e) => {
+                                  const next = [...uploadItensRevisados];
+                                  next[idx] = { ...next[idx], incluir: e.target.checked };
+                                  setUploadItensRevisados(next);
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight={500}>{item.descricao_original}</Typography>
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                size="small" variant="standard" value={item.marca}
+                                onChange={(e) => {
+                                  const next = [...uploadItensRevisados];
+                                  next[idx] = { ...next[idx], marca: e.target.value };
+                                  setUploadItensRevisados(next);
+                                }}
+                                sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                size="small" variant="standard" type="number"
+                                value={item.peso_liquido_kg}
+                                onChange={(e) => {
+                                  const peso = Number(e.target.value) || 0.001;
+                                  const novoPrecoPorKg = calcularPrecoPorKg(item.preco_unitario, peso, item.quantidade_embalagem);
+                                  const next = [...uploadItensRevisados];
+                                  next[idx] = { ...next[idx], peso_liquido_kg: peso, preco_por_kg: novoPrecoPorKg };
+                                  setUploadItensRevisados(next);
+                                }}
+                                sx={{ width: 80, '& .MuiInputBase-input': { fontSize: '0.85rem', textAlign: 'center' } }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                size="small" variant="standard" type="number"
+                                value={item.preco_unitario}
+                                onChange={(e) => {
+                                  const preco = Number(e.target.value) || 0;
+                                  const novoPrecoPorKg = calcularPrecoPorKg(preco, item.peso_liquido_kg, item.quantidade_embalagem);
+                                  const next = [...uploadItensRevisados];
+                                  next[idx] = { ...next[idx], preco_unitario: preco, preco_por_kg: novoPrecoPorKg };
+                                  setUploadItensRevisados(next);
+                                }}
+                                InputProps={{ startAdornment: <InputAdornment position="start"><Typography variant="caption">R$</Typography></InputAdornment> }}
+                                sx={{ width: 100, '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ bgcolor: alpha(theme.palette.success.main, 0.04) }}>
+                              <Typography variant="body2" fontWeight="bold" color="success.dark">
+                                R$ {item.preco_por_kg.toFixed(2)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                select size="small" fullWidth
+                                value={item.ingrediente_id}
+                                onChange={(e) => {
+                                  const next = [...uploadItensRevisados];
+                                  next[idx] = { ...next[idx], ingrediente_id: e.target.value };
+                                  setUploadItensRevisados(next);
+                                }}
+                                sx={{ '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                              >
+                                {item.sugestoes.length > 0 && (
+                                  <MenuItem disabled sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>--- Sugestões da IA ---</MenuItem>
+                                )}
+                                {item.sugestoes.map(s => (
+                                  <MenuItem key={s.ingrediente_id} value={s.ingrediente_id}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                                      <span>{s.ingrediente_nome}</span>
+                                      <Chip label={`${(s.score * 100).toFixed(0)}%`} size="small" color={s.score > 0.5 ? 'success' : 'default'} sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} />
+                                    </Box>
+                                  </MenuItem>
+                                ))}
+                                {item.sugestoes.length > 0 && (
+                                  <MenuItem disabled sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>--- Todos ---</MenuItem>
+                                )}
+                                {ingredientes
+                                  .filter(i => !item.sugestoes.some(s => s.ingrediente_id === i.id))
+                                  .map(i => <MenuItem key={i.id} value={i.id}>{i.nome}</MenuItem>)
+                                }
+                              </TextField>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3, gap: 2 }}>
+                    <Button startIcon={<RotateCcw size={16} />} onClick={() => { setUploadStep(0); setCotacaoParsed(null); }} color="inherit">
+                      Novo Upload
+                    </Button>
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                        {uploadItensRevisados.filter(i => i.incluir && i.ingrediente_id).length} de {uploadItensRevisados.length} itens vinculados
+                      </Typography>
+                      <Button
+                        variant="contained" size="large"
+                        startIcon={uploadSaving ? <CircularProgress size={18} color="inherit" /> : <CheckCircle size={18} />}
+                        onClick={handleSaveCotacaoUpload}
+                        disabled={uploadSaving || !uploadFornecedorId || uploadItensRevisados.filter(i => i.incluir && i.ingrediente_id).length === 0}
+                      >
+                        {uploadSaving ? 'Salvando...' : 'Confirmar e Salvar Cotação'}
+                      </Button>
+                    </Box>
+                  </Box>
+                </Box>
+              )}
+
+              {/* ETAPA 2: Concluído */}
+              {uploadStep === 2 && (
+                <Paper variant="outlined" sx={{ p: 5, textAlign: 'center' }}>
+                  <Box sx={{ mx: 'auto', mb: 2, width: 64, height: 64, borderRadius: '50%', bgcolor: alpha(theme.palette.success.main, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCircle size={32} color={theme.palette.success.main} />
+                  </Box>
+                  <Typography variant="h5" fontWeight="bold" sx={{ mb: 1 }}>Cotação Importada!</Typography>
+                  <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+                    {uploadSavedCount} orçamentos foram salvos com sucesso na planilha.
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                    <Button variant="outlined" startIcon={<Upload size={16} />} onClick={() => { setUploadStep(0); setCotacaoParsed(null); setUploadSavedCount(0); }}>
+                      Importar Outra Cotação
+                    </Button>
+                    <Button variant="contained" onClick={() => { setTabValue(1); loadData(); }}>
+                      Ver no Quadro Comparativo
+                    </Button>
+                  </Box>
+                </Paper>
               )}
             </Box>
           )}

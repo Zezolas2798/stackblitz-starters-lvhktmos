@@ -1,3 +1,8 @@
+> [!NOTE] Ancestry
+> ⬆️ **Parent**: [[hub-mestre|Hub de Legislação]]
+
+---
+
 ﻿---
 id: legislacao.decreto9013
 titulo: "Decreto 9.013/2017 - RIISPOA"
@@ -10,11 +15,11 @@ tags:
   - tema/origem-animal
   - tema/riispoa
 edges:
-  - interpreta: "[[fontes/Decreto_9013_RIISPOA_Original]]"
-  - referenciada_por: "[[CONFORMIDADE_ROTULAGEM_MESTRE]]"
+  - interpreta: "[[legislacao/fontes/Decreto_9013_RIISPOA_Original]]"
+  - referenciada_por: "[[legislacao/hub-mestre]]"
 ---
 
-← [[CONFORMIDADE_ROTULAGEM_MESTRE|Voltar ao Hub de Conformidade]]
+← [[legislacao/hub-mestre|Voltar ao Hub de Conformidade]]
 # Especificação Técnica: Decreto nº 9.013/2017 (RIISPOA)
 
 O RIISPOA regulamenta a rotulagem de produtos de origem animal (POA) sob inspeção federal (SIF), estadual ou municipal.

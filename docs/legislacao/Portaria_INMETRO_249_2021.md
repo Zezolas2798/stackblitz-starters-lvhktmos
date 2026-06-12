@@ -1,3 +1,8 @@
+> [!NOTE] Ancestry
+> ⬆️ **Parent**: [[hub-mestre|Hub de Legislação]]
+
+---
+
 ﻿---
 id: legislacao.portaria_inmetro249
 titulo: "Portaria INMETRO 249/2021 - Metrologia"
@@ -10,11 +15,11 @@ tags:
   - tema/conteudo-liquido
   - tema/metrologia
 edges:
-  - interpreta: "[[fontes/Portaria_INMETRO_249_Original]]"
-  - referenciada_por: "[[CONFORMIDADE_ROTULAGEM_MESTRE]]"
+  - interpreta: "[[legislacao/fontes/Portaria_INMETRO_249_Original]]"
+  - referenciada_por: "[[legislacao/hub-mestre]]"
 ---
 
-← [[CONFORMIDADE_ROTULAGEM_MESTRE|Voltar ao Hub de Conformidade]]
+← [[legislacao/hub-mestre|Voltar ao Hub de Conformidade]]
 # Especificação Técnica: Portaria INMETRO nº 249/2021
 
 Esta portaria estabelece a forma de expressar a indicação quantitativa do conteúdo líquido (metrologia).

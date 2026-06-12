@@ -26,7 +26,8 @@ export interface DadosEtiqueta {
     idInterno: string;
     responsavel: string;
     codigoRef?: string;
-  }
+  };
+  qtd_embalagens?: number;
 }
 
 /**

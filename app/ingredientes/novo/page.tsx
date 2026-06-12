@@ -81,7 +81,7 @@ export default function NovoIngredientePage() {
   // Estados do Formulário (Inicializando TODOS os campos do tipo Ingrediente)
   const [formData, setFormData] = useState<Partial<Ingrediente>>({
     nome: '',
-    fonte: '', 
+    marca: '', 
     tipo_ingrediente: 'SIMPLES',
     peso_unitario_g: null,
     contem_gluten: false,
@@ -141,11 +141,13 @@ export default function NovoIngredientePage() {
     }
     async function loadGroupsAndCategories() {
       if (!activeClientId) return;
-      const [grpRes, catRes] = await Promise.all([
+      const [grpGlobalRes, grpClientRes, catRes] = await Promise.all([
+        (supabase as any).from('subgrupos_produto').select('id, nome, grupo_id').is('cliente_id', null).order('nome'),
         (supabase as any).from('subgrupos_produto').select('id, nome, grupo_id').eq('cliente_id', activeClientId).order('nome'),
-        (supabase as any).from('grupos_produto').select('id, nome').eq('cliente_id', activeClientId).eq('modalidade', 'ALIMENTOS').order('nome')
+        (supabase as any).from('grupos_produto').select('id, nome').is('cliente_id', null).eq('modalidade', 'ALIMENTOS').order('nome')
       ]);
-      if (grpRes.data) setTodosGrupos(grpRes.data);
+      const allGrupos = [...(grpGlobalRes.data || []), ...(grpClientRes.data || [])];
+      if (allGrupos.length > 0) setTodosGrupos(allGrupos);
       if (catRes.data) setCategoriasMestre(catRes.data);
     }
     loadMasters();
@@ -211,7 +213,7 @@ export default function NovoIngredientePage() {
     if (typeof value === 'string' && value === '') {
         finalValue = null;
     } else if (
-        field !== 'nome' && field !== 'fonte' && field !== 'tipo_ingrediente' && 
+        field !== 'nome' && field !== 'marca' && field !== 'tipo_ingrediente' && 
         field !== 'funcao_aditivo' && field !== 'ins_code' && field !== 'declaracao_ingredientes_fornecedor' &&
         field !== 'classificacao_nova' && field !== 'grupo_id' && field !== 'subgrupo_id'
     ) {
@@ -229,12 +231,12 @@ export default function NovoIngredientePage() {
       if (funcoesPossiveis.length > 0) {
           setOpcoesFuncaoDinamicas(funcoesPossiveis);
           if (funcoesPossiveis.length === 1) {
-              setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, funcao_aditivo: funcoesPossiveis[0], fonte: 'Tabela INS ANVISA' }));
+              setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, funcao_aditivo: funcoesPossiveis[0], marca: 'Tabela INS ANVISA' }));
           } else {
-              setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, funcao_aditivo: '', fonte: 'Tabela INS ANVISA' }));
+              setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, funcao_aditivo: '', marca: 'Tabela INS ANVISA' }));
           }
       } else {
-          setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, fonte: 'Tabela INS ANVISA' }));
+          setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, marca: 'Tabela INS ANVISA' }));
       }
       // A detecção de corantes agora é automatizada na Edge Function via ins_code
     }
@@ -262,7 +264,7 @@ export default function NovoIngredientePage() {
     setFormData(prev => ({
       ...prev,
       referencia_id: ref.id,
-      fonte: ref.fonte,
+      marca: ref.fonte,
       energia_kcal: ref.energia_kcal,
       proteina_g: ref.proteina_g,
       lipideos_g: ref.lipideos_g,
@@ -537,7 +539,7 @@ export default function NovoIngredientePage() {
               )}
 
               <Grid item xs={12} md={4}>
-                <TextField label="Marca / Fonte" fullWidth value={formData.fonte || ''} onChange={e => handleChange('fonte', e.target.value)} />
+                <TextField label="Marca / Fonte" fullWidth value={formData.marca || ''} onChange={e => handleChange('marca', e.target.value)} />
               </Grid>
               <Grid item xs={12} md={4}>
                 <Autocomplete

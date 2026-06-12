@@ -179,7 +179,7 @@ function CriarEditarReceitaComponent() {
     setError(null);
     try {
       const [ingPromise, recPromise, catPromise, medPromise, alergenicosPromise, ingAlergLinkPromise, gruposPopPromise, tiposRecPromise, aditivosMestrePromise, materiaisPromise, refPromise] = await Promise.all([
-        (supabase as any).from('ingredientes').select('id, nome, fonte, ins_code, tipo_ingrediente, funcao_aditivo, alergenicos_ids, preco_ultima_compra, peso_unitario_g, referencia_id').or(`cliente_id.eq.${activeClientId},cliente_id.is.null`).is('deleted_at', null).order('nome'),
+        (supabase as any).from('ingredientes').select('id, nome, marca, ins_code, tipo_ingrediente, funcao_aditivo, alergenicos_ids, preco_ultima_compra, peso_unitario_g, referencia_id').or(`cliente_id.eq.${activeClientId},cliente_id.is.null`).is('deleted_at', null).order('nome'),
         (supabase as any).from('receitas').select('id, nome').eq('cliente_id', activeClientId!).eq('is_sub_receita', true).neq('id', editingId || '00000000-0000-0000-0000-000000000000').order('nome'),
         (supabase as any).from('anvisa_categorias').select('*').order('nome_produto'),
         (supabase as any).from('anvisa_medidas_caseiras').select('nome').order('nome'),
@@ -232,7 +232,7 @@ function CriarEditarReceitaComponent() {
           nome: ing.nome,
           tipo: 'ingrediente',
           grupo: 'Meus Ingredientes',
-          fonte: ing.fonte,
+          fonte: ing.marca,
           preco_ultima_compra: Number(ing.preco_ultima_compra || 0),
           peso_unitario_g: Number(ing.peso_unitario_g || 1000)
         }));
@@ -341,7 +341,7 @@ function CriarEditarReceitaComponent() {
                   nome: ingRaw.nome,
                   tipo: 'ingrediente',
                   grupo: 'Aditivo Cadastrado',
-                  fonte: ingRaw.fonte,
+                  fonte: ingRaw.marca,
                   preco_ultima_compra: Number(ingRaw.preco_ultima_compra || 0),
                   peso_unitario_g: Number(ingRaw.peso_unitario_g || 1000),
                   aditivoData: {

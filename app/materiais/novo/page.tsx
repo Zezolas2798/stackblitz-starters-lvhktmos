@@ -6,6 +6,12 @@ import Link from 'next/link';
 import { useClient } from '@/lib/ClientContext';
 import { supabase } from '@/lib/supabaseClient';
 import { TipoMaterial } from '@/lib/types';
+import CamposEspecificosMaterial from '@/components/CamposEspecificosMaterial';
+import {
+  getDefaultsForModalidade,
+  validateEspecificacoes,
+  MODALIDADE_LABELS,
+} from '@/lib/schemas/materiais-modalidade';
 import {
   Box,
   Button,
@@ -34,6 +40,7 @@ export default function NovoMaterialPage() {
   const [loading, setLoading] = useState(false);
   const [errorObj, setErrorObj] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<any[]>([]);
+  const [specsErrors, setSpecsErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
     nome: '',
@@ -49,8 +56,27 @@ export default function NovoMaterialPage() {
     cor: '',
     sustentavel: false,
     apropriado_alimentos: false,
-    especificacoes_adicionais: {}
+    especificacoes_adicionais: getDefaultsForModalidade('EMBALAGEM') as Record<string, any>
   });
+
+  // Handler para campos dinâmicos de especificação por modalidade
+  const handleSpecChange = (field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      especificacoes_adicionais: {
+        ...prev.especificacoes_adicionais,
+        [field]: value
+      }
+    }));
+    // Limpar erro do campo ao editar
+    if (specsErrors[field]) {
+      setSpecsErrors(prev => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+  };
 
   const fetchCategorias = useCallback(async (type: TipoMaterial) => {
     if (!unidadeSelecionada?.cliente_id) {
@@ -81,7 +107,7 @@ export default function NovoMaterialPage() {
         .from('grupos_produto')
         .select('id, nome, modalidade')
         .eq('cliente_id', unidadeSelecionada.cliente_id)
-        .eq('modalidade', targetModality)
+        .eq('modalidade', targetModality as any)
         .order('nome');
       
       if (error) {
@@ -109,9 +135,29 @@ export default function NovoMaterialPage() {
     e.preventDefault();
     if (!unidadeSelecionada?.cliente_id) return;
     setErrorObj(null);
+    setSpecsErrors({});
     setLoading(true);
 
+    // ── Validação Zod das especificações por modalidade ──
+    const validationResult = validateEspecificacoes(
+      formData.tipo_material,
+      formData.especificacoes_adicionais
+    );
+
+    if (!validationResult.success) {
+      const errMap: Record<string, string> = {};
+      validationResult.errors?.forEach((err: { path: string; message: string }) => {
+        errMap[err.path] = err.message;
+      });
+      setSpecsErrors(errMap);
+      setErrorObj(`Preencha os campos obrigatórios das especificações de ${MODALIDADE_LABELS[formData.tipo_material] || formData.tipo_material}.`);
+      setLoading(false);
+      return;
+    }
+
     try {
+      // ── Sincronizar colunas legadas a partir das especificações Zod ──
+      const specs = formData.especificacoes_adicionais;
       const { error } = await (supabase as any).from('materiais').insert([
         {
           cliente_id: unidadeSelecionada.cliente_id,
@@ -122,14 +168,15 @@ export default function NovoMaterialPage() {
           preco_ultima_compra: Number(formData.custo_medio),
           grupo_id: formData.grupo_id || null,
           descricao_tecnica: formData.descricao_tecnica,
-          material_base: formData.material_base,
-          dimensoes: formData.dimensoes,
-          capacidade: formData.capacidade,
-          peso_unitario_g: Number(formData.peso_unitario_g),
-          cor: formData.cor,
-          sustentavel: formData.sustentavel,
-          apropriado_alimentos: formData.apropriado_alimentos,
-          especificacoes_adicionais: formData.especificacoes_adicionais
+          // Sincronização de colunas planas com dados das especificações
+          material_base: specs.material_base || formData.material_base || null,
+          dimensoes: specs.dimensoes || formData.dimensoes || null,
+          capacidade: specs.capacidade || formData.capacidade || null,
+          peso_unitario_g: Number(formData.peso_unitario_g) || null,
+          cor: specs.cor || formData.cor || null,
+          sustentavel: specs.sustentavel ?? formData.sustentavel ?? false,
+          apropriado_alimentos: specs.apropriado_alimentos ?? formData.apropriado_alimentos ?? false,
+          especificacoes_adicionais: validationResult.data
         }
       ]);
 
@@ -199,8 +246,14 @@ export default function NovoMaterialPage() {
                 name="tipo_material"
                 value={formData.tipo_material}
                 onChange={(e) => {
-                    handleChange(e as any);
-                    setFormData(prev => ({ ...prev, grupo_id: '' })); // Resetar subcategoria ao mudar modalidade
+                    const newType = e.target.value as TipoMaterial;
+                    setFormData(prev => ({
+                      ...prev,
+                      tipo_material: newType,
+                      grupo_id: '',
+                      especificacoes_adicionais: getDefaultsForModalidade(newType)
+                    }));
+                    setSpecsErrors({});
                 }}
               >
                 <MenuItem value="EMBALAGEM">Embalagem</MenuItem>
@@ -271,6 +324,23 @@ export default function NovoMaterialPage() {
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle1" fontWeight="bold" color="primary" sx={{ mb: 2 }}>
                 Especificações Técnicas
+              </Typography>
+            </Grid>
+
+            {/* ── Campos Dinâmicos por Modalidade (Validados por Zod) ── */}
+            <Grid item xs={12}>
+              <CamposEspecificosMaterial
+                tipoMaterial={formData.tipo_material}
+                specs={formData.especificacoes_adicionais}
+                onChange={handleSpecChange}
+                errors={specsErrors}
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                Informações Complementares (opcionais)
               </Typography>
             </Grid>
 

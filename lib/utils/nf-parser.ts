@@ -1,5 +1,3 @@
-import Tesseract from 'tesseract.js';
-
 export interface ParsedNFItem {
   descricao: string;
   unidade: string;
@@ -22,7 +20,7 @@ export interface ParsedNF {
 }
 
 /**
- * Parser para XML de Nota Fiscal Eletrônica (NF-e) Brasileira
+ * Parser determinístico para XML de Nota Fiscal Eletrônica (NF-e) Brasileira
  */
 export async function parseXmlNF(xmlText: string): Promise<ParsedNF> {
   try {
@@ -39,14 +37,13 @@ export async function parseXmlNF(xmlText: string): Promise<ParsedNF> {
     const fornecedorCnpj = getValue("emit > CNPJ");
     const fornecedorNome = getValue("emit > xNome");
     const valorTotalNf = parseFloat(getValue("vNF") || "0") || 0;
-    const dataVencimento = getValue("dup > vVenc"); // Tenta pegar vencimento da primeira duplicata
+    const dataVencimento = getValue("dup > vVenc");
 
     const detNodes = xmlDoc.querySelectorAll("det");
     const itens: ParsedNFItem[] = Array.from(detNodes).map(det => {
       const prod = det.querySelector("prod");
       const infAdProd = det.querySelector("infAdProd")?.textContent || "";
       
-      // Tenta extrair lote e validade de informações adicionais
       const loteMatch = infAdProd.match(/Lote:\s*([^\s|]+)/i);
       const valMatch = infAdProd.match(/Validade:\s*([^\s|]+)/i);
 
@@ -70,66 +67,38 @@ export async function parseXmlNF(xmlText: string): Promise<ParsedNF> {
 }
 
 /**
- * Parser para PDF Digital (Extração via PDF.js)
+ * Parser para PDF Digital, Imagens ou Planilhas usando IA (Gemini API)
  */
-export async function parsePdfNF(file: File): Promise<ParsedNF | null> {
+export async function parseWithAI(file: File): Promise<ParsedNF | null> {
   try {
-    const pdfjs = await import('pdfjs-dist');
-    // Configura worker vindo do CDN compatível com a versão instalada
-    const version = (pdfjs as any).version || '3.4.120';
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`;
+    const formData = new FormData();
+    formData.append('file', file);
 
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-    
-    let fullText = "";
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const strings = content.items.map((item: any) => item.str);
-      fullText += strings.join(" ") + "\n";
+    const response = await fetch('/api/parse-document', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error || 'Erro na API de IA');
     }
 
-    const nNfMatch = fullText.match(/N[ºo].?\s*Nota\s*Fiscal:\s*(\d+)/i) || fullText.match(/N[ºo].?\s*(\d{3}[\d.]+)/);
-    const vNfMatch = fullText.match(/VALOR\s*TOTAL\s*D[A|O].?\s*NOTA\D+([\d,.]+)/i);
+    const data: ParsedNF = await response.json();
     
-    return {
-      numero: nNfMatch ? nNfMatch[1] : `PDF-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
-      dataEmissao: new Date().toISOString().split('T')[0],
-      valorTotalNf: vNfMatch ? parseFloat(vNfMatch[1].replace('.','').replace(',','.')) || 0 : 0,
-      itens: [] 
-    };
-  } catch (err) {
-    console.error("Erro no parsePdfNF:", err);
-    return null;
-  }
-}
+    // Normalizar datas caso a IA tenha falhado
+    if (data.dataEmissao) data.dataEmissao = fmtDate(data.dataEmissao);
+    if (data.dataVencimento) data.dataVencimento = fmtDate(data.dataVencimento);
+    if (data.itens) {
+      data.itens.forEach(it => {
+        if (it.validade) it.validade = fmtDate(it.validade);
+      });
+    }
 
-/**
- * Parser para Imagem/Foto (OCR via Tesseract.js)
- */
-export async function parseImageNF(file: File): Promise<ParsedNF> {
-  try {
-    const result = await Tesseract.recognize(file, 'por');
-    const text = result.data.text;
-    const nNfMatch = text.match(/N[ºo].?\s*(\d+)/);
-    
-    return {
-      numero: nNfMatch ? nNfMatch[1] : "Foto-Leitura",
-      dataEmissao: new Date().toISOString().split('T')[0],
-      valorTotalNf: 0,
-      itens: [
-        { descricao: "Item detectado via Foto (IA)", unidade: "UN", quantidade: 1, valorUnitario: 0, valorTotal: 0 }
-      ]
-    };
+    return data;
   } catch (err) {
-    console.error("Erro no parseImageNF:", err);
-    return {
-      numero: "Erro-OCR",
-      dataEmissao: new Date().toISOString().split('T')[0],
-      valorTotalNf: 0,
-      itens: []
-    };
+    console.error("Erro no parseWithAI:", err);
+    return null;
   }
 }
 
@@ -148,14 +117,16 @@ export async function processNFFile(file: File): Promise<ParsedNF | null> {
   try {
     const extension = file.name.split('.').pop()?.toLowerCase();
 
+    // Se for XML padrão (estruturado), usa o parser nativo que é 100% preciso, rápido e grátis.
     if (extension === 'xml') {
       const text = await file.text();
       return parseXmlNF(text);
-    } else if (extension === 'pdf') {
-      return parsePdfNF(file);
-    } else if (['jpg', 'jpeg', 'png', 'webp'].includes(extension || '')) {
-      return parseImageNF(file);
+    } 
+    // Se for PDF, Imagem, Planilha ou Documento, delega para a IA.
+    else if (['pdf', 'jpg', 'jpeg', 'png', 'webp', 'xls', 'xlsx', 'csv'].includes(extension || '')) {
+      return parseWithAI(file);
     }
+    
     return null;
   } catch (err) {
     console.error("Erro no processNFFile:", err);

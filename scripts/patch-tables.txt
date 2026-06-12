@@ -1,0 +1,130 @@
+            case 'TABELA_DINAMICA_DIARIO_PRAGAS': {
+                const linhas = respostas[col.id] || [];
+                const handleAdd = () => {
+                    setRespostas({ ...respostas, [col.id]: [...linhas, { setor: '', encontrou: 'Não', quais_pragas: [], acoes: '' }] });
+                };
+                const handleRemove = (idx: number) => {
+                    const nova = [...linhas];
+                    nova.splice(idx, 1);
+                    setRespostas({ ...respostas, [col.id]: nova });
+                };
+                const handleChange = (idx: number, field: string, val: any) => {
+                    const nova = [...linhas];
+                    nova[idx] = { ...nova[idx], [field]: val };
+                    setRespostas({ ...respostas, [col.id]: nova });
+                };
+                const pragasOptions = ['Barata', 'Escorpião', 'Formiga', 'Mosca', 'Rato', 'Outro'];
+                return (
+                    <Box key={col.id} sx={{ mb: 3, p: 2, border: '1px dashed #ccc', borderRadius: 2 }}>
+                        <Typography variant="subtitle2" sx={{ mb: 2 }}>{col.titulo}</Typography>
+                        {linhas.map((linha: any, idx: number) => (
+                            <Box key={idx} sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 1 }}>
+                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2, alignItems: 'center' }}>
+                                    <TextField select fullWidth label="Setor / Área" size="small" value={linha.setor} onChange={(e) => handleChange(idx, 'setor', e.target.value)}>
+                                        {setoresOptions.map((s: any) => <MenuItem key={s.id} value={s.nome}>{s.nome}</MenuItem>)}
+                                    </TextField>
+                                    <TextField select label="Viu Pragas?" size="small" value={linha.encontrou} sx={{ width: { xs: '100%', md: '200px' } }} onChange={(e) => handleChange(idx, 'encontrou', e.target.value)}>
+                                        <MenuItem value="Não">Não</MenuItem>
+                                        <MenuItem value="Sim">Sim</MenuItem>
+                                    </TextField>
+                                    <IconButton color="error" onClick={() => handleRemove(idx)}><Trash2 size={20} /></IconButton>
+                                </Stack>
+                                {linha.encontrou === 'Sim' && (
+                                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'center' }}>
+                                        <TextField select fullWidth label="Quais pragas?" size="small" value={linha.quais_pragas || []}
+                                            SelectProps={{ multiple: true, renderValue: (sel: any) => <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{sel.map((v: string) => <Chip key={v} label={v} size="small" />)}</Box> }}
+                                            onChange={(e) => handleChange(idx, 'quais_pragas', e.target.value)}>
+                                            {pragasOptions.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
+                                        </TextField>
+                                        <TextField fullWidth label="Ações Corretivas" size="small" value={linha.acoes || ''} onChange={(e) => handleChange(idx, 'acoes', e.target.value)} />
+                                    </Stack>
+                                )}
+                            </Box>
+                        ))}
+                        <Button variant="outlined" startIcon={<Plus size={18} />} onClick={handleAdd}>Adicionar Setor</Button>
+                    </Box>
+                );
+            }
+            case 'TABELA_DINAMICA_RALOS': {
+                const linhas = respostas[col.id] || [];
+                const handleAdd = () => {
+                    setRespostas({ ...respostas, [col.id]: [...linhas, { setor: '', limpeza: 'Conforme', tampas: 'Sim', pragas: 'Não', acoes: '' }] });
+                };
+                const handleRemove = (idx: number) => {
+                    const nova = [...linhas];
+                    nova.splice(idx, 1);
+                    setRespostas({ ...respostas, [col.id]: nova });
+                };
+                const handleChange = (idx: number, field: string, val: any) => {
+                    const nova = [...linhas];
+                    nova[idx] = { ...nova[idx], [field]: val };
+                    setRespostas({ ...respostas, [col.id]: nova });
+                };
+                return (
+                    <Box key={col.id} sx={{ mb: 3, p: 2, border: '1px dashed #ccc', borderRadius: 2 }}>
+                        <Typography variant="subtitle2" sx={{ mb: 2 }}>{col.titulo}</Typography>
+                        {linhas.map((linha: any, idx: number) => (
+                            <Box key={idx} sx={{ mb: 3, p: 2, border: '1px solid #eee', borderRadius: 1 }}>
+                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2, alignItems: 'center' }}>
+                                    <TextField select fullWidth label="Setor / Local" size="small" value={linha.setor} onChange={(e) => handleChange(idx, 'setor', e.target.value)}>
+                                        {setoresOptions.map((s: any) => <MenuItem key={s.id} value={s.nome}>{s.nome}</MenuItem>)}
+                                    </TextField>
+                                    <TextField select label="Limpeza" size="small" value={linha.limpeza} sx={{ width: { xs: '100%', md: '200px' } }} onChange={(e) => handleChange(idx, 'limpeza', e.target.value)}>
+                                        <MenuItem value="Conforme">Conforme</MenuItem>
+                                        <MenuItem value="Não Conforme">Não Conforme</MenuItem>
+                                    </TextField>
+                                    <IconButton color="error" onClick={() => handleRemove(idx)}><Trash2 size={20} /></IconButton>
+                                </Stack>
+                                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'center' }}>
+                                    <TextField select label="Tampas Íntegras?" size="small" value={linha.tampas} sx={{ width: { xs: '100%', md: '200px' } }} onChange={(e) => handleChange(idx, 'tampas', e.target.value)}>
+                                        <MenuItem value="Sim">Sim</MenuItem>
+                                        <MenuItem value="Não">Não</MenuItem>
+                                    </TextField>
+                                    <TextField select label="Pragas?" size="small" value={linha.pragas} sx={{ width: { xs: '100%', md: '200px' } }} onChange={(e) => handleChange(idx, 'pragas', e.target.value)}>
+                                        <MenuItem value="Não">Não</MenuItem>
+                                        <MenuItem value="Sim">Sim</MenuItem>
+                                    </TextField>
+                                    <TextField fullWidth label="Ações/Obs" size="small" value={linha.acoes || ''} onChange={(e) => handleChange(idx, 'acoes', e.target.value)} />
+                                </Stack>
+                            </Box>
+                        ))}
+                        <Button variant="outlined" startIcon={<Plus size={18} />} onClick={handleAdd}>Adicionar Ralo/Setor</Button>
+                    </Box>
+                );
+            }
+            case 'TABELA_DINAMICA_ARMADILHAS': {
+                const linhas = respostas[col.id] || [];
+                const handleAdd = () => {
+                    setRespostas({ ...respostas, [col.id]: [...linhas, { local: '', praga: 'Nenhuma', qtd: 0, obs: '' }] });
+                };
+                const handleRemove = (idx: number) => {
+                    const nova = [...linhas];
+                    nova.splice(idx, 1);
+                    setRespostas({ ...respostas, [col.id]: nova });
+                };
+                const handleChange = (idx: number, field: string, val: any) => {
+                    const nova = [...linhas];
+                    nova[idx] = { ...nova[idx], [field]: val };
+                    setRespostas({ ...respostas, [col.id]: nova });
+                };
+                const pragasOptions = ['Nenhuma', 'Barata', 'Escorpião', 'Formiga', 'Mosca', 'Rato', 'Pássaro/Pombo', 'Outro'];
+                return (
+                    <Box key={col.id} sx={{ mb: 3, p: 2, border: '1px dashed #ccc', borderRadius: 2 }}>
+                        <Typography variant="subtitle2" sx={{ mb: 2 }}>{col.titulo}</Typography>
+                        {linhas.map((linha: any, idx: number) => (
+                            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} key={idx} sx={{ mb: 2, alignItems: 'center' }}>
+                                <TextField select fullWidth label="Local da Armadilha" size="small" value={linha.local} onChange={(e) => handleChange(idx, 'local', e.target.value)}>
+                                    {setoresOptions.map((s: any) => <MenuItem key={s.id} value={s.nome}>{s.nome}</MenuItem>)}
+                                </TextField>
+                                <TextField select fullWidth label="Praga" size="small" value={linha.praga} onChange={(e) => handleChange(idx, 'praga', e.target.value)}>
+                                    {pragasOptions.map((opt) => <MenuItem key={opt} value={opt}>{opt}</MenuItem>)}
+                                </TextField>
+                                <TextField type="number" label="Qtd" size="small" value={linha.qtd} sx={{ width: { xs: '100%', md: '100px' } }} onChange={(e) => handleChange(idx, 'qtd', parseInt(e.target.value) || 0)} />
+                                <TextField fullWidth label="Observações" size="small" value={linha.obs} onChange={(e) => handleChange(idx, 'obs', e.target.value)} />
+                                <IconButton color="error" onClick={() => handleRemove(idx)}><Trash2 size={20} /></IconButton>
+                            </Stack>
+                        ))}
+                        <Button variant="outlined" startIcon={<Plus size={18} />} onClick={handleAdd}>Adicionar Armadilha</Button>
+                    </Box>
+                );
+            }

@@ -21,3 +21,29 @@ a {
     display: none !important;
   }
 }
+
+/* ZELUS Brand Styles */
+.zelus-card {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.zelus-card:hover {
+    border-color: rgba(254, 97, 94, 0.4);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 20px rgba(254, 97, 94, 0.3);
+    transform: translateY(-5px);
+}
+
+.zelus-reveal {
+    animation: zelusFadeIn 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes zelusFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

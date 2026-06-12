@@ -34,7 +34,7 @@ interface ItemComposicaoCompleto {
   nome: string;
   peso_liquido_g: number;
   unidade: string;
-  fonte?: string | null;
+  marca?: string | null;
   peso_unitario_g?: number | null;
   alergenicosNames?: string[];
 }
@@ -202,14 +202,14 @@ export default function RelatoriosPage() {
         if (modo === 'FICHA' && vRecord.composicao_snapshot) {
           const comps = vRecord.composicao_snapshot as any[];
           const idsIng = comps.filter((c: any) => c.tipo === 'ingrediente').map((c: any) => c.item_id);
-          const { data: ingBrands } = await supabase.from('ingredientes').select('id, fonte').in('id', idsIng);
-          const brandMap = new Map(ingBrands?.map((i: any) => [i.id, i.fonte]) || []);
+          const { data: ingBrands } = await supabase.from('ingredientes').select('id, marca').in('id', idsIng);
+          const brandMap = new Map(ingBrands?.map((i: any) => [i.id, i.marca]) || []);
 
           rec.ingredientesDetalhados = comps.map((c: any) => ({
             nome: c.nome_snapshot || c.nome,
             peso_liquido_g: c.quantidade,
             unidade: c.unidade,
-            fonte: brandMap.get(c.item_id)
+            marca: brandMap.get(c.item_id)
           }));
         }
       }
@@ -224,30 +224,30 @@ export default function RelatoriosPage() {
           const idsRec = comps.filter((c: any) => c.item_type === 'receita').map((c: any) => c.item_id);
 
           const [resIng, resRec] = await Promise.all([
-            idsIng.length > 0 ? (supabase as any).from('ingredientes').select('id, nome, fonte, peso_unitario_g').in('id', idsIng).is('deleted_at', null) : { data: [] },
+            idsIng.length > 0 ? (supabase as any).from('ingredientes').select('id, nome, marca, peso_unitario_g').in('id', idsIng).is('deleted_at', null) : { data: [] },
             idsRec.length > 0 ? (supabase as any).from('receitas').select('id, nome, peso_embalagem_g').in('id', idsRec) : { data: [] }
           ]);
 
           const nomeMap = new Map();
-          const fonteMap = new Map();
+          const marcaMap = new Map();
           const pesoUnitarioMap = new Map();
 
           resIng.data?.forEach((i: any) => {
             nomeMap.set(i.id, i.nome);
-            fonteMap.set(i.id, i.fonte);
+            marcaMap.set(i.id, i.marca);
             pesoUnitarioMap.set(i.id, i.peso_unitario_g);
           });
 
           resRec.data?.forEach((r: any) => {
             nomeMap.set(r.id, r.nome);
-            fonteMap.set(r.id, "Sub-receita");
+            marcaMap.set(r.id, "Sub-receita");
           });
 
           rec.ingredientesDetalhados = comps.map((c: any) => ({
             nome: nomeMap.get(c.item_id) || 'Item desconhecido',
             peso_liquido_g: c.peso_liquido_g,
             unidade: 'g',
-            fonte: fonteMap.get(c.item_id),
+            marca: marcaMap.get(c.item_id),
             peso_unitario_g: pesoUnitarioMap.get(c.item_id)
           }));
         }
@@ -622,9 +622,9 @@ export default function RelatoriosPage() {
                                   <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
                                     {ing.nome.charAt(0).toUpperCase() + ing.nome.slice(1).toLowerCase()}
                                   </Typography>
-                                  {ing.fonte && (
+                                  {ing.marca && (
                                     <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', fontSize: '0.65rem', mt: -0.5 }}>
-                                      Marca: {ing.fonte}
+                                      Marca: {ing.marca}
                                     </Typography>
                                   )}
                                 </Box>
@@ -714,7 +714,7 @@ export default function RelatoriosPage() {
                           height: '200px'
                         }}
                       >
-                        <NextImage src="/logo-cortex.svg" alt="" width={200} height={200} />
+                        <NextImage src="/zelus-icon-official.svg" alt="Zelus" width={200} height={200} />
                       </Box>
                     </Box>
                   ) : (
@@ -848,7 +848,7 @@ export default function RelatoriosPage() {
                       {/* RODAPÉ INTEGRADO */}
                       <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <NextImage src="/logo-cortex.svg" alt="" width={80} height={24} />
+                          <NextImage src="/zelus-icon-official.svg" alt="Zelus" width={80} height={24} />
                           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 1 }}>SOFTWARE PLATFORM</Typography>
                         </Box>
                         <Typography variant="caption" color="text.secondary">

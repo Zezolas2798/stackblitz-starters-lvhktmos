@@ -1,1 +1,4 @@
-[]
+{"signal_type": "drift_tolerance", "feature": "ingredientes", "threshold": 0.05, "action": "alert_only", "rationale": "Módulo em brownfield, permitir pequeno drift até os gaps serem fechados."}
+{"signal_type": "test_coverage", "feature": "ingredientes", "target_layer": "domain", "threshold": 0.90, "action": "block_pr", "rationale": "Regras como limpeza de GMO são críticas para a rotulagem."}
+{"signal_type": "ui_performance", "feature": "ingredientes", "target": "fetchIngredientes", "p95_ms": 500, "action": "create_ticket", "rationale": "Query na base de ingredientes não pode bloquear interface principal."}
+{"signal_type": "agent_confidence", "agent": "03-gap-analyzer", "minimum_confidence": "high", "action": "require_human_review", "rationale": "Qualquer gap regulatório ANVISA detectado pelo agente exige validação humana."}

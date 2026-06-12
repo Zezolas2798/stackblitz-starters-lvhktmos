@@ -1,3 +1,8 @@
+> [!NOTE] Ancestry
+> ⬆️ **Parent**: [[hub-mestre|Hub de Legislação]]
+
+---
+
 ﻿---
 id: legislacao.vdr_tabelas
 titulo: "VDR por Grupo Populacional (IN 75/2020)"
@@ -11,11 +16,11 @@ tags:
   - tema/grupo-populacional
   - referencia/tabela
 edges:
-  - referenciada_por: "[[CONFORMIDADE_ROTULAGEM_MESTRE]]"
-  - referenciada_por: "[[RDC_429_2020_IN_75_2020]]"
+  - referenciada_por: "[[legislacao/hub-mestre]]"
+  - referenciada_por: "[[legislacao/RDC_429_2020_IN_75_2020]]"
 ---
 
-← [[CONFORMIDADE_ROTULAGEM_MESTRE|Voltar ao Hub de Conformidade]]
+← [[legislacao/hub-mestre|Voltar ao Hub de Conformidade]]
 # Tabela de Referência: VDR por Grupo Populacional (IN 75/2020)
 
 Esta tabela consolida os Valores Diários de Referência (VDR) utilizados pela Edge Function `calcular-nutrientes` para determinar o %VD no rótulo.

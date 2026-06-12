@@ -46,8 +46,8 @@ export function AppHeader() {
         {/* LOGO DINÂMICA NO HEADER */}
         <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
           <img
-            src={activeClientLogo || (mode === 'dark' ? "/logo-cortex.svg" : "/logo-cortex-light.svg")}
-            alt={unidadeSelecionada?.cliente?.nome_fantasia || "Córtex Food Solution"}
+            src={activeClientLogo || "/zelus-icon-official.svg"}
+            alt={unidadeSelecionada?.cliente?.nome_fantasia || "Zelus Manager"}
             style={{ height: '36px', width: 'auto', maxWidth: '120px', objectFit: 'contain' }}
           />
         </Box>

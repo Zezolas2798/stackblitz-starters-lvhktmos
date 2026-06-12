@@ -9,10 +9,11 @@ import {
   CircularProgress, Grid, Tabs, Tab, Alert, MenuItem, Select,
   FormControl, InputLabel, Chip, Tooltip, InputAdornment, Snackbar,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
-  Autocomplete, Checkbox
+  Autocomplete, Checkbox, Accordion, AccordionSummary, AccordionDetails,
+  FormControlLabel
 } from '@mui/material';
 import { useTheme, alpha } from '@mui/material/styles';
-import { ArrowLeft, Save, HelpCircle, ChevronRight, Settings, Search, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, HelpCircle, ChevronRight, ChevronDown, Settings, Search, Loader2, Trash2 } from 'lucide-react';
 
 const MODALIDADES_COMPRAS = [
   'ALIMENTOS', 'EMBALAGENS', 'LIMPEZA', 'MANUTENCAO', 'UTENSILIOS', 'EPI_EPC', 'UNIFORMES', 'PRIMEIROS_SOCORROS'
@@ -171,14 +172,14 @@ export default function EditFornecedorPage() {
 
   // Efeito para carregar o portfólio assim que as categorias do fornecedor estiverem disponíveis
   useEffect(() => {
-    if (activeClientId && fornecedor.id && fornecedor.tipo === 'FORNECEDOR' && fornecedor.categorias_compras?.length > 0) {
+    if (activeClientId && fornecedor.tipo === 'FORNECEDOR' && fornecedor.categorias_compras?.length > 0) {
       fetchPortfolioData(fornecedor.categorias_compras);
     } else if (fornecedor.categorias_compras?.length === 0 || fornecedor.tipo === 'SERVICO') {
       setGruposDisponiveis([]);
       setSubgruposDisponiveis([]);
       setItensDisponiveis([]);
     }
-  }, [activeClientId, fornecedor.id, JSON.stringify(fornecedor.categorias_compras)]);
+  }, [activeClientId, JSON.stringify(fornecedor.categorias_compras)]);
 
   const fetchPortfolioData = async (categoriasToFetch?: string[]) => {
     if (!activeClientId) return;
@@ -193,25 +194,33 @@ export default function EditFornecedorPage() {
     try {
       setCarregandoPortfolio(true);
       
-      // 1. Buscar Grupos (Level 2)
-      const { data: grupos } = await (supabase as any)
-        .from('grupos_produto')
-        .select('*')
-        .eq('cliente_id', activeClientId)
-        .in('modalidade', categorias)
-        .order('modalidade')
-        .order('nome');
-
-      setGruposDisponiveis(grupos || []);
-
-      // 2. Buscar Subgrupos (Level 3)
-      const { data: subgrupos } = await (supabase as any)
-        .from('subgrupos_produto')
-        .select('*')
-        .eq('cliente_id', activeClientId)
-        .order('nome');
+      // 1. Buscar Grupos (Level 2) - globais (ALIMENTOS) + por cliente (outras)
+      const alimentosCats = categorias.filter(c => c === 'ALIMENTOS');
+      const outrasCats = categorias.filter(c => c !== 'ALIMENTOS');
       
-      setSubgruposDisponiveis(subgrupos || []);
+      const gruposPromises = [];
+      if (alimentosCats.length > 0) {
+        gruposPromises.push(
+          (supabase as any).from('grupos_produto').select('*').is('cliente_id', null).eq('modalidade', 'ALIMENTOS').order('nome')
+        );
+      }
+      if (outrasCats.length > 0) {
+        gruposPromises.push(
+          (supabase as any).from('grupos_produto').select('*').eq('cliente_id', activeClientId).in('modalidade', outrasCats).order('nome')
+        );
+      }
+      
+      const gruposResults = await Promise.all(gruposPromises);
+      const grupos = gruposResults.flatMap(r => r.data || []);
+      setGruposDisponiveis(grupos);
+
+      // 2. Buscar Subgrupos (Level 3) - globais + por cliente
+      const [globalSubRes, clientSubRes] = await Promise.all([
+        (supabase as any).from('subgrupos_produto').select('*').is('cliente_id', null).order('nome'),
+        (supabase as any).from('subgrupos_produto').select('*').eq('cliente_id', activeClientId).order('nome')
+      ]);
+      const subgrupos = [...(globalSubRes.data || []), ...(clientSubRes.data || [])];
+      setSubgruposDisponiveis(subgrupos);
 
       // 3. Buscar Itens (Level 4 / Ingredientes)
       const { data: ingredientes } = await (supabase as any)
@@ -316,6 +325,123 @@ export default function EditFornecedorPage() {
       ...prev,
       itens_fornecidos: newValue.map(v => v.id)
     }));
+  };
+
+  const handleToggleGroupInSupplier = (groupId: string, checked: boolean) => {
+    setFornecedor((prev: any) => {
+      const currentGroups = prev.grupos_fornecidos || [];
+      let nextGroups = [...currentGroups];
+      if (checked) {
+        if (!nextGroups.includes(groupId)) nextGroups.push(groupId);
+      } else {
+        nextGroups = nextGroups.filter((id: string) => id !== groupId);
+      }
+
+      const subgIdsOfGroup = subgruposDisponiveis.filter((s: any) => s.grupo_id === groupId).map((s: any) => s.id);
+      let nextSubgroups = prev.subgrupos_fornecidos || [];
+      if (checked) {
+        nextSubgroups = Array.from(new Set([...nextSubgroups, ...subgIdsOfGroup]));
+      } else {
+        nextSubgroups = nextSubgroups.filter((id: string) => !subgIdsOfGroup.includes(id));
+      }
+
+      let nextItens = prev.itens_fornecidos || [];
+      if (!checked) {
+        const itensParaRemover = itensDisponiveis.filter((i: any) => i.grupo_id === groupId).map((i: any) => i.id);
+        nextItens = nextItens.filter((id: string) => !itensParaRemover.includes(id));
+      }
+
+      return {
+        ...prev,
+        grupos_fornecidos: nextGroups,
+        subgrupos_fornecidos: nextSubgroups,
+        itens_fornecidos: nextItens
+      };
+    });
+  };
+
+  const handleToggleSubgroupInSupplier = (subgroupId: string, groupId: string, checked: boolean) => {
+    setFornecedor((prev: any) => {
+      let nextSubgroups = prev.subgrupos_fornecidos || [];
+      if (checked) {
+        if (!nextSubgroups.includes(subgroupId)) nextSubgroups.push(subgroupId);
+      } else {
+        nextSubgroups = nextSubgroups.filter((id: string) => id !== subgroupId);
+      }
+
+      const currentGroups = prev.grupos_fornecidos || [];
+      let nextGroups = [...currentGroups];
+      if (checked && !nextGroups.includes(groupId)) {
+        nextGroups.push(groupId);
+      }
+
+      let nextItens = prev.itens_fornecidos || [];
+      if (!checked) {
+        const itensParaRemover = itensDisponiveis.filter((i: any) => i.subgrupo_id === subgroupId).map((i: any) => i.id);
+        nextItens = nextItens.filter((id: string) => !itensParaRemover.includes(id));
+      }
+
+      return {
+        ...prev,
+        grupos_fornecidos: nextGroups,
+        subgrupos_fornecidos: nextSubgroups,
+        itens_fornecidos: nextItens
+      };
+    });
+  };
+
+  const handleSelectAllSubgroupsOfGroupInSupplier = (groupId: string, checked: boolean) => {
+    const subgOfGrupo = subgruposDisponiveis.filter(s => s.grupo_id === groupId);
+    const subgIdsOfGrupo = subgOfGrupo.map(s => s.id);
+
+    setFornecedor((prev: any) => {
+      let nextGroups = prev.grupos_fornecidos || [];
+      let nextSubgroups = prev.subgrupos_fornecidos || [];
+
+      if (checked) {
+        if (!nextGroups.includes(groupId)) nextGroups.push(groupId);
+        nextSubgroups = Array.from(new Set([...nextSubgroups, ...subgIdsOfGrupo]));
+      } else {
+        nextSubgroups = nextSubgroups.filter((id: string) => !subgIdsOfGrupo.includes(id));
+      }
+
+      return {
+        ...prev,
+        grupos_fornecidos: nextGroups,
+        subgrupos_fornecidos: nextSubgroups
+      };
+    });
+  };
+
+  const handleSelectAllForModality = (modality: string, checked: boolean) => {
+    const groupsOfMod = gruposDisponiveis.filter((g: any) => g.modalidade === modality);
+    const groupIdsOfMod = groupsOfMod.map((g: any) => g.id);
+    const subgroupsOfMod = subgruposDisponiveis.filter((s: any) => groupIdsOfMod.includes(s.grupo_id));
+    const subgroupIdsOfMod = subgroupsOfMod.map((s: any) => s.id);
+
+    setFornecedor((prev: any) => {
+      let nextGroups = prev.grupos_fornecidos || [];
+      let nextSubgroups = prev.subgrupos_fornecidos || [];
+      let nextItens = prev.itens_fornecidos || [];
+
+      if (checked) {
+        nextGroups = Array.from(new Set([...nextGroups, ...groupIdsOfMod]));
+        nextSubgroups = Array.from(new Set([...nextSubgroups, ...subgroupIdsOfMod]));
+      } else {
+        nextGroups = nextGroups.filter((id: string) => !groupIdsOfMod.includes(id));
+        nextSubgroups = nextSubgroups.filter((id: string) => !subgroupIdsOfMod.includes(id));
+        
+        const itensParaRemover = itensDisponiveis.filter((i: any) => groupIdsOfMod.includes(i.grupo_id)).map((i: any) => i.id);
+        nextItens = nextItens.filter((id: string) => !itensParaRemover.includes(id));
+      }
+
+      return {
+        ...prev,
+        grupos_fornecidos: nextGroups,
+        subgrupos_fornecidos: nextSubgroups,
+        itens_fornecidos: nextItens
+      };
+    });
   };
 
   // ─── Busca CNPJ via Brasil API ───
@@ -594,18 +720,171 @@ export default function EditFornecedorPage() {
                       </Typography>
                     </Box>
 
-                    <Grid container spacing={3}>
-                      {/* GRUPOS DE COMPRAS */}
-                      <Grid item xs={12} md={6}>
+                    {fornecedor.categorias_compras.map((modName: string) => {
+                      const groupsOfMod = gruposDisponiveis.filter(g => g.modalidade === modName);
+                      const allModGroupIds = groupsOfMod.map(g => g.id);
+                      
+                      const subgroupsOfMod = subgruposDisponiveis.filter(s => allModGroupIds.includes(s.grupo_id));
+                      const allModSubgroupIds = subgroupsOfMod.map(s => s.id);
+                      
+                      const isAllModSelected = allModGroupIds.length > 0 && 
+                                               allModGroupIds.every(id => (fornecedor.grupos_fornecidos || []).includes(id)) &&
+                                               allModSubgroupIds.every(id => (fornecedor.subgrupos_fornecidos || []).includes(id));
+                      
+                      const getFriendlyModName = (id: string) => {
+                        const m = {
+                          'ALIMENTOS': 'Alimentos (Insumos)',
+                          'EMBALAGENS': 'Embalagens',
+                          'LIMPEZA': 'Produtos de limpeza',
+                          'MANUTENCAO': 'Manutenção',
+                          'UTENSILIOS': 'Utensílios',
+                          'EPI_EPC': 'EPIs/EPCs',
+                          'UNIFORMES': 'Uniformes',
+                          'PRIMEIROS_SOCORROS': 'Primeiros Socorros'
+                        };
+                        return (m as any)[id] || id;
+                      };
+
+                      return (
+                        <Box key={modName} sx={{ mb: 3, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="subtitle2" fontWeight="800" color="primary.main" sx={{ textTransform: 'uppercase' }}>
+                              {getFriendlyModName(modName)}
+                            </Typography>
+                            {groupsOfMod.length > 0 && (
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    size="small"
+                                    checked={isAllModSelected}
+                                    onChange={(e) => handleSelectAllForModality(modName, e.target.checked)}
+                                  />
+                                }
+                                label={<Typography variant="caption" fontWeight="bold">Selecionar Todos</Typography>}
+                              />
+                            )}
+                          </Box>
+
+                          {groupsOfMod.length === 0 ? (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 1 }}>
+                              Nenhum grupo disponível para esta categoria.
+                            </Typography>
+                          ) : (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                              {groupsOfMod.map((grupo) => {
+                                const subgOfGrupo = subgruposDisponiveis.filter(s => s.grupo_id === grupo.id);
+                                const subgIdsOfGrupo = subgOfGrupo.map(s => s.id);
+                                
+                                const isGroupChecked = (fornecedor.grupos_fornecidos || []).includes(grupo.id);
+                                const isAllSubgChecked = subgIdsOfGrupo.length > 0 && 
+                                                         subgIdsOfGrupo.every(id => (fornecedor.subgrupos_fornecidos || []).includes(id));
+                                
+                                return (
+                                  <Accordion 
+                                    key={grupo.id} 
+                                    elevation={0} 
+                                    sx={{ 
+                                      border: '1px solid', 
+                                      borderColor: 'divider', 
+                                      borderRadius: '8px !important',
+                                      overflow: 'hidden',
+                                      '&:before': { display: 'none' } 
+                                    }}
+                                  >
+                                    <AccordionSummary 
+                                      expandIcon={<ChevronDown size={18} />}
+                                      sx={{ 
+                                        bgcolor: isGroupChecked ? alpha(theme.palette.primary.main, 0.02) : 'transparent',
+                                        minHeight: '48px !important',
+                                        '& .MuiAccordionSummary-content': { 
+                                          margin: '0 !important',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 1
+                                        } 
+                                      }}
+                                    >
+                                      <Checkbox
+                                        size="small"
+                                        checked={isGroupChecked}
+                                        onChange={(e) => handleToggleGroupInSupplier(grupo.id, e.target.checked)}
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <Typography variant="body2" fontWeight={700}>
+                                        {grupo.nome}
+                                      </Typography>
+                                      <Chip 
+                                        label={`${subgOfGrupo.filter(s => (fornecedor.subgrupos_fornecidos || []).includes(s.id)).length}/${subgOfGrupo.length} subgrupos`} 
+                                        size="small" 
+                                        sx={{ height: 18, fontSize: '0.65rem', ml: 1 }} 
+                                      />
+                                    </AccordionSummary>
+                                    
+                                    <AccordionDetails sx={{ p: 2, bgcolor: alpha(theme.palette.action.hover, 0.3) }}>
+                                      {subgOfGrupo.length > 0 && (
+                                        <Box sx={{ mb: 1, pl: 1, borderBottom: '1px dashed', borderColor: 'divider', pb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <Typography variant="caption" fontWeight="bold" color="text.secondary">Subgrupos</Typography>
+                                          <FormControlLabel
+                                            control={
+                                              <Checkbox
+                                                size="small"
+                                                checked={isAllSubgChecked}
+                                                onChange={(e) => handleSelectAllSubgroupsOfGroupInSupplier(grupo.id, e.target.checked)}
+                                              />
+                                            }
+                                            label={<Typography variant="caption" fontWeight="bold" color="text.secondary">Selecionar Todos os Subgrupos</Typography>}
+                                          />
+                                        </Box>
+                                      )}
+                                      
+                                      {subgOfGrupo.length === 0 ? (
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', pl: 1 }}>
+                                          Sem subgrupos cadastrados.
+                                        </Typography>
+                                      ) : (
+                                        <Grid container spacing={1}>
+                                          {subgOfGrupo.map((subg) => {
+                                            const isSubgChecked = (fornecedor.subgrupos_fornecidos || []).includes(subg.id);
+                                            return (
+                                              <Grid item xs={12} sm={6} md={4} key={subg.id}>
+                                                <FormControlLabel
+                                                  control={
+                                                    <Checkbox
+                                                      size="small"
+                                                      checked={isSubgChecked}
+                                                      onChange={(e) => handleToggleSubgroupInSupplier(subg.id, grupo.id, e.target.checked)}
+                                                    />
+                                                  }
+                                                  label={<Typography variant="body2">{subg.nome}</Typography>}
+                                                />
+                                              </Grid>
+                                            );
+                                          })}
+                                        </Grid>
+                                      )}
+                                    </AccordionDetails>
+                                  </Accordion>
+                                );
+                              })}
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })}
+
+                    {/* ITENS / INGREDIENTES (LEVEL 4) */}
+                    {(fornecedor.grupos_fornecidos || []).length > 0 && (
+                      <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid', borderColor: 'divider' }}>
                         <Autocomplete
                           multiple
                           disableCloseOnSelect
-                          options={gruposDisponiveis}
-                          groupBy={(option) => option.modalidade || 'Outros'}
+                          options={itensDisponiveis.filter(i => 
+                            (fornecedor.grupos_fornecidos || []).includes(i.grupo_id) &&
+                            ((fornecedor.subgrupos_fornecidos || []).length === 0 || (fornecedor.subgrupos_fornecidos || []).includes(i.subgrupo_id))
+                          )}
                           getOptionLabel={(option) => option.nome}
-                          value={gruposDisponiveis.filter(g => (fornecedor.grupos_fornecidos || []).includes(g.id))}
-                          onChange={handleUpdateGrupos}
-                          loading={carregandoPortfolio}
+                          value={itensDisponiveis.filter(i => (fornecedor.itens_fornecidos || []).includes(i.id))}
+                          onChange={handleUpdateItens}
                           renderOption={(props, option, { selected }) => (
                             <li {...props}>
                               <Checkbox
@@ -619,9 +898,9 @@ export default function EditFornecedorPage() {
                           renderInput={(params) => (
                             <TextField
                               {...params}
-                              label="Grupos Fornecidos (Level 2)"
-                              placeholder="Ex: Farinhas, Carnes..."
-                              helperText="Grupos organizados por modalidade"
+                              label="Itens Específicos (Level 4)"
+                              placeholder="Ex: Farinha de Trigo Tipo 1..."
+                              helperText="Especifique os insumos homologados deste fornecedor"
                             />
                           )}
                           renderTags={(value, getTagProps) =>
@@ -629,102 +908,14 @@ export default function EditFornecedorPage() {
                               <Chip
                                 label={option.nome}
                                 {...getTagProps({ index })}
-                                color="primary"
+                                color="secondary"
                                 size="small"
                               />
                             ))
                           }
                         />
-                      </Grid>
-
-                      {/* SUBGRUPOS (LEVEL 3) */}
-                      {(fornecedor.grupos_fornecidos || []).length > 0 && (
-                        <Grid item xs={12} md={6}>
-                          <Autocomplete
-                            multiple
-                            disableCloseOnSelect
-                            options={subgruposDisponiveis.filter(s => 
-                              (fornecedor.grupos_fornecidos || []).includes(s.grupo_id)
-                            )}
-                            getOptionLabel={(option) => option.nome}
-                            value={subgruposDisponiveis.filter(s => (fornecedor.subgrupos_fornecidos || []).includes(s.id))}
-                            onChange={handleUpdateSubgrupos}
-                            renderOption={(props, option, { selected }) => (
-                              <li {...props}>
-                                <Checkbox
-                                  size="small"
-                                  style={{ marginRight: 8 }}
-                                  checked={selected}
-                                />
-                                {option.nome}
-                              </li>
-                            )}
-                            renderInput={(params) => (
-                              <TextField
-                                {...params}
-                                label="Subgrupos (Level 3)"
-                                placeholder="Filtro fino de categorias"
-                              />
-                            )}
-                            renderTags={(value, getTagProps) =>
-                              value.map((option, index) => (
-                                <Chip
-                                  label={option.nome}
-                                  {...getTagProps({ index })}
-                                  color="info"
-                                  size="small"
-                                />
-                              ))
-                            }
-                          />
-                        </Grid>
-                      )}
-
-                      {/* ITENS / INGREDIENTES (LEVEL 4) */}
-                      {(fornecedor.grupos_fornecidos || []).length > 0 && (
-                        <Grid item xs={12}>
-                          <Autocomplete
-                            multiple
-                            disableCloseOnSelect
-                            options={itensDisponiveis.filter(i => 
-                              (fornecedor.grupos_fornecidos || []).includes(i.grupo_id) &&
-                              ((fornecedor.subgrupos_fornecidos || []).length === 0 || (fornecedor.subgrupos_fornecidos || []).includes(i.subgrupo_id))
-                            )}
-                            getOptionLabel={(option) => option.nome}
-                            value={itensDisponiveis.filter(i => (fornecedor.itens_fornecidos || []).includes(i.id))}
-                            onChange={handleUpdateItens}
-                            renderOption={(props, option, { selected }) => (
-                              <li {...props}>
-                                <Checkbox
-                                  size="small"
-                                  style={{ marginRight: 8 }}
-                                  checked={selected}
-                                />
-                                {option.nome}
-                              </li>
-                            )}
-                            renderInput={(params) => (
-                              <TextField
-                                {...params}
-                                label="Itens Específicos (Level 4)"
-                                placeholder="Ex: Farinha de Trigo Tipo 1..."
-                                helperText="Especifique os insumos homologados deste fornecedor"
-                              />
-                            )}
-                            renderTags={(value, getTagProps) =>
-                              value.map((option, index) => (
-                                <Chip
-                                  label={option.nome}
-                                  {...getTagProps({ index })}
-                                  color="secondary"
-                                  size="small"
-                                />
-                              ))
-                            }
-                          />
-                        </Grid>
-                      )}
-                    </Grid>
+                      </Box>
+                    )}
 
                     {gruposDisponiveis.length === 0 && !carregandoPortfolio && (
                       <Alert severity="info" sx={{ mt: 2 }}>

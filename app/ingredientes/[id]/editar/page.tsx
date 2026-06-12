@@ -85,7 +85,7 @@ export default function EditarIngredientePage() {
     // Estados do Formulário (Inicializando TODOS os campos do tipo Ingrediente)
     const [formData, setFormData] = useState<Partial<Ingrediente>>({
         nome: '',
-        fonte: '',
+        marca: '',
         tipo_ingrediente: 'SIMPLES',
         peso_unitario_g: null,
         contem_gluten: false,
@@ -150,14 +150,18 @@ export default function EditarIngredientePage() {
 
             let categorias: any[] = [];
             if (activeClientId) {
-                const { data: catData } = await supabase.from('grupos_produto').select('id, nome').eq('cliente_id', activeClientId).eq('modalidade', 'ALIMENTOS').order('nome');
+                const { data: catData } = await supabase.from('grupos_produto').select('id, nome').is('cliente_id' as any, null).eq('modalidade', 'ALIMENTOS').order('nome');
                 if (catData) {
                     setCategoriasMestre(catData);
                     categorias = catData;
                 }
                 
-                const { data: grpData } = await (supabase as any).from('subgrupos_produto').select('id, nome, grupo_id').eq('cliente_id', activeClientId).order('nome');
-                if (grpData) setTodosGrupos(grpData);
+                const [globalSubRes, clientSubRes] = await Promise.all([
+                    (supabase as any).from('subgrupos_produto').select('id, nome, grupo_id').is('cliente_id', null).order('nome'),
+                    (supabase as any).from('subgrupos_produto').select('id, nome, grupo_id').eq('cliente_id', activeClientId).order('nome')
+                ]);
+                const allGrupos = [...(globalSubRes.data || []), ...(clientSubRes.data || [])];
+                if (allGrupos.length > 0) setTodosGrupos(allGrupos);
             }
 
             // 2. Carrega Dados do Ingrediente
@@ -270,7 +274,7 @@ export default function EditarIngredientePage() {
         if (typeof value === 'string' && value === '') {
             finalValue = null;
         } else if (
-            field !== 'nome' && field !== 'fonte' && field !== 'tipo_ingrediente' &&
+            field !== 'nome' && field !== 'marca' && field !== 'tipo_ingrediente' &&
             field !== 'funcao_aditivo' && field !== 'ins_code' && field !== 'declaracao_ingredientes_fornecedor' &&
             field !== 'classificacao_nova' && field !== 'grupo_id' && field !== 'subgrupo_id'
         ) {
@@ -287,12 +291,12 @@ export default function EditarIngredientePage() {
             if (funcoesPossiveis.length > 0) {
                 setOpcoesFuncaoDinamicas(funcoesPossiveis);
                 if (funcoesPossiveis.length === 1) {
-                    setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, funcao_aditivo: funcoesPossiveis[0], fonte: 'Tabela INS ANVISA' }));
+                    setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, funcao_aditivo: funcoesPossiveis[0], marca: 'Tabela INS ANVISA' }));
                 } else {
-                    setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, funcao_aditivo: '', fonte: 'Tabela INS ANVISA' }));
+                    setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, funcao_aditivo: '', marca: 'Tabela INS ANVISA' }));
                 }
             } else {
-                setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, fonte: 'Tabela INS ANVISA' }));
+                setFormData(prev => ({ ...prev, nome: aditivo.nome, ins_code: aditivo.ins, marca: 'Tabela INS ANVISA' }));
             }
 
             // A detecção de corantes agora é automatizada na Edge Function via ins_code
@@ -321,7 +325,7 @@ export default function EditarIngredientePage() {
         setFormData(prev => ({
             ...prev,
             referencia_id: ref.id,
-            fonte: ref.fonte,
+            marca: ref.fonte,
             energia_kcal: ref.energia_kcal,
             proteina_g: ref.proteina_g,
             lipideos_g: ref.lipideos_g,
@@ -356,14 +360,17 @@ export default function EditarIngredientePage() {
             const payload: any = {
                 ...formData,
                 // Garantir limpeza de campos legados e persistência correta do JSONB
+                // @biz-rule(ingredientes.RegraGMOCleanup)
                 especie_transgenica: formData.is_transgenico ? formData.especie_transgenica : null,
                 especie_doadora: formData.is_transgenico ? formData.especie_doadora : null,
+                // @biz-rule(ingredientes.RegraTransgenicosArray)
                 transgenicos: formData.is_transgenico ? (formData.transgenicos || []) : [],
                 alergenicos_ids: idsAlergenicos,
                 updated_at: new Date().toISOString()
             };
 
             // Regra de Negócio: Aditivos não rastreiam transgênicos
+            // @biz-rule(ingredientes.RegraGMOAditivo)
             if (formData.tipo_ingrediente === 'ADITIVO') {
                 payload.is_transgenico = false;
                 payload.especie_transgenica = null;
@@ -387,6 +394,7 @@ export default function EditarIngredientePage() {
             if (error) throw error;
 
             // Update Alergenicos (Deleta os existentes e recriar os passados)
+            // @biz-mutation(ingredientes.LinkAlergenicos)
             await supabase.from('ingrediente_alergenicos').delete().eq('ingrediente_id', ingredienteId);
             if (alergenosSelecionados.length > 0) {
                 const links: any[] = alergenosSelecionados.map(a => ({ 
@@ -611,7 +619,7 @@ export default function EditarIngredientePage() {
                             )}
 
                             <Grid item xs={12} md={4}>
-                                <TextField label="Marca / Fonte" fullWidth value={formData.fonte || ''} onChange={e => handleChange('fonte', e.target.value)} />
+                                <TextField label="Marca / Fonte" fullWidth value={formData.marca || ''} onChange={e => handleChange('marca', e.target.value)} />
                             </Grid>
                             <Grid item xs={12} md={4}>
                                 <Autocomplete

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import {
   Box,
@@ -65,12 +66,15 @@ export default function LoginPage() {
           alignItems: 'center',
         }}
       >
-        {/* Logo Córtex */}
+        {/* Logo Zelus */}
         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
-          <img
-            src={mode === 'dark' ? '/logo-cortex.svg' : '/logo-cortex-light.svg'}
-            alt="Córtex Logo"
-            style={{ height: '140px', objectFit: 'contain' }}
+          <Image
+            src="/zelus-icon-official.svg"
+            alt="Zelus Logo"
+            width={240}
+            height={72}
+            priority
+            className="zelus-reveal"
           />
         </Box>
         <Typography variant="body2" color="text.secondary">

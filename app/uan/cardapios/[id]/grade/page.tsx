@@ -85,7 +85,7 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
         *, 
         composicao_fichas_uan(
           peso_bruto_g, 
-          ingrediente:ingredientes(id, preco_ultima_compra, grupo_id, subgrupo_id)
+          ingrediente:ingredientes(id, preco_ultima_compra, custo_medio, grupo_id, subgrupo_id)
         )
       `).eq('cliente_id', activeClientId).order('nome'),
       supabase.from('cardapio_regras_variedade' as any).select('*').eq('cliente_id', activeClientId).eq('ativo', true)
@@ -127,7 +127,7 @@ export default function GradeCardapioUANPage({ params }: { params: { id: string 
             const pesoBruto = comp.peso_bruto_g || 0;
             const pbKg = pesoBruto / 1000;
             const ing = comp.ingrediente;
-            const precoKg = ing?.preco_ultima_compra || 0;
+            const precoKg = ing?.custo_medio || ing?.preco_ultima_compra || 0;
             
             custo += (pbKg * precoKg);
             pesoTotal += pesoBruto;

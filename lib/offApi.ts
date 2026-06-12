@@ -58,7 +58,7 @@ export function mapOFFToIngrediente(offData: OFFProductResponse): Partial<Ingred
   // Mapeamento básico
   const mapped: Partial<Ingrediente> & { _alergenos_detectados?: any[] } = {
     nome: p.product_name_pt || p.product_name || '',
-    fonte: p.brands || 'Open Food Facts',
+    marca: p.brands || 'Open Food Facts',
     tipo_ingrediente: 'COMPOSTO',
     declaracao_ingredientes_fornecedor: p.ingredients_text_pt || p.ingredients_text || null,
     classificacao_nova: p.nova_group || null,

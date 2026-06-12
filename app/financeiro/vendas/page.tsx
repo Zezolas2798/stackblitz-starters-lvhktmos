@@ -206,6 +206,7 @@ export default function VendasPDVPage() {
           is_menu_item,
           rendimento_total_g,
           peso_embalagem_g,
+          preco_venda,
           tipo_receita:tipos_receita(nome),
           composicao_receitas (
             peso_bruto_g,
@@ -301,7 +302,7 @@ export default function VendasPDVPage() {
         const porcao = Number(r.peso_embalagem_g) || 100;
         const unitCost = (batchCost / rendimento) * porcao;
 
-        return { ...r, custo_teorico: unitCost, batchCost };
+        return { ...r, custo_teorico: unitCost, batchCost, preco_venda_base: r.preco_venda || 0 };
       });
 
       setRealReceitas(processed);
@@ -625,7 +626,7 @@ export default function VendasPDVPage() {
                 </TableRow>
               ) : (
                 realReceitas.filter(r => r.is_menu_item).map(r => {
-                  const values = vendasLote[r.id] || { qtd: '', preco: '' };
+                  const values = vendasLote[r.id] || { qtd: '', preco: r.preco_venda_base ? r.preco_venda_base.toString() : '' };
                   const precoNum = parseFloat(values.preco) || 0;
                   const margem = precoNum > 0 ? precoNum - (r.custo_teorico || 0) : 0;
                   

@@ -183,9 +183,9 @@ export default function CapaRelatorio({
         </Grid>
 
         <Box sx={{ textAlign: 'center', mt: 2 }}>
-          <Image src="/logo-cortex.svg" alt="NutriDev Logo" width={120} height={36} style={{ opacity: 0.8, marginBottom: '8px' }} />
+          <Image src="/zelus-icon-official.svg" alt="Zelus Logo" width={120} height={36} style={{ opacity: 0.8, marginBottom: '8px' }} />
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 500, letterSpacing: 1 }}>
-            Cortex Intelligence Platform • Software for Life Sciences
+            Zelus Management Platform • Software for Life Sciences
           </Typography>
         </Box>
       </Box>

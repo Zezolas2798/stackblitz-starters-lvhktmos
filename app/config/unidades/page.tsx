@@ -16,6 +16,49 @@ import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import { ClienteUnidade } from '@/lib/types';
 
+// --- Funções Auxiliares para CNPJ ---
+const formatCnpj = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
+const validarCnpjCompleto = (cnpj: string): boolean => {
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14) return false;
+  if (/^(\d)\1+$/.test(digits)) return false;
+  
+  const raiz = digits.slice(0, 8);
+  const filial = digits.slice(8, 12);
+  const dv = digits.slice(12, 14);
+  
+  const base = raiz + filial;
+  
+  // Primeiro dígito
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum1 = 0;
+  for (let i = 0; i < 12; i++) {
+    sum1 += parseInt(base[i]) * weights1[i];
+  }
+  const rem1 = sum1 % 11;
+  const d1 = rem1 < 2 ? 0 : 11 - rem1;
+  
+  // Segundo dígito
+  const base2 = base + d1;
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum2 = 0;
+  for (let i = 0; i < 13; i++) {
+    sum2 += parseInt(base2[i]) * weights2[i];
+  }
+  const rem2 = sum2 % 11;
+  const d2 = rem2 < 2 ? 0 : 11 - rem2;
+  
+  return `${d1}${d2}` === dv;
+};
+
 export default function UnidadesPage() {
   const theme = useTheme();
   const { activeClientId } = useClient();
@@ -49,6 +92,11 @@ export default function UnidadesPage() {
     
     if (cnpj.length !== 14) {
       alert('Informe um CNPJ válido com 14 dígitos completos para a unidade.');
+      return;
+    }
+
+    if (!validarCnpjCompleto(cnpj)) {
+      alert('Dígitos verificadores do CNPJ são inválidos. Verifique os números digitados.');
       return;
     }
 
@@ -377,7 +425,7 @@ export default function UnidadesPage() {
                     fullWidth label="CNPJ Completo"
                     placeholder="00.000.000/0000-00"
                     value={formData.cnpj_completo}
-                    onChange={(e) => setFormData({...formData, cnpj_completo: e.target.value})}
+                    onChange={(e) => setFormData({...formData, cnpj_completo: formatCnpj(e.target.value)})}
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">

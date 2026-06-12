@@ -358,7 +358,7 @@ export interface Ingrediente {
   funcao_aditivo: string | null;
   ins_code: string | null;
   peso_unitario_g: number | null;
-  fonte: string | null;
+  marca: string | null;
   
   alergenicos_ids: number[] | null; 
   contem_gluten: boolean;
@@ -439,6 +439,7 @@ export interface Ingrediente {
 
   // Custo & Suprimentos UAN
   preco_ultima_compra?: number;
+  custo_medio?: number;
   estoque_minimo_kg?: number;
   tempo_minimo_compra_dias?: number;
 

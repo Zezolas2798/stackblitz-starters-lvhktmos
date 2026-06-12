@@ -64,6 +64,8 @@ export default function IngredientesPage() {
       // REGRA DE OURO GxP:
       // Busca ingredientes do Cliente Atual OU Ingredientes do Sistema (cliente_id IS NULL)
       // Isso isola os dados para que um cliente não veja os dados do outro.
+      // @biz-policy(ingredientes.RegraIsolamentoTenant)
+      // @biz-policy(ingredientes.PoliticaSoftDelete)
       const { data, error } = await (supabase as any).from('ingredientes')
         .select('*')
         .or(`cliente_id.eq.${unidadeSelecionada!.cliente_id},cliente_id.is.null`)
@@ -89,6 +91,7 @@ export default function IngredientesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este ingrediente?')) return;
     try {
+      // @biz-policy(ingredientes.PoliticaSoftDelete)
       const { error } = await (supabase as any).from('ingredientes').update({ deleted_at: new Date().toISOString() } as any).eq('id', id);
       if (error) throw error;
       fetchIngredientes(); // Atualiza a lista
@@ -100,8 +103,9 @@ export default function IngredientesPage() {
   // Filtragem local (Busca rápida no Frontend)
   const filteredIngredientes = ingredientes.filter(ing => {
     const matchesSearch = ing.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           (ing.fonte && ing.fonte.toLowerCase().includes(searchTerm.toLowerCase()));
+           (ing.marca && ing.marca.toLowerCase().includes(searchTerm.toLowerCase()));
 
+    // @biz-calc(ingredientes.CalculoCompletude)
     const isIncompleto = ing.energia_kcal === null || ing.energia_kcal === undefined;
 
     if (mostrarIncompletos && !isIncompleto) return false;

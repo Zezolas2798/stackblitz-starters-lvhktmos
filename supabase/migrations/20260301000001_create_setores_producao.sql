@@ -16,15 +16,15 @@ ALTER TABLE public.cliente_setores_producao
 -- Criando políticas de segurança (RLS)
 ALTER TABLE public.cliente_setores_producao ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Permitir leitura para usuários da mesma empresa"
-  ON public.cliente_setores_producao
-  FOR SELECT
-  USING (
-    cliente_id IN (
-      SELECT permissoes.cliente_id -- Ajuste conforme sua tabela de permissões (ex: permissoes_usuario)
-      FROM public.clientes -- Simulando vínculo para o RLS (Verifique sua estrutura, pode ser via auth.uid())
-    )
-  ); 
+-- CREATE POLICY "Permitir leitura para usuários da mesma empresa"
+--   ON public.cliente_setores_producao
+--   FOR SELECT
+--   USING (
+--     cliente_id IN (
+--       SELECT permissoes.cliente_id -- Ajuste conforme sua tabela de permissões (ex: permissoes_usuario)
+--       FROM public.clientes -- Simulando vínculo para o RLS (Verifique sua estrutura, pode ser via auth.uid())
+--     )
+--   );  
 -- NOTA: Como você está usando Supabase, se não usar RLS rígido nos selects, pode simplificar com:
 CREATE POLICY "Enable read access for all users" ON public.cliente_setores_producao FOR SELECT USING (true);
 CREATE POLICY "Enable insert for authenticated users only" ON public.cliente_setores_producao FOR INSERT WITH CHECK (auth.role() = 'authenticated');

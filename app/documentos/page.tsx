@@ -17,6 +17,8 @@ import {
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import { format, isBefore, addMonths, addYears } from 'date-fns';
+import RelatorioTemperaturaPage from './3-7-12-planilha-temperatura/page';
+import RelatorioResfriamentoPage from './3-7-13-planilha-resfriamento/page';
 
 interface Categoria {
   id: string;
@@ -871,7 +873,27 @@ function GEDContent() {
               </Box>
             )}
 
-            {/* SEÇÃO 3: ARQUIVOS (TABELA) - ATIVA QUANDO UMA CATEGORIA OU PASTA ESTÁ SELECIONADA */}
+            {/* SEÇÃO 3: RELATÓRIO DINÂMICO SE FOR PASTA DE TEMPERATURA */}
+            {(() => {
+              const activePastaInfo = pastas.find(p => p.id === activePastaId);
+              if (activePastaInfo?.nome.includes('3.7.12')) {
+                return (
+                  <Box sx={{ mb: 4 }}>
+                    <RelatorioTemperaturaPage isEmbedded={true} />
+                  </Box>
+                );
+              }
+              if (activePastaInfo?.nome.includes('3.7.13')) {
+                return (
+                  <Box sx={{ mb: 4 }}>
+                    <RelatorioResfriamentoPage isEmbedded={true} />
+                  </Box>
+                );
+              }
+              return null;
+            })()}
+
+            {/* SEÇÃO 4: ARQUIVOS (TABELA) - ATIVA QUANDO UMA CATEGORIA OU PASTA ESTÁ SELECIONADA */}
             {(activePastaId || activeCategoriaId) && (
               <Box>
                 <Typography variant="overline" color="text.secondary" fontWeight="bold" sx={{ display: 'block', mb: 2 }}>

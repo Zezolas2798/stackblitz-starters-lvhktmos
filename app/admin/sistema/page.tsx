@@ -65,6 +65,77 @@ import { useClient } from '@/lib/ClientContext';
 import { usePermission } from '@/hooks/usePermission';
 import { useRouter } from 'next/navigation';
 
+// --- Funções Auxiliares para CNPJ ---
+const formatCnpj = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
+const gerarCnpjCompleto = (cnpjRaiz: string): string | null => {
+  const digits = cnpjRaiz.replace(/\D/g, '').slice(0, 8);
+  if (digits.length !== 8) return null;
+  
+  const base = digits + '0001'; // 12 dígitos
+  
+  // Primeiro dígito verificador
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum1 = 0;
+  for (let i = 0; i < 12; i++) {
+    sum1 += parseInt(base[i]) * weights1[i];
+  }
+  const rem1 = sum1 % 11;
+  const d1 = rem1 < 2 ? 0 : 11 - rem1;
+  
+  // Segundo dígito verificador
+  const base2 = base + d1;
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum2 = 0;
+  for (let i = 0; i < 13; i++) {
+    sum2 += parseInt(base2[i]) * weights2[i];
+  }
+  const rem2 = sum2 % 11;
+  const d2 = rem2 < 2 ? 0 : 11 - rem2;
+  
+  return base2 + d2;
+};
+
+const validarCnpjCompleto = (cnpj: string): boolean => {
+  const digits = cnpj.replace(/\D/g, '');
+  if (digits.length !== 14) return false;
+  if (/^(\d)\1+$/.test(digits)) return false;
+  
+  const raiz = digits.slice(0, 8);
+  const filial = digits.slice(8, 12);
+  const dv = digits.slice(12, 14);
+  
+  const base = raiz + filial;
+  
+  // Primeiro dígito
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum1 = 0;
+  for (let i = 0; i < 12; i++) {
+    sum1 += parseInt(base[i]) * weights1[i];
+  }
+  const rem1 = sum1 % 11;
+  const d1 = rem1 < 2 ? 0 : 11 - rem1;
+  
+  // Segundo dígito
+  const base2 = base + d1;
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum2 = 0;
+  for (let i = 0; i < 13; i++) {
+    sum2 += parseInt(base2[i]) * weights2[i];
+  }
+  const rem2 = sum2 % 11;
+  const d2 = rem2 < 2 ? 0 : 11 - rem2;
+  
+  return `${d1}${d2}` === dv;
+};
+
 export default function SuperAdminPage() {
   const theme = useTheme();
   const router = useRouter();
@@ -107,9 +178,24 @@ export default function SuperAdminPage() {
       return;
     }
 
+    if (cnpj.length > 8 && cnpj.length < 14) {
+      alert('Informe o CNPJ com 8 dígitos (CNPJ Raiz) ou 14 dígitos (CNPJ Completo).');
+      return;
+    }
+
     let cnpjBusca = cnpj;
     if (cnpj.length === 8) {
-      cnpjBusca = cnpj + '000191';
+      const cnpjGerado = gerarCnpjCompleto(cnpj);
+      if (!cnpjGerado) {
+        alert('Erro ao calcular os dígitos verificadores do CNPJ.');
+        return;
+      }
+      cnpjBusca = cnpjGerado;
+    } else if (cnpj.length === 14) {
+      if (!validarCnpjCompleto(cnpj)) {
+        alert('Dígitos verificadores do CNPJ são inválidos. Verifique os números digitados.');
+        return;
+      }
     }
 
     const url = `https://brasilapi.com.br/api/cnpj/v1/${cnpjBusca}`;
@@ -145,6 +231,7 @@ export default function SuperAdminPage() {
 
       setFormData(prev => ({
         ...prev,
+        cnpj_raiz: formatCnpj(cnpjBusca),
         razao_social: data.razao_social || prev.razao_social,
         nome_fantasia: data.nome_fantasia || prev.nome_fantasia || data.razao_social,
         endereco_completo: endereco,
@@ -601,12 +688,12 @@ export default function SuperAdminPage() {
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField 
-                label="CNPJ Raiz" 
+                label="CNPJ / Raiz" 
                 fullWidth 
                 required 
-                placeholder="00.000.000"
+                placeholder="00.000.000/0000-00"
                 value={formData.cnpj_raiz} 
-                onChange={(e) => setFormData({...formData, cnpj_raiz: e.target.value})}
+                onChange={(e) => setFormData({...formData, cnpj_raiz: formatCnpj(e.target.value)})}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">

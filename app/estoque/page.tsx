@@ -169,11 +169,12 @@ export default function EstoquePage() {
       .eq('unidade_id', unidadeId)
       .eq('ativo', true);
 
-    // Busca todas as categorias de produto do cliente para o filtro
-    const { data: catsData } = await (supabase as any)
-      .from('grupos_produto')
-      .select('id, nome, modalidade')
-      .eq('cliente_id', activeClientId!);
+    // Busca todas as categorias de produto (globais ALIMENTOS + por cliente)
+    const [globalCatsRes, clientCatsRes] = await Promise.all([
+      (supabase as any).from('grupos_produto').select('id, nome, modalidade').is('cliente_id', null),
+      (supabase as any).from('grupos_produto').select('id, nome, modalidade').eq('cliente_id', activeClientId!)
+    ]);
+    const catsData = [...(globalCatsRes.data || []), ...(clientCatsRes.data || [])];
 
     if (lotesData) {
       const lotesComReserva = lotesData.map((lote: any) => {
@@ -228,13 +229,13 @@ export default function EstoquePage() {
       const usoItems = movData.filter((m: any) => (m.justificativa || '').toUpperCase().includes('USO'));
       setUsos(usoItems);
 
-      // Busca categorias para filtros
-      const { data: catsData } = await (supabase as any)
-        .from('grupos_produto')
-        .select('nome')
-        .eq('cliente_id', activeClientId!);
+      // Busca categorias para filtros (globais + por cliente)
+      const [globalCatsRes2, clientCatsRes2] = await Promise.all([
+        (supabase as any).from('grupos_produto').select('nome').is('cliente_id', null),
+        (supabase as any).from('grupos_produto').select('nome').eq('cliente_id', activeClientId!)
+      ]);
 
-      const catsDb = catsData ? catsData.map((c: any) => c.nome) : [];
+      const catsDb = [...(globalCatsRes2.data || []), ...(clientCatsRes2.data || [])].map((c: any) => c.nome);
       setCategoriasDescDisponiveis(Array.from(new Set([...catsDb, 'Geral', 'Embalagens', 'Limpeza', 'Manutenção'])));
     }
     setDescartesLoading(false);

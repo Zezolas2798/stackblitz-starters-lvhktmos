@@ -44,12 +44,16 @@ BEGIN
         FOREACH cat_name IN ARRAY NEW.categorias_compras
         LOOP
             -- Buscar configurações da categoria
+            -- Usa jsonb_array_elements() pois documentos_obrigatorios é jsonb, não text[]
             FOR doc_record IN 
-                SELECT unnest(documentos_obrigatorios) 
+                SELECT jsonb_array_elements(documentos_obrigatorios) 
                 FROM public.categorias_config 
                 WHERE nome = cat_name 
                   AND cliente_id = NEW.cliente_id
                   AND deleted_at IS NULL
+                  AND documentos_obrigatorios IS NOT NULL
+                  AND jsonb_typeof(documentos_obrigatorios) = 'array'
+                  AND jsonb_array_length(documentos_obrigatorios) > 0
             LOOP
                 doc_name := doc_record->>'nome';
                 target_pasta_id := (doc_record->>'ged_pasta_id')::UUID;
@@ -63,23 +67,25 @@ BEGIN
                     full_target_name := '[' || NEW.razao_social || '] ' || doc_name;
 
                     -- Inserir placeholder se não existir (baseado em entidade_id E nome)
-                    INSERT INTO public.documentos_arquivos (
-                        pasta_id, 
-                        nome_arquivo, 
-                        entidade_id,
-                        versao
-                    )
-                    VALUES (
-                        target_pasta_id, 
-                        full_target_name, 
-                        NEW.id,
-                        1
-                    )
-                    ON CONFLICT DO NOTHING;
-                    
-                    -- Nota: Para ON CONFLICT funcionar baseado em entidade_id + nome, seria necessário uma constraint UNIQUE.
-                    -- Como não queremos travar o banco, fazemos um check manual se preferir, ou apenas usamos a lógica de busca do app.
-                    -- Aqui usamos um WHERE NOT EXISTS para simular o comportamento se não houver constraint.
+                    IF NOT EXISTS (
+                        SELECT 1 FROM public.documentos_arquivos 
+                        WHERE entidade_id = NEW.id 
+                          AND pasta_id = target_pasta_id
+                          AND (nome_arquivo = full_target_name OR nome_arquivo ILIKE '%' || doc_name)
+                    ) THEN
+                        INSERT INTO public.documentos_arquivos (
+                            pasta_id, 
+                            nome_arquivo, 
+                            entidade_id,
+                            versao
+                        )
+                        VALUES (
+                            target_pasta_id, 
+                            full_target_name, 
+                            NEW.id,
+                            1
+                        );
+                    END IF;
                 END IF;
             END LOOP;
         END LOOP;
@@ -95,3 +101,4 @@ CREATE TRIGGER tr_gerar_placeholders_ged_fornecedor
 AFTER INSERT OR UPDATE ON public.fornecedores
 FOR EACH ROW
 EXECUTE FUNCTION public.fn_gerar_placeholders_ged_fornecedor();
+

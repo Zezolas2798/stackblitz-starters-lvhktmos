@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       acoes_corretivas: {
@@ -57,7 +32,7 @@ export type Database = {
           id?: string
           origem_checklist_resposta_id?: string | null
           status?: string | null
-          unidade_id?: string
+          unidade_id: string
           verificado_em_auditoria_id?: string | null
         }
         Update: {
@@ -83,6 +58,13 @@ export type Database = {
             columns: ["unidade_id"]
             isOneToOne: false
             referencedRelation: "cliente_unidades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acoes_corretivas_verificado_em_auditoria_id_fkey"
+            columns: ["verificado_em_auditoria_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_execucoes"
             referencedColumns: ["id"]
           },
         ]
@@ -1080,7 +1062,7 @@ export type Database = {
         Row: {
           ativo: boolean | null
           categoria: string | null
-          cliente_id: string
+          cliente_id: string | null
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
@@ -1093,7 +1075,7 @@ export type Database = {
         Insert: {
           ativo?: boolean | null
           categoria?: string | null
-          cliente_id: string
+          cliente_id?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -1106,7 +1088,7 @@ export type Database = {
         Update: {
           ativo?: boolean | null
           categoria?: string | null
-          cliente_id?: string
+          cliente_id?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -1230,6 +1212,45 @@ export type Database = {
           },
         ]
       }
+      cliente_grupos_preferencias: {
+        Row: {
+          ativo: boolean
+          cliente_id: string
+          created_at: string | null
+          grupo_id: string
+          id: string
+        }
+        Insert: {
+          ativo?: boolean
+          cliente_id: string
+          created_at?: string | null
+          grupo_id: string
+          id?: string
+        }
+        Update: {
+          ativo?: boolean
+          cliente_id?: string
+          created_at?: string | null
+          grupo_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cliente_grupos_preferencias_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cliente_grupos_preferencias_grupo_id_fkey"
+            columns: ["grupo_id"]
+            isOneToOne: false
+            referencedRelation: "grupos_produto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cliente_modulos: {
         Row: {
           ativo: boolean | null
@@ -1266,6 +1287,45 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "app_modulos"
             referencedColumns: ["slug"]
+          },
+        ]
+      }
+      cliente_subgrupos_preferencias: {
+        Row: {
+          ativo: boolean
+          cliente_id: string
+          created_at: string | null
+          id: string
+          subgrupo_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          cliente_id: string
+          created_at?: string | null
+          id?: string
+          subgrupo_id: string
+        }
+        Update: {
+          ativo?: boolean
+          cliente_id?: string
+          created_at?: string | null
+          id?: string
+          subgrupo_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cliente_subgrupos_preferencias_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cliente_subgrupos_preferencias_subgrupo_id_fkey"
+            columns: ["subgrupo_id"]
+            isOneToOne: false
+            referencedRelation: "subgrupos_produto"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1536,15 +1596,123 @@ export type Database = {
           },
         ]
       }
+      compras_campanha_fornecedor: {
+        Row: {
+          campanha_id: string
+          created_at: string | null
+          data_envio: string | null
+          data_resposta: string | null
+          fornecedor_id: string
+          id: string
+          itens_solicitados: Json
+          status: string
+          token_acesso: string
+          updated_at: string | null
+        }
+        Insert: {
+          campanha_id: string
+          created_at?: string | null
+          data_envio?: string | null
+          data_resposta?: string | null
+          fornecedor_id: string
+          id?: string
+          itens_solicitados?: Json
+          status?: string
+          token_acesso?: string
+          updated_at?: string | null
+        }
+        Update: {
+          campanha_id?: string
+          created_at?: string | null
+          data_envio?: string | null
+          data_resposta?: string | null
+          fornecedor_id?: string
+          id?: string
+          itens_solicitados?: Json
+          status?: string
+          token_acesso?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compras_campanha_fornecedor_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "compras_campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compras_campanha_fornecedor_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      compras_campanhas: {
+        Row: {
+          cliente_id: string
+          created_at: string | null
+          created_by: string
+          data_criacao: string
+          id: string
+          itens_cesta: Json
+          status: string
+          unidade_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          cliente_id: string
+          created_at?: string | null
+          created_by: string
+          data_criacao?: string
+          id?: string
+          itens_cesta?: Json
+          status?: string
+          unidade_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          cliente_id?: string
+          created_at?: string | null
+          created_by?: string
+          data_criacao?: string
+          id?: string
+          itens_cesta?: Json
+          status?: string
+          unidade_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compras_campanhas_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "compras_campanhas_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "cliente_unidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       compras_orcamentos: {
         Row: {
           cliente_id: string
           created_at: string | null
           data_orcamento: string
+          descricao_fornecedor: string | null
           fornecedor_id: string
           id: string
           ingrediente_id: string
           is_embalagem: boolean | null
+          marca_cotada: string | null
+          peso_embalagem_kg: number | null
           peso_volume_por_unidade: number | null
           preco_embalagem: number | null
           preco_por_kg_l: number
@@ -1555,10 +1723,13 @@ export type Database = {
           cliente_id: string
           created_at?: string | null
           data_orcamento?: string
+          descricao_fornecedor?: string | null
           fornecedor_id: string
           id?: string
           ingrediente_id: string
           is_embalagem?: boolean | null
+          marca_cotada?: string | null
+          peso_embalagem_kg?: number | null
           peso_volume_por_unidade?: number | null
           preco_embalagem?: number | null
           preco_por_kg_l: number
@@ -1569,10 +1740,13 @@ export type Database = {
           cliente_id?: string
           created_at?: string | null
           data_orcamento?: string
+          descricao_fornecedor?: string | null
           fornecedor_id?: string
           id?: string
           ingrediente_id?: string
           is_embalagem?: boolean | null
+          marca_cotada?: string | null
+          peso_embalagem_kg?: number | null
           peso_volume_por_unidade?: number | null
           preco_embalagem?: number | null
           preco_por_kg_l?: number
@@ -1942,12 +2116,16 @@ export type Database = {
           created_at: string | null
           frequencia_diaria: number | null
           grupo: string
+          grupos_permitidos_ids: string[] | null
           horarios_afericao: string[] | null
           id: string
           nome: string
           parent_id: string | null
           temp_ideal_max: number | null
           temp_ideal_min: number | null
+          tipo_equipamento:
+            | Database["public"]["Enums"]["tipo_equipamento_enum"]
+            | null
           unidade_id: string
           updated_at: string | null
         }
@@ -1957,12 +2135,16 @@ export type Database = {
           created_at?: string | null
           frequencia_diaria?: number | null
           grupo: string
+          grupos_permitidos_ids?: string[] | null
           horarios_afericao?: string[] | null
           id?: string
           nome: string
           parent_id?: string | null
           temp_ideal_max?: number | null
           temp_ideal_min?: number | null
+          tipo_equipamento?:
+            | Database["public"]["Enums"]["tipo_equipamento_enum"]
+            | null
           unidade_id: string
           updated_at?: string | null
         }
@@ -1972,12 +2154,16 @@ export type Database = {
           created_at?: string | null
           frequencia_diaria?: number | null
           grupo?: string
+          grupos_permitidos_ids?: string[] | null
           horarios_afericao?: string[] | null
           id?: string
           nome?: string
           parent_id?: string | null
           temp_ideal_max?: number | null
           temp_ideal_min?: number | null
+          tipo_equipamento?:
+            | Database["public"]["Enums"]["tipo_equipamento_enum"]
+            | null
           unidade_id?: string
           updated_at?: string | null
         }
@@ -3120,10 +3306,53 @@ export type Database = {
           },
         ]
       }
+      grupo_regra_temperatura: {
+        Row: {
+          grupo_id: string | null
+          id: string
+          regra_temperatura_id: string
+          subgrupo_id: string | null
+        }
+        Insert: {
+          grupo_id?: string | null
+          id?: string
+          regra_temperatura_id: string
+          subgrupo_id?: string | null
+        }
+        Update: {
+          grupo_id?: string | null
+          id?: string
+          regra_temperatura_id?: string
+          subgrupo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grupo_regra_temperatura_grupo_id_fkey"
+            columns: ["grupo_id"]
+            isOneToOne: true
+            referencedRelation: "grupos_produto"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "grupo_regra_temperatura_regra_temperatura_id_fkey"
+            columns: ["regra_temperatura_id"]
+            isOneToOne: false
+            referencedRelation: "regras_temperatura"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "grupo_regra_temperatura_subgrupo_id_fkey"
+            columns: ["subgrupo_id"]
+            isOneToOne: true
+            referencedRelation: "subgrupos_produto"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       grupos_produto: {
         Row: {
           ativo: boolean | null
-          cliente_id: string
+          cliente_id: string | null
           created_at: string | null
           id: string
           modalidade:
@@ -3133,7 +3362,7 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean | null
-          cliente_id: string
+          cliente_id?: string | null
           created_at?: string | null
           id?: string
           modalidade?:
@@ -3143,7 +3372,7 @@ export type Database = {
         }
         Update: {
           ativo?: boolean | null
-          cliente_id?: string
+          cliente_id?: string | null
           created_at?: string | null
           id?: string
           modalidade?:
@@ -3242,7 +3471,6 @@ export type Database = {
           ferro_mg: number | null
           fibra_alimentar_g: number | null
           fluor_mg: number | null
-          fonte: string | null
           fosforo_mg: number | null
           funcao_aditivo: string | null
           galactose_g: number | null
@@ -3266,6 +3494,7 @@ export type Database = {
           maltitol_g: number | null
           manganes_mg: number | null
           manitol_g: number | null
+          marca: string | null
           molibdenio_mcg: number | null
           nome: string
           peso_unitario_g: number | null
@@ -3329,7 +3558,6 @@ export type Database = {
           ferro_mg?: number | null
           fibra_alimentar_g?: number | null
           fluor_mg?: number | null
-          fonte?: string | null
           fosforo_mg?: number | null
           funcao_aditivo?: string | null
           galactose_g?: number | null
@@ -3353,6 +3581,7 @@ export type Database = {
           maltitol_g?: number | null
           manganes_mg?: number | null
           manitol_g?: number | null
+          marca?: string | null
           molibdenio_mcg?: number | null
           nome: string
           peso_unitario_g?: number | null
@@ -3416,7 +3645,6 @@ export type Database = {
           ferro_mg?: number | null
           fibra_alimentar_g?: number | null
           fluor_mg?: number | null
-          fonte?: string | null
           fosforo_mg?: number | null
           funcao_aditivo?: string | null
           galactose_g?: number | null
@@ -3440,6 +3668,7 @@ export type Database = {
           maltitol_g?: number | null
           manganes_mg?: number | null
           manitol_g?: number | null
+          marca?: string | null
           molibdenio_mcg?: number | null
           nome?: string
           peso_unitario_g?: number | null
@@ -4603,6 +4832,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          assinatura_url: string | null
           cliente_id: string | null
           cpf: string | null
           created_at: string
@@ -4613,6 +4843,7 @@ export type Database = {
           role: string
         }
         Insert: {
+          assinatura_url?: string | null
           cliente_id?: string | null
           cpf?: string | null
           created_at?: string
@@ -4623,6 +4854,7 @@ export type Database = {
           role: string
         }
         Update: {
+          assinatura_url?: string | null
           cliente_id?: string | null
           cpf?: string | null
           created_at?: string
@@ -4638,6 +4870,295 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qual_planilha_colunas: {
+        Row: {
+          created_at: string | null
+          id: string
+          modelo_id: string
+          obrigatorio: boolean | null
+          opcoes: Json | null
+          ordem: number
+          regras: Json | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          modelo_id: string
+          obrigatorio?: boolean | null
+          opcoes?: Json | null
+          ordem: number
+          regras?: Json | null
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          modelo_id?: string
+          obrigatorio?: boolean | null
+          opcoes?: Json | null
+          ordem?: number
+          regras?: Json | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qual_planilha_colunas_modelo_id_fkey"
+            columns: ["modelo_id"]
+            isOneToOne: false
+            referencedRelation: "qual_planilha_modelos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qual_planilha_configuracoes: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          frequencia_config: Json | null
+          frequencia_tipo: string
+          id: string
+          itens_monitorados: Json | null
+          modelo_id: string
+          responsavel_id: string | null
+          unidade_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          frequencia_config?: Json | null
+          frequencia_tipo: string
+          id?: string
+          itens_monitorados?: Json | null
+          modelo_id: string
+          responsavel_id?: string | null
+          unidade_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          frequencia_config?: Json | null
+          frequencia_tipo?: string
+          id?: string
+          itens_monitorados?: Json | null
+          modelo_id?: string
+          responsavel_id?: string | null
+          unidade_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qual_planilha_configuracoes_modelo_id_fkey"
+            columns: ["modelo_id"]
+            isOneToOne: false
+            referencedRelation: "qual_planilha_modelos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qual_planilha_configuracoes_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qual_planilha_configuracoes_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "cliente_unidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qual_planilha_modelos: {
+        Row: {
+          ativo: boolean | null
+          categoria: string
+          cliente_id: string | null
+          created_at: string | null
+          deleted_at: string | null
+          descricao: string | null
+          icone: string | null
+          id: string
+          titulo: string
+          updated_at: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          categoria: string
+          cliente_id?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          descricao?: string | null
+          icone?: string | null
+          id?: string
+          titulo: string
+          updated_at?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          categoria?: string
+          cliente_id?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          descricao?: string | null
+          icone?: string | null
+          id?: string
+          titulo?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qual_planilha_modelos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qual_planos_acao: {
+        Row: {
+          id: string
+          cliente_id: string
+          unidade_id: string
+          origem_modulo: string
+          origem_id: string
+          periodo_referencia: string | null
+          causa_raiz: string | null
+          acao_corretiva: string
+          insights: string | null
+          status: string | null
+          criado_por: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          cliente_id: string
+          unidade_id: string
+          origem_modulo: string
+          origem_id: string
+          periodo_referencia?: string | null
+          causa_raiz?: string | null
+          acao_corretiva: string
+          insights?: string | null
+          status?: string | null
+          criado_por?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          cliente_id?: string
+          unidade_id?: string
+          origem_modulo?: string
+          origem_id?: string
+          periodo_referencia?: string | null
+          causa_raiz?: string | null
+          acao_corretiva?: string
+          insights?: string | null
+          status?: string | null
+          criado_por?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qual_planos_acao_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qual_planos_acao_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "cliente_unidades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qual_planos_acao_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      qual_planilha_registros: {
+        Row: {
+          anexos_gerais: Json | null
+          created_at: string | null
+          data_referencia: string
+          data_referencia_local: string | null
+          id: string
+          item_monitorado: string | null
+          modelo_id: string
+          preenchido_por: string
+          respostas: Json
+          status: string | null
+          unidade_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          anexos_gerais?: Json | null
+          created_at?: string | null
+          data_referencia: string
+          data_referencia_local?: string | null
+          id?: string
+          item_monitorado?: string | null
+          modelo_id: string
+          preenchido_por: string
+          respostas?: Json
+          status?: string | null
+          unidade_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          anexos_gerais?: Json | null
+          created_at?: string | null
+          data_referencia?: string
+          data_referencia_local?: string | null
+          id?: string
+          item_monitorado?: string | null
+          modelo_id?: string
+          preenchido_por?: string
+          respostas?: Json
+          status?: string | null
+          unidade_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qual_planilha_registros_modelo_id_fkey"
+            columns: ["modelo_id"]
+            isOneToOne: false
+            referencedRelation: "qual_planilha_modelos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qual_planilha_registros_preenchido_por_fkey"
+            columns: ["preenchido_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qual_planilha_registros_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "cliente_unidades"
             referencedColumns: ["id"]
           },
         ]
@@ -4669,6 +5190,7 @@ export type Database = {
           nome: string
           peso_embalagem_g: number
           porcao_final_g_ml: number | null
+          preco_venda: number | null
           rendimento_preparado_g: number | null
           rendimento_total_g: number
           risco_contaminacao_cruzada_ids: number[] | null
@@ -4705,6 +5227,7 @@ export type Database = {
           nome: string
           peso_embalagem_g?: number
           porcao_final_g_ml?: number | null
+          preco_venda?: number | null
           rendimento_preparado_g?: number | null
           rendimento_total_g?: number
           risco_contaminacao_cruzada_ids?: number[] | null
@@ -4741,6 +5264,7 @@ export type Database = {
           nome?: string
           peso_embalagem_g?: number
           porcao_final_g_ml?: number | null
+          preco_venda?: number | null
           rendimento_preparado_g?: number | null
           rendimento_total_g?: number
           risco_contaminacao_cruzada_ids?: number[] | null
@@ -4913,6 +5437,54 @@ export type Database = {
         }
         Relationships: []
       }
+      regras_temperatura: {
+        Row: {
+          categoria_slug: string
+          created_at: string | null
+          id: string
+          legislacao_referencia: string | null
+          nome_exibicao: string
+          temp_resfriado_max: number
+          temp_resfriado_min: number | null
+          tipo: string
+          validade_congelado_atencao_dias: number | null
+          validade_congelado_bom_dias: number | null
+          validade_congelado_excelente_dias: number | null
+          validade_congelado_regular_dias: number | null
+          validade_resfriado_dias: number
+        }
+        Insert: {
+          categoria_slug: string
+          created_at?: string | null
+          id?: string
+          legislacao_referencia?: string | null
+          nome_exibicao: string
+          temp_resfriado_max: number
+          temp_resfriado_min?: number | null
+          tipo: string
+          validade_congelado_atencao_dias?: number | null
+          validade_congelado_bom_dias?: number | null
+          validade_congelado_excelente_dias?: number | null
+          validade_congelado_regular_dias?: number | null
+          validade_resfriado_dias: number
+        }
+        Update: {
+          categoria_slug?: string
+          created_at?: string | null
+          id?: string
+          legislacao_referencia?: string | null
+          nome_exibicao?: string
+          temp_resfriado_max?: number
+          temp_resfriado_min?: number | null
+          tipo?: string
+          validade_congelado_atencao_dias?: number | null
+          validade_congelado_bom_dias?: number | null
+          validade_congelado_excelente_dias?: number | null
+          validade_congelado_regular_dias?: number | null
+          validade_resfriado_dias?: number
+        }
+        Relationships: []
+      }
       regras_validade_sanitaria: {
         Row: {
           ambito: string | null
@@ -4968,6 +5540,7 @@ export type Database = {
           created_at: string
           id: string
           nome: string
+          tipo: string | null
           unidade_id: string
         }
         Insert: {
@@ -4976,6 +5549,7 @@ export type Database = {
           created_at?: string
           id?: string
           nome: string
+          tipo?: string | null
           unidade_id: string
         }
         Update: {
@@ -4984,6 +5558,7 @@ export type Database = {
           created_at?: string
           id?: string
           nome?: string
+          tipo?: string | null
           unidade_id?: string
         }
         Relationships: [
@@ -5005,21 +5580,21 @@ export type Database = {
       }
       subgrupos_produto: {
         Row: {
-          cliente_id: string
+          cliente_id: string | null
           created_at: string
           grupo_id: string | null
           id: string
           nome: string
         }
         Insert: {
-          cliente_id: string
+          cliente_id?: string | null
           created_at?: string
           grupo_id?: string | null
           id?: string
           nome: string
         }
         Update: {
-          cliente_id?: string
+          cliente_id?: string | null
           created_at?: string
           grupo_id?: string | null
           id?: string
@@ -5211,6 +5786,14 @@ export type Database = {
           permission_slug: string
         }[]
       }
+      obter_dados_portal_fornecedor: {
+        Args: { p_token: string }
+        Returns: Json
+      }
+      processar_resposta_cotacao: {
+        Args: { p_precos: Json; p_token: string }
+        Returns: boolean
+      }
       registrar_producao: {
         Args: {
           p_cliente_id: string
@@ -5278,6 +5861,26 @@ export type Database = {
         | "FINALIZADA"
         | "CANCELADA"
       status_receita: "RASCUNHO" | "EM_ANALISE" | "APROVADO" | "OBSOLETO"
+      tipo_equipamento_enum:
+        | "CAMARA_FRIA_RESFRIADOS"
+        | "CAMARA_FRIA_CONGELADOS"
+        | "REFRIGERADOR_COMERCIAL"
+        | "FREEZER_VERTICAL"
+        | "FREEZER_HORIZONTAL"
+        | "BALCAO_REFRIGERADO"
+        | "VITRINE_REFRIGERADA"
+        | "ULTRACONGELADOR"
+        | "PASS_THROUGH_FRIO"
+        | "ESTUFA"
+        | "BANHO_MARIA"
+        | "BALCAO_AQUECIDO"
+        | "VITRINE_AQUECIDA"
+        | "PASS_THROUGH_QUENTE"
+        | "CHAPA_QUENTE"
+        | "FORNO_COMBINADO"
+        | "FOGAO_INDUSTRIAL"
+        | "FRITADEIRA"
+        | "OUTRO"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5403,9 +6006,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       criticidade_insumo: ["BAIXA", "MEDIA", "ALTA"],
@@ -5467,6 +6067,28 @@ export const Constants = {
         "CANCELADA",
       ],
       status_receita: ["RASCUNHO", "EM_ANALISE", "APROVADO", "OBSOLETO"],
+      tipo_equipamento_enum: [
+        "CAMARA_FRIA_RESFRIADOS",
+        "CAMARA_FRIA_CONGELADOS",
+        "REFRIGERADOR_COMERCIAL",
+        "FREEZER_VERTICAL",
+        "FREEZER_HORIZONTAL",
+        "BALCAO_REFRIGERADO",
+        "VITRINE_REFRIGERADA",
+        "ULTRACONGELADOR",
+        "PASS_THROUGH_FRIO",
+        "ESTUFA",
+        "BANHO_MARIA",
+        "BALCAO_AQUECIDO",
+        "VITRINE_AQUECIDA",
+        "PASS_THROUGH_QUENTE",
+        "CHAPA_QUENTE",
+        "FORNO_COMBINADO",
+        "FOGAO_INDUSTRIAL",
+        "FRITADEIRA",
+        "OUTRO",
+      ],
     },
   },
 } as const
+

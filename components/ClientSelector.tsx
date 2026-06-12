@@ -11,8 +11,14 @@ export function ClientSelector() {
     unidadeSelecionada, 
     setUnidadeSelecionada, 
     loading,
-    activeClientLogo
+    activeClientLogo,
+    activeClientId
   } = useClient();
+
+  // Filtra as unidades para mostrar apenas as pertencentes à empresa atual (se houver uma selecionada)
+  const unidadesParaMostrar = activeClientId 
+    ? minhasUnidades.filter(u => u.cliente_id === activeClientId)
+    : minhasUnidades;
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
@@ -32,7 +38,7 @@ export function ClientSelector() {
     return <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1 }} />;
   }
 
-  if (!minhasUnidades || minhasUnidades.length === 0) {
+  if (!unidadesParaMostrar || unidadesParaMostrar.length === 0) {
     return (
       <Box sx={{ p: 1, bgcolor: '#FEF2F2', color: '#DC2626', borderRadius: 1, border: '1px solid #FECACA' }}>
         <Typography variant="caption" fontWeight="bold">Sem acesso a unidades</Typography>
@@ -87,7 +93,7 @@ export function ClientSelector() {
         onClose={handleClose}
         PaperProps={{ sx: { width: anchorEl?.clientWidth, mt: 1 } }}
       >
-        {minhasUnidades.map((unidade) => (
+        {unidadesParaMostrar.map((unidade) => (
           <MenuItem 
             key={unidade.id} 
             onClick={() => handleSelect(unidade)}

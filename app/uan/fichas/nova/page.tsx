@@ -153,7 +153,7 @@ export default function NovaFichaUANPage() {
     let custo = 0;
     linhas.forEach(l => {
       const pesoKg = (Number(l.peso_bruto_g) || 0) / 1000;
-      const preco = l.ui_ingrediente?.preco_ultima_compra || 0;
+      const preco = l.ui_ingrediente?.custo_medio || l.ui_ingrediente?.preco_ultima_compra || 0;
       custo += (pesoKg * preco);
     });
     return custo;
@@ -566,7 +566,7 @@ export default function NovaFichaUANPage() {
                   </TableCell>
                   <TableCell align="right">
                     <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
-                      R$ {(((Number(row.peso_bruto_g) || 0) / 1000) * (row.ui_ingrediente?.preco_ultima_compra || 0)).toFixed(2)}
+                      R$ {(((Number(row.peso_bruto_g) || 0) / 1000) * (row.ui_ingrediente?.custo_medio || row.ui_ingrediente?.preco_ultima_compra || 0)).toFixed(2)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">

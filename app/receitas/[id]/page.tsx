@@ -38,10 +38,13 @@ import CalculateIcon from '@mui/icons-material/Calculate';
 import { ResultadoCalculo, ReceitaVersao } from '@/lib/types';
 import RotulagemTab from '@/components/receitas/RotulagemTab';
 import GraficosNutricionaisTab from '@/components/receitas/GraficosNutricionaisTab';
+import FinanceiroTab from '@/components/receitas/FinanceiroTab';
 import ReceitaHeader from '@/components/receitas/ReceitaHeader';
 import ComposicaoDisplayList from '@/components/receitas/ComposicaoDisplayList';
 import VersionControl from '@/components/receitas/VersionControl';
 import NutritionalLabel, { LupaFrontalANVISA, GMOIcon } from '@/components/NutritionalLabel';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import ScienceIcon from '@mui/icons-material/Science';
 
 // --- TIPOS ---
 type TabelaLayout = 'VERTICAL' | 'VERTICAL_QUEBRADA' | 'HORIZONTAL' | 'HORIZONTAL_QUEBRADA' | 'LINEAR';
@@ -99,6 +102,7 @@ export default function DetalhesReceitaPage() {
   const [layoutTabela, setLayoutTabela] = useState<TabelaLayout>('VERTICAL');
   const [lupaLayout, setLupaLayout] = useState<LupaLayout>('VERTICAL');
   const [dadosCliente, setDadosCliente] = useState<any | null>(null);
+  const [abaPrincipal, setAbaPrincipal] = useState(0); // 0: Ficha Técnica, 1: Financeiro
   const [abaAtiva, setAbaAtiva] = useState(0);
   const [abaSubGrafico, setAbaSubGrafico] = useState(1); // 0: 100g, 1: Porção
  
@@ -374,6 +378,23 @@ export default function DetalhesReceitaPage() {
     } catch (err: any) { setError(err.message); } finally { setCalculating(false); }
   };
 
+  const handleSavePreco = async (novoPreco: number) => {
+    try {
+      const { error } = await supabase
+        .from('receitas')
+        .update({ preco_venda: novoPreco })
+        .eq('id', recipeId);
+      
+      if (error) throw error;
+      
+      setReceitaAtual(prev => ({ ...prev, preco_venda: novoPreco }));
+      setReceitaExibida(prev => ({ ...prev, preco_venda: novoPreco }));
+      alert('Preço de venda atualizado com sucesso!');
+    } catch (err: any) {
+      alert('Erro ao salvar o preço de venda: ' + err.message);
+    }
+  };
+
   const handleDownloadJPEG = () => {
     if (!tabelaRef.current) return;
     html2canvas(tabelaRef.current, { scale: 3, backgroundColor: '#FFFFFF', useCORS: true }).then(canvas => {
@@ -420,6 +441,27 @@ export default function DetalhesReceitaPage() {
         handleSelecionarVersao={handleSelecionarVersao}
       />
 
+      {/* === ABAS DE NÍVEL SUPERIOR === */}
+      <Paper elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: 2, mt: 3, overflow: 'hidden' }}>
+        <Tabs
+          value={abaPrincipal}
+          onChange={(_, v) => setAbaPrincipal(v)}
+          variant="fullWidth"
+          sx={{
+            bgcolor: alpha(theme.palette.primary.main, 0.04),
+            borderBottom: '2px solid',
+            borderColor: 'primary.main',
+            '& .MuiTab-root': { py: 2, fontWeight: 600, fontSize: '0.95rem', textTransform: 'none' },
+            '& .Mui-selected': { color: 'primary.main' },
+          }}
+        >
+          <Tab icon={<ScienceIcon fontSize="small" />} iconPosition="start" label="Ficha Técnica & Rotulagem" />
+          <Tab icon={<AttachMoneyIcon fontSize="small" />} iconPosition="start" label="Controle Financeiro / CMV" />
+        </Tabs>
+      </Paper>
+
+      {/* ========== ABA PRINCIPAL 0: FICHA TÉCNICA ========== */}
+      {abaPrincipal === 0 && (
       <Stack spacing={4}>
         
         {/* 1. FOTO DA RECEITA (Estilo Estúdio) */}
@@ -559,6 +601,20 @@ export default function DetalhesReceitaPage() {
             </Box>
         </Paper>
       </Stack>
+      )}
+
+      {/* ========== ABA PRINCIPAL 1: CONTROLE FINANCEIRO ========== */}
+      {abaPrincipal === 1 && (
+        <Box sx={{ mt: 3 }}>
+          <FinanceiroTab
+            receitaExibida={receitaExibida}
+            composicaoDisplay={composicaoDisplay}
+            custoTotalUltimo={custoTotalUltimo}
+            isHistorico={isHistorico}
+            onSavePreco={handleSavePreco}
+          />
+        </Box>
+      )}
 
       <Dialog open={modalAprovacaoOpen} onClose={() => setModalAprovacaoOpen(false)}>
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

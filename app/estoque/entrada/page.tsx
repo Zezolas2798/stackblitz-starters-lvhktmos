@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import { Fornecedor } from '@/lib/types';
 import QuickIngredienteDialog from '@/components/QuickIngredienteDialog';
+import QuickMaterialDialog from '@/components/QuickMaterialDialog';
 
 // --- NOVOS IMPORTS (FASE 2 e 3 DO MASTERPLAN) ---
 import EtiquetaPrinter from '@/components/etiquetas/EtiquetaPrinter';
@@ -92,7 +93,7 @@ export default function EntradaEstoquePage() {
       ];
 
       const comMatch = extraidos.map(item => {
-        const match = ingredientes.find(ing => ing.nome.toLowerCase().includes(item.nomeExtracao.split(' ')[0].toLowerCase()) || ing.fonte?.toLowerCase() === item.marca.toLowerCase());
+        const match = ingredientes.find(ing => ing.nome.toLowerCase().includes(item.nomeExtracao.split(' ')[0].toLowerCase()) || ing.marca?.toLowerCase() === item.marca.toLowerCase());
         return {
           ...item,
           ingrediente_id: match ? match.id : '',
@@ -250,6 +251,12 @@ export default function EntradaEstoquePage() {
     const item = itensConferencia[index];
     if (!item.localEdit) {
       alert('Selecione o local de destino para este item.');
+      return;
+    }
+
+    const isValidadeRequired = ['ALIMENTOS', 'LIMPEZA', 'PRIMEIROS_SOCORROS'].includes(categoriaPrincipal);
+    if (isValidadeRequired && !item.validadeEdit) {
+      alert('A validade é obrigatória para esta categoria.');
       return;
     }
 
@@ -452,8 +459,8 @@ export default function EntradaEstoquePage() {
     async function fetchHistoricoMarcas() {
       if (!ingredienteSelecionado || !clienteId) return;
 
-      if (ingredienteSelecionado.fonte) {
-        setMarca(ingredienteSelecionado.fonte);
+      if (ingredienteSelecionado.marca) {
+        setMarca(ingredienteSelecionado.marca);
         setMarcasSugeridas([]);
       } else {
         setMarca('');
@@ -497,7 +504,7 @@ export default function EntradaEstoquePage() {
 
     const { data: ingData } = await (supabase as any)
       .from('ingredientes')
-      .select('id, nome, fonte, peso_unitario_g, grupo_id')
+      .select('id, nome, marca, peso_unitario_g, grupo_id')
       .eq('cliente_id', clienteId)
       .is('deleted_at', null)
       .order('nome');
@@ -558,7 +565,7 @@ export default function EntradaEstoquePage() {
 
     if (activeTab === 0) {
       setIngredienteSelecionado(novoItem);
-      if (novoItem.fonte) setMarca(novoItem.fonte);
+      if (novoItem.marca) setMarca(novoItem.marca);
       if (categoriaSugerida && categoriaPrincipal === 'ALIMENTOS') {
         const existe = categoriasDisponiveis.some(c => c.nome === categoriaSugerida);
         if (!existe) {
@@ -590,7 +597,9 @@ export default function EntradaEstoquePage() {
   const estoqueCalculado = calcularTotalEstoque();
 
   const handleSalvar = async (comoPrevisto: boolean = false) => {
-    if (!clienteId || !unidadeId || !ingredienteSelecionado || !validade || !qtdPacotes || (unidadePeso !== 'UN' && !pesoPacote)) {
+    const isValidadeRequired = ['ALIMENTOS', 'LIMPEZA', 'PRIMEIROS_SOCORROS'].includes(categoriaPrincipal);
+
+    if (!clienteId || !unidadeId || !ingredienteSelecionado || (isValidadeRequired && !validade) || !qtdPacotes || (unidadePeso !== 'UN' && !pesoPacote)) {
       alert('Preencha os campos obrigatórios (*).');
       return;
     }
@@ -610,15 +619,21 @@ export default function EntradaEstoquePage() {
       const { data: userData } = await supabase.auth.getUser();
       const user = userData.user;
 
-      const validadeCalculada = await calcularValidade(
-        categoria,
-        new Date(validade),
-        new Date(),
-        temperatura ? Number(temperatura) : 25
-      );
+      let dataValidadeInternaFinal = new Date();
+      let diasRestantes = 0;
+      let statusFinal = comoPrevisto ? 'PREVISTO' : (estadoProduto === 'AVARIADO' ? 'REJEITADO' : 'QUARENTENA');
 
-      const diasRestantes = differenceInCalendarDays(validadeCalculada.dataValidadeFinal, new Date());
-      const statusFinal = comoPrevisto ? 'PREVISTO' : (estadoProduto === 'AVARIADO' ? 'REJEITADO' : (diasRestantes < 0 ? 'VENCIDO' : 'QUARENTENA'));
+      if (validade) {
+        const validadeCalculada = await calcularValidade(
+          categoria,
+          new Date(validade),
+          new Date(),
+          temperatura ? Number(temperatura) : 25
+        );
+        dataValidadeInternaFinal = validadeCalculada.dataValidadeFinal;
+        diasRestantes = differenceInCalendarDays(dataValidadeInternaFinal, new Date());
+        statusFinal = comoPrevisto ? 'PREVISTO' : (estadoProduto === 'AVARIADO' ? 'REJEITADO' : (diasRestantes < 0 ? 'VENCIDO' : 'QUARENTENA'));
+      }
 
       let qtdReal = estoqueCalculado.valor;
       if (estoqueCalculado.unidade === 'KG' || estoqueCalculado.unidade === 'L') {
@@ -642,7 +657,7 @@ export default function EntradaEstoquePage() {
           nota_fiscal: notaFiscal || null,
           data_fabricacao: dataRecebimento ? new Date(dataRecebimento).toISOString() : null,
           data_validade_rotulo: validade || null,
-          data_validade_interna: validadeCalculada.dataValidadeFinal.toISOString(),
+          data_validade_interna: validade ? dataValidadeInternaFinal.toISOString() : null,
           quantidade_inicial_g_ml: qtdReal,
           status: statusFinal,
           registro_sif: registroSif || null,
@@ -679,13 +694,14 @@ export default function EntradaEstoquePage() {
         },
         datas: {
           manipulacao: new Date(),
-          validadeOriginal: new Date(validade),
-          validadeFinal: validadeCalculada.dataValidadeFinal
+          validadeOriginal: validade ? new Date(validade) : new Date(),
+          validadeFinal: validade ? dataValidadeInternaFinal : new Date()
         },
         rastreabilidade: {
           idInterno: lote.id,
           responsavel: user?.email || 'Sistema'
-        }
+        },
+        qtd_embalagens: qtdPacotes ? Number(qtdPacotes) : 1
       };
 
       setDadosEtiqueta(dadosParaEtiqueta);
@@ -799,13 +815,22 @@ export default function EntradaEstoquePage() {
         </Box>
       </Box>
 
-      <QuickIngredienteDialog
-        open={modalOpen}
-        onClose={() => { setModalOpen(false); setOcrItemToLink(null); }}
-        onSuccess={handleIngredienteCriado}
-        nomeSugerido={termoBuscaIngrediente}
-        categoriaPrincipal={categoriaPrincipal}
-      />
+      {categoriaPrincipal === 'ALIMENTOS' ? (
+        <QuickIngredienteDialog
+          open={modalOpen}
+          onClose={() => { setModalOpen(false); setOcrItemToLink(null); }}
+          onSuccess={handleIngredienteCriado}
+          nomeSugerido={termoBuscaIngrediente}
+        />
+      ) : (
+        <QuickMaterialDialog
+          open={modalOpen}
+          onClose={() => { setModalOpen(false); setOcrItemToLink(null); }}
+          onSuccess={handleIngredienteCriado}
+          nomeSugerido={termoBuscaIngrediente}
+          categoriaPrincipal={categoriaPrincipal}
+        />
+      )}
 
       {/* TABS DE CATEGORIA PRINCIPAL (IGUAL AO ESTOQUE) */}
       <Box sx={{ mb: 3 }}>
@@ -899,9 +924,11 @@ export default function EntradaEstoquePage() {
                 <Grid item xs={12} md={4}>
                   <TextField label="Nº Nota Fiscal" size="small" fullWidth value={notaFiscal} onChange={e => setNotaFiscal(e.target.value)} />
                 </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField label="Registro S.I.F / S.I.M" size="small" fullWidth value={registroSif} onChange={e => setRegistroSif(e.target.value)} placeholder="Ex: SIF 123" />
-                </Grid>
+                {categoriaPrincipal === 'ALIMENTOS' && (
+                  <Grid item xs={12} md={4}>
+                    <TextField label="Registro S.I.F / S.I.M" size="small" fullWidth value={registroSif} onChange={e => setRegistroSif(e.target.value)} placeholder="Ex: SIF 123" />
+                  </Grid>
+                )}
                 <Grid item xs={12} md={4}>
                   <TextField label="Preço Total (R$)" size="small" fullWidth value={precoTotal} onChange={e => setPrecoTotal(e.target.value)} type="number" />
                 </Grid>
@@ -1053,10 +1080,14 @@ export default function EntradaEstoquePage() {
                   />
                 </Box>
 
-                <TextField label="Validade Rótulo *" type="date" size="small" fullWidth InputLabelProps={{ shrink: true }} value={validade} onChange={e => setValidade(e.target.value)} />
+                {['ALIMENTOS', 'LIMPEZA', 'PRIMEIROS_SOCORROS'].includes(categoriaPrincipal) && (
+                  <TextField label="Validade Rótulo *" type="date" size="small" fullWidth InputLabelProps={{ shrink: true }} value={validade} onChange={e => setValidade(e.target.value)} />
+                )}
 
                 <Box sx={{ display: 'flex', gap: 2 }}>
-                  <TextField label="Temp. (°C)" size="small" type="number" fullWidth value={temperatura} onChange={e => setTemperatura(e.target.value)} InputProps={{ endAdornment: <InputAdornment position="end">°C</InputAdornment> }} />
+                  {categoriaPrincipal === 'ALIMENTOS' && (
+                    <TextField label="Temp. (°C)" size="small" type="number" fullWidth value={temperatura} onChange={e => setTemperatura(e.target.value)} InputProps={{ endAdornment: <InputAdornment position="end">°C</InputAdornment> }} />
+                  )}
                   <FormControl fullWidth size="small" required>
                     <InputLabel>Destino</InputLabel>
                     <Select value={local} label="Destino" onChange={e => setLocal(e.target.value)}>
@@ -1372,7 +1403,7 @@ export default function EntradaEstoquePage() {
                   <Grid item xs={12} key={item.id}>
                     <Paper elevation={0} sx={{ p: 3, borderLeft: '6px solid', borderLeftColor: 'primary.main', border: '1px solid', borderColor: 'divider' }}>
                       <Typography variant="h6" fontWeight="bold" gutterBottom color="primary.main">
-                        {item.ingredientes?.nome}
+                        {categoriaPrincipal === 'ALIMENTOS' ? item.ingredientes?.nome : item.materiais?.nome}
                       </Typography>
 
                       <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -1389,36 +1420,40 @@ export default function EntradaEstoquePage() {
                             }}
                           />
                         </Grid>
+                        {categoriaPrincipal === 'ALIMENTOS' && (
+                          <>
+                            <Grid item xs={12} md={2}>
+                              <TextField
+                                label="Temp. (°C)"
+                                size="small"
+                                type="number"
+                                fullWidth
+                                value={item.tempEdit}
+                                onChange={(e) => {
+                                  const v = [...itensConferencia];
+                                  v[index].tempEdit = e.target.value;
+                                  setItensConferencia(v);
+                                }}
+                              />
+                            </Grid>
+                            <Grid item xs={12} md={2}>
+                              <TextField
+                                label="S.I.F / S.I.M"
+                                size="small"
+                                fullWidth
+                                value={item.sifEdit}
+                                onChange={(e) => {
+                                  const v = [...itensConferencia];
+                                  v[index].sifEdit = e.target.value;
+                                  setItensConferencia(v);
+                                }}
+                              />
+                            </Grid>
+                          </>
+                        )}
                         <Grid item xs={12} md={2}>
                           <TextField
-                            label="Temp. (°C)"
-                            size="small"
-                            type="number"
-                            fullWidth
-                            value={item.tempEdit}
-                            onChange={(e) => {
-                              const v = [...itensConferencia];
-                              v[index].tempEdit = e.target.value;
-                              setItensConferencia(v);
-                            }}
-                          />
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                          <TextField
-                            label="S.I.F / S.I.M"
-                            size="small"
-                            fullWidth
-                            value={item.sifEdit}
-                            onChange={(e) => {
-                              const v = [...itensConferencia];
-                              v[index].sifEdit = e.target.value;
-                              setItensConferencia(v);
-                            }}
-                          />
-                        </Grid>
-                        <Grid item xs={12} md={2}>
-                          <TextField
-                            label="Validade *"
+                            label={`Validade ${['ALIMENTOS', 'LIMPEZA', 'PRIMEIROS_SOCORROS'].includes(categoriaPrincipal) ? '*' : ''}`}
                             type="date"
                             size="small"
                             fullWidth
@@ -1575,7 +1610,7 @@ export default function EntradaEstoquePage() {
 
             {dadosEtiqueta && (
               <Box sx={{ mt: 2 }}>
-                <EtiquetaPrinter dados={dadosEtiqueta} />
+                <EtiquetaPrinter dados={dadosEtiqueta} quantidadeCopias={dadosEtiqueta.qtd_embalagens || 1} />
               </Box>
             )}
           </Box>

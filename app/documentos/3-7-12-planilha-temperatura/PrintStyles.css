@@ -1,0 +1,56 @@
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background-color: white !important;
+  }
+
+  /* Oculta tudo por padrão e exibe apenas o que estiver dentro do .print-container */
+  body * {
+    visibility: hidden;
+  }
+  .print-container, .print-container * {
+    visibility: visible;
+  }
+  .no-print, .no-print * {
+    display: none !important;
+  }
+
+  /* Ajusta o container principal para usar 100% da largura do A4 e posicionar no topo esquerdo */
+  .print-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Evita quebras de página no meio de uma linha da tabela, permitindo que a tabela quebre entre linhas */
+  tr {
+    page-break-inside: avoid;
+  }
+
+  /* Força a impressão das faixas coloridas no gráfico (se renderizado como SVG) */
+  svg rect {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  /* Oculta Tooltips e cursores do Recharts na impressão */
+  .recharts-tooltip-wrapper,
+  .recharts-default-tooltip,
+  .recharts-tooltip-cursor {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+}

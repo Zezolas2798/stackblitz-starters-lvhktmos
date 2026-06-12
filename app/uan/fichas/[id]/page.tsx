@@ -121,7 +121,7 @@ export default function EditarFichaUANPage() {
         // A. Carregar Ingredientes
         const { data: ingData } = await supabase
           .from('ingredientes')
-          .select('id, nome, preco_ultima_compra, tipo_ingrediente')
+          .select('id, nome, preco_ultima_compra, custo_medio, tipo_ingrediente')
           .eq('cliente_id', activeClientId)
           .order('nome');
         
@@ -193,7 +193,7 @@ export default function EditarFichaUANPage() {
     let custo = 0;
     linhas.forEach(l => {
       const pesoKg = (Number(l.peso_bruto_g) || 0) / 1000;
-      const preco = l.ui_ingrediente?.preco_ultima_compra || 0;
+      const preco = l.ui_ingrediente?.custo_medio || l.ui_ingrediente?.preco_ultima_compra || 0;
       custo += (pesoKg * preco);
     });
     return custo;
@@ -522,7 +522,7 @@ export default function EditarFichaUANPage() {
                   </TableCell>
                   <TableCell align="right">
                     <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
-                      R$ {(((Number(row.peso_bruto_g) || 0) / 1000) * (row.ui_ingrediente?.preco_ultima_compra || 0)).toFixed(2)}
+                      R$ {(((Number(row.peso_bruto_g) || 0) / 1000) * (row.ui_ingrediente?.custo_medio || row.ui_ingrediente?.preco_ultima_compra || 0)).toFixed(2)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">

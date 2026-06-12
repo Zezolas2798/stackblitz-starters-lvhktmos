@@ -1,521 +1,454 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useClient } from '@/lib/ClientContext';
 import {
-    Box, Typography, Button, Paper, Tabs, Tab,
-    Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-    TextField, MenuItem, Select, FormControl, InputLabel,
-    CircularProgress, Snackbar, Alert, Container, IconButton,
-    Chip, Divider, useTheme, alpha, Tooltip, Autocomplete
+    Container, Typography, Box, Grid, Card, CardContent, CardActionArea, CardActions,
+    CircularProgress, Alert, Chip, Stack, Button, Divider, Tabs, Tab
 } from '@mui/material';
-import { LoadingButton } from '@mui/lab';
-import { 
-    Thermometer, 
-    Droplet, 
-    ClipboardCheck, 
-    ChevronLeft, 
-    Save, 
-    AlertCircle,
-    Power,
-    Inbox,
-    RefreshCw,
-    Search,
-    ChefHat,
-    ShoppingBag
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { Droplet, Thermometer, Wind, Zap, ClipboardList, Settings, Clock, CheckCircle, Calendar } from 'lucide-react';
+import { startOfDay, addDays, addMonths, addYears, isBefore, format, differenceInDays } from 'date-fns';
 
-interface Alimento {
-    id: string;
-    nome: string;
-    tipo: 'PRODUTO' | 'RECEITA';
-    uniqueId: string; // "PRODUTO-id" or "RECEITA-id"
-}
+// Mapper to convert string icon names to actual lucide components
+const IconMap: Record<string, any> = {
+    Droplet: Droplet,
+    Thermometer: Thermometer,
+    Wind: Wind,
+    Zap: Zap,
+    ClipboardList: ClipboardList
+};
 
 export default function ControleProducaoPage() {
-    const theme = useTheme();
     const router = useRouter();
-    const { activeClientId, unidadeId: ctxUnidadeId } = useClient();
+    const { activeClientId, unidadeId } = useClient();
 
-    const [tabValue, setTabValue] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [msg, setMsg] = useState({ open: false, text: '', type: 'success' as 'success' | 'error' });
-    
-    const [dataFiltro, setDataFiltro] = useState(format(new Date(), 'yyyy-MM-dd'));
-    const [equipamentosMonitorados, setEquipamentosMonitorados] = useState<any[]>([]);
-    const [alimentos, setAlimentos] = useState<Alimento[]>([]);
-    const [logsTemp, setLogsTemp] = useState<Record<string, any>>({}); // Key: equipId-periodo
+    const [modelos, setModelos] = useState<any[]>([]);
+    const [pendentes, setPendentes] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [categoriaFiltro, setCategoriaFiltro] = useState<string>('Todas');
 
-    const SESSION_KEY = `temp_logs_producao_${activeClientId}_${ctxUnidadeId}_${dataFiltro}`;
+    useEffect(() => {
+        fetchPlanilhas();
+    }, [activeClientId, unidadeId]);
 
-    const loadDados = useCallback(async () => {
-        if (!activeClientId) return;
+    const fetchPlanilhas = async () => {
         setLoading(true);
+        setError(null);
+        
         try {
-            // 1. Pegar TODOS os equipamentos do grupo Temperaturas do cliente
-            const equipsPromise = (supabase as any)
-                .from('equipamentos_config')
-                .select(`
-                    id, 
-                    nome, 
-                    grupo,
-                    parent_id,
-                    frequencia_diaria,
-                    temp_ideal_min,
-                    temp_ideal_max,
-                    horarios_afericao,
-                    parent:equipamentos_config!parent_id(id, nome),
-                    locais:estoque_locais(id, nome)
-                `)
-                .eq('unidade_id', ctxUnidadeId)
-                .eq('grupo', 'Temperaturas')
-                .not('parent_id', 'is', null);
-
-            // 2. Pegar Alimentos (Produtos/Ingredientes e Receitas)
-            const produtosPromise = (supabase as any)
-                .from('ingredientes')
-                .select('id, nome')
-                .eq('cliente_id', activeClientId)
-                .is('deleted_at', null);
-
-            const receitasPromise = (supabase as any)
-                .from('receitas')
-                .select('id, nome')
-                .eq('cliente_id', activeClientId);
-
-            // 3. Pegar registros já existentes no Banco para a data
-            const logsPromise = (supabase as any)
-                .from('controle_temperatura')
+            // 1. Buscar os modelos
+            let queryModelos = (supabase as any).from('qual_planilha_modelos')
                 .select('*')
-                .eq('data', dataFiltro)
-                .eq('unidade_id', ctxUnidadeId);
+                .eq('ativo', true)
+                .is('deleted_at', null)
+                .order('categoria', { ascending: true })
+                .order('titulo', { ascending: true });
 
-            const [equipsRes, produtosRes, receitasRes, logsRes] = await Promise.all([
-                equipsPromise, produtosPromise, receitasPromise, logsPromise
-            ]);
-
-            if (equipsRes.error) throw equipsRes.error;
-            if (produtosRes.error) throw produtosRes.error;
-            if (receitasRes.error) throw receitasRes.error;
-            if (logsRes.error) throw logsRes.error;
-
-            setEquipamentosMonitorados(equipsRes.data || []);
-
-            // Consolidar alimentos
-            const unifiedAlimentos: Alimento[] = [
-                ...(produtosRes.data || []).map((p: any) => ({
-                    id: p.id,
-                    nome: p.nome,
-                    tipo: 'PRODUTO' as const,
-                    uniqueId: `PRODUTO-${p.id}`
-                })),
-                ...(receitasRes.data || []).map((r: any) => ({
-                    id: r.id,
-                    nome: r.nome,
-                    tipo: 'RECEITA' as const,
-                    uniqueId: `RECEITA-${r.id}`
-                }))
-            ].sort((a, b) => a.nome.localeCompare(b.nome));
-            
-            setAlimentos(unifiedAlimentos);
-
-            // 4. Montar log consolidado (Banco + SessionStorage)
-            const newLogs: Record<string, any> = {};
-            (logsRes.data || []).forEach((log: any) => {
-                newLogs[`${log.equipamento_id}-${log.periodo}`] = log;
-            });
-
-            // 5. Verificar se há dados temporários não salvos no sessionStorage
-            const sessionData = sessionStorage.getItem(SESSION_KEY);
-            if (sessionData) {
-                const tempLogs = JSON.parse(sessionData);
-                Object.keys(tempLogs).forEach(key => {
-                    newLogs[key] = {
-                        ...(newLogs[key] || {}),
-                        ...tempLogs[key]
-                    };
-                });
+            if (activeClientId) {
+                queryModelos = queryModelos.or(`cliente_id.eq.${activeClientId},cliente_id.is.null`);
+            } else {
+                queryModelos = queryModelos.is('cliente_id', null);
             }
 
-            setLogsTemp(newLogs);
+            const { data: modelosData, error: modelosErr } = await queryModelos;
+            if (modelosErr) throw modelosErr;
+
+            setModelos(modelosData || []);
+            
+            const firstCategory = modelosData && modelosData.length > 0 ? modelosData[0].categoria : '';
+            if (firstCategory && categoriaFiltro === 'Todas') {
+                setCategoriaFiltro(firstCategory);
+            }
+
+            // 2. Se houver unidadeId, checar pendências
+            if (unidadeId && modelosData) {
+                // Buscar configs da unidade
+                const { data: configData, error: configErr } = await (supabase as any).from('qual_planilha_configuracoes')
+                    .select('*')
+                    .eq('unidade_id', unidadeId)
+                    .eq('ativo', true);
+                
+                if (configErr) throw configErr;
+
+                // Buscar os últimos registros de cada modelo desta unidade
+                const { data: registrosData, error: registrosErr } = await (supabase as any).from('qual_planilha_registros')
+                    .select('modelo_id, item_monitorado, data_referencia')
+                    .eq('unidade_id', unidadeId)
+                    .order('data_referencia', { ascending: false });
+
+                if (registrosErr) throw registrosErr;
+
+                // Mapear o último registro por modelo E por item
+                const ultimosRegistros = (registrosData || []).reduce((acc: any, reg: any) => {
+                    const key = `${reg.modelo_id}_${reg.item_monitorado || 'default'}`;
+                    if (!acc[key]) {
+                        acc[key] = new Date(reg.data_referencia);
+                    }
+                    return acc;
+                }, {});
+
+                const pendentesList: any[] = [];
+                const seenModels = new Set();
+                const hoje = startOfDay(new Date());
+                
+                (configData || []).forEach((config: any) => {
+                    if (config.frequencia_tipo === 'DEMANDA') return;
+                    // Evitar duplicatas caso existam configs antigas erradas
+                    if (seenModels.has(config.modelo_id)) return;
+                    seenModels.add(config.modelo_id);
+
+                    const modelo = modelosData.find((m: any) => m.id === config.modelo_id);
+                    if (!modelo) return;
+
+                    // Se tiver itens_monitorados configurados, avaliamos individualmente
+                    let itemsToEvaluate: string[] = ['default'];
+                    if (config.itens_monitorados && config.itens_monitorados.length > 0) {
+                        itemsToEvaluate = config.itens_monitorados;
+                    }
+
+                    itemsToEvaluate.forEach((itemName) => {
+                        const regKey = `${config.modelo_id}_${itemName}`;
+                        const ultimoReg = ultimosRegistros[regKey];
+                        let isPendente = true;
+                        let proximaData: Date | null = null;
+
+                        if (config.frequencia_tipo === 'DIARIA') {
+                            const diasSemana = config.frequencia_config?.dias_semana;
+                            if (diasSemana && Array.isArray(diasSemana)) {
+                                if (!diasSemana.includes(new Date().getDay())) {
+                                    isPendente = false;
+                                }
+                            }
+                            
+                            if (ultimoReg && isPendente) {
+                                const ultimoRegStart = startOfDay(ultimoReg);
+                                if (ultimoRegStart.getTime() === hoje.getTime()) {
+                                    isPendente = false;
+                                }
+                            }
+                            if (isPendente) {
+                                proximaData = hoje;
+                            }
+                        } else {
+                            if (ultimoReg) {
+                                const ultimoRegStart = startOfDay(ultimoReg);
+                                let proxima = ultimoRegStart;
+                                switch (config.frequencia_tipo) {
+                                    case 'SEMANAL':
+                                        proxima = addDays(ultimoRegStart, 7);
+                                        break;
+                                    case 'QUINZENAL':
+                                        proxima = addDays(ultimoRegStart, 15);
+                                        break;
+                                    case 'MENSAL':
+                                        proxima = addMonths(ultimoRegStart, 1);
+                                        break;
+                                    case 'BIMESTRAL':
+                                        proxima = addMonths(ultimoRegStart, 2);
+                                        break;
+                                    case 'TRIMESTRAL':
+                                        proxima = addMonths(ultimoRegStart, 3);
+                                        break;
+                                    case 'SEMESTRAL':
+                                        proxima = addMonths(ultimoRegStart, 6);
+                                        break;
+                                    case 'ANUAL':
+                                        proxima = addYears(ultimoRegStart, 1);
+                                        break;
+                                    case 'BIENAL':
+                                        proxima = addYears(ultimoRegStart, 2);
+                                        break;
+                                }
+                                proximaData = proxima;
+                                
+                                const diasParaVencer = differenceInDays(proxima, hoje);
+
+                                if (diasParaVencer <= 0) {
+                                    isPendente = true; // Atrasado ou vence hoje
+                                } else {
+                                    // Verificar antecedência para mostrar aviso
+                                    if (['MENSAL', 'BIMESTRAL'].includes(config.frequencia_tipo)) {
+                                        isPendente = diasParaVencer <= 15;
+                                    } else if (['TRIMESTRAL', 'SEMESTRAL', 'ANUAL', 'BIENAL'].includes(config.frequencia_tipo)) {
+                                        isPendente = diasParaVencer <= 30;
+                                    } else {
+                                        isPendente = false;
+                                    }
+                                }
+                            } else {
+                                // Se não tem último registro e não é diário, está pendente hoje.
+                                proximaData = hoje;
+                            }
+                        }
+
+                        if (isPendente) {
+                            const diasVencer = proximaData ? differenceInDays(proximaData, hoje) : 0;
+                            const isAviso = diasVencer > 0;
+                            
+                            pendentesList.push({ 
+                                ...modelo, 
+                                id: itemName === 'default' ? modelo.id : `${modelo.id}_${itemName}`,
+                                modelo_id_original: modelo.id,
+                                item_monitorado_name: itemName === 'default' ? null : itemName,
+                                frequencia_tipo: config.frequencia_tipo,
+                                data_proxima: proximaData ? format(proximaData, 'dd/MM/yyyy') : null,
+                                dias_para_vencer: diasVencer,
+                                is_aviso: isAviso
+                            });
+                        }
+                    });
+                });
+
+                setPendentes(pendentesList);
+            } else {
+                setPendentes([]);
+            }
 
         } catch (err: any) {
-            console.error('Erro no loadDados:', err);
-            setMsg({ open: true, text: 'Erro ao carregar dados do dia.', type: 'error' });
+            console.error('Erro ao buscar modelos de planilhas:', err);
+            setError(err.message || 'Falha ao carregar planilhas.');
         } finally {
             setLoading(false);
         }
-    }, [activeClientId, ctxUnidadeId, dataFiltro, SESSION_KEY]);
-
-    useEffect(() => {
-        loadDados();
-    }, [loadDados]);
-
-    const handleLogChange = (equipId: string, periodo: string, field: string, value: any) => {
-        const key = `${equipId}-${periodo}`;
-        const now = format(new Date(), 'HH:mm:ss');
-        
-        setLogsTemp(prev => {
-            const currentLog = prev[key] || { 
-                equipamento_id: equipId, 
-                periodo, 
-                data: dataFiltro, 
-                status: 'LIGADO',
-                unidade_id: ctxUnidadeId,
-                cliente_id: activeClientId
-            };
-            
-            let newLog = {
-                ...currentLog,
-                [field]: value,
-                hora_afericao: currentLog.hora_afericao || now
-            };
-
-            // Lógica especial para troca de alimento
-            if (field === 'alimento_obj') {
-                const alim = value as Alimento | null;
-                newLog.produto_id = alim?.tipo === 'PRODUTO' ? alim.id : null;
-                newLog.receita_id = alim?.tipo === 'RECEITA' ? alim.id : null;
-            }
-
-            const nextState = { ...prev, [key]: newLog };
-            sessionStorage.setItem(SESSION_KEY, JSON.stringify(nextState));
-            return nextState;
-        });
     };
 
-    const handleSave = async () => {
-        if (!activeClientId || !ctxUnidadeId) return;
-        setSaving(true);
-        try {
-            const upsertData = Object.values(logsTemp).map(log => {
-                const { alimento_obj, ...cleanLog } = log; // Remover campo temporário da UI
-                return {
-                    ...cleanLog,
-                    cliente_id: activeClientId,
-                    unidade_id: log.unidade_id || ctxUnidadeId,
-                    data: dataFiltro
-                };
-            });
+    // Agrupar modelos por categoria
+    const groupedModelos = modelos.reduce((acc, curr) => {
+        if (!acc[curr.categoria]) acc[curr.categoria] = [];
+        acc[curr.categoria].push(curr);
+        return acc;
+    }, {} as Record<string, any[]>);
 
-            if (upsertData.length === 0) {
-                setMsg({ open: true, text: 'Nenhuma alteração para salvar.', type: 'success' });
-                return;
-            }
+    const categoriasDisponiveis = Object.keys(groupedModelos).sort();
 
-            const { error } = await (supabase as any)
-                .from('controle_temperatura')
-                .upsert(upsertData, { onConflict: 'equipamento_id, data, periodo' });
+    const renderCard = (modelo: any, isPendente: boolean = false) => {
+        const IconComponent = modelo.icone && IconMap[modelo.icone] ? IconMap[modelo.icone] : ClipboardList;
 
-            if (error) throw error;
-            
-            sessionStorage.removeItem(SESSION_KEY);
-            setMsg({ open: true, text: 'Registros salvos com sucesso!', type: 'success' });
-            loadDados();
-        } catch (err: any) {
-            console.error('Erro ao salvar:', err);
-            setMsg({ open: true, text: 'Erro ao salvar registros.', type: 'error' });
-        } finally {
-            setSaving(false);
+        let targetRoute = `/qualidade/planilhas/${modelo.modelo_id_original || modelo.id}${isPendente ? '?new=true' : ''}`;
+        if (modelo.item_monitorado_name) {
+            targetRoute += `${isPendente ? '&' : '?'}item=${encodeURIComponent(modelo.item_monitorado_name)}`;
         }
-    };
 
-    const renderTabContent = (value: number) => {
-        switch (value) {
-            case 0:
-                return (
-                    <Box sx={{ mt: 3 }}>
-                        {/* FILTROS E AÇÕES */}
-                        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-                            <TextField
-                                type="date"
-                                label="Data do Monitoramento"
-                                size="small"
-                                value={dataFiltro}
-                                onChange={(e) => setDataFiltro(e.target.value)}
-                                InputLabelProps={{ shrink: true }}
-                                sx={{ minWidth: 200 }}
-                            />
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button 
-                                    variant="outlined" 
-                                    startIcon={<RefreshCw size={18} />} 
-                                    onClick={() => {
-                                        if (confirm('Deseja realmente limpar o rascunho atual?')) {
-                                            sessionStorage.removeItem(SESSION_KEY);
-                                            loadDados();
-                                        }
-                                    }}
-                                    sx={{ borderRadius: '10px' }}
-                                >
-                                    Limpar Rascunho
-                                </Button>
-                                <LoadingButton 
-                                    variant="contained" 
-                                    startIcon={<Save size={18} />} 
-                                    onClick={handleSave}
-                                    loading={saving}
-                                    sx={{ borderRadius: '10px', px: 4 }}
-                                >
-                                    Salvar Tudo
-                                </LoadingButton>
-                            </Box>
-                        </Box>
+        // Interceptar planilhas com módulo customizado
+        const tituloMin = modelo.titulo?.toLowerCase() || '';
+        if (tituloMin.includes('temperatura')) {
+            targetRoute = `/qualidade/planilhas/temperatura`;
+        } else if (tituloMin.includes('amostras')) {
+            targetRoute = `/qualidade/planilhas/amostras`;
+        }
 
-                        <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '16px', overflowX: 'auto' }}>
-                            <Table sx={{ minWidth: 1100 }}>
-                                <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
-                                    <TableRow>
-                                        <TableCell sx={{ fontWeight: 'bold' }}>Equipamento / Categoria</TableCell>
-                                        <TableCell align="center" sx={{ fontWeight: 'bold', borderLeft: '1px solid', borderColor: 'divider' }}>Período</TableCell>
-                                        <TableCell align="center" sx={{ fontWeight: 'bold' }}>Status</TableCell>
-                                        <TableCell align="center" sx={{ fontWeight: 'bold' }}>Horário</TableCell>
-                                        <TableCell sx={{ fontWeight: 'bold', minWidth: 250 }}>Alimento Aferido</TableCell>
-                                        <TableCell align="center" sx={{ fontWeight: 'bold' }}>Temp. Equip.</TableCell>
-                                        <TableCell align="center" sx={{ fontWeight: 'bold' }}>Temp. Alim.</TableCell>
-                                        <TableCell align="center" sx={{ fontWeight: 'bold' }}>Estado</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {loading ? (
-                                        <TableRow>
-                                            <TableCell colSpan={8} align="center" sx={{ py: 8 }}>
-                                                <CircularProgress size={32} />
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : equipamentosMonitorados.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={8} align="center" sx={{ py: 8, opacity: 0.6 }}>
-                                                <AlertCircle size={40} style={{ marginBottom: 8 }} />
-                                                <Typography variant="body2">Nenhum equipamento do grupo 'Temperaturas' encontrado.</Typography>
-                                                <Button size="small" onClick={() => router.push('/config/estoque')} sx={{ mt: 1 }}>Configurar Equipamentos</Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        equipamentosMonitorados.map((equip) => {
-                                            const freq = equip.frequencia_diaria || 2;
-                                            const sessions = Array.from({ length: freq }, (_, i) => {
-                                                if (freq === 2) return i === 0 ? 'MANHA' : 'TARDE';
-                                                return (i + 1).toString();
-                                            });
-
-                                            return sessions.map((periodo, idx) => {
-                                                const logKey = `${equip.id}-${periodo}`;
-                                                const log = logsTemp[logKey] || {};
-
-                                                // Helper para marcar temperatura fora da faixa
-                                                const isOutOfRange = (temp: any) => {
-                                                    if (temp === null || temp === undefined || temp === '') return false;
-                                                    const t = parseFloat(temp);
-                                                    if (equip.temp_ideal_min !== null && t < equip.temp_ideal_min) return true;
-                                                    if (equip.temp_ideal_max !== null && t > equip.temp_ideal_max) return true;
-                                                    return false;
-                                                };
-
-                                                const rangeText = equip.temp_ideal_min !== null || equip.temp_ideal_max !== null 
-                                                    ? `Meta: ${equip.temp_ideal_min ?? '-∞'}°C a ${equip.temp_ideal_max ?? '+∞'}°C`
-                                                    : 'Sem meta';
-
-                                                const getAlimento = (l: any) => {
-                                                    if (l.alimento_obj) return l.alimento_obj;
-                                                    if (l.produto_id) return alimentos.find(a => a.id === l.produto_id && a.tipo === 'PRODUTO');
-                                                    if (l.receita_id) return alimentos.find(a => a.id === l.receita_id && a.tipo === 'RECEITA');
-                                                    return null;
-                                                };
-
-                                                return (
-                                                    <TableRow key={logKey} sx={idx % 2 !== 0 ? { bgcolor: alpha(theme.palette.primary.main, 0.02) } : {}}>
-                                                        {idx === 0 && (
-                                                            <TableCell rowSpan={freq} sx={{ fontWeight: 600, bgcolor: 'background.default', borderBottom: '1px solid', borderColor: 'divider', minWidth: 200 }}>
-                                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>{equip.nome}</Typography>
-                                                                <Typography variant="caption" color="text.secondary" display="block">
-                                                                    {equip.parent?.nome} {equip.locais?.length > 0 && `• ${equip.locais[0].nome}`}
-                                                                </Typography>
-                                                                <Chip 
-                                                                    label={rangeText} 
-                                                                    size="small" 
-                                                                    variant="outlined" 
-                                                                    sx={{ height: 18, fontSize: '0.6rem', mt: 0.5, borderColor: alpha(theme.palette.divider, 0.1) }} 
-                                                                />
-                                                            </TableCell>
-                                                        )}
-                                                        <TableCell align="center" sx={{ borderLeft: '1px solid', borderColor: 'divider' }}>
-                                                            <Chip 
-                                                                label={equip.horarios_afericao?.[idx] ? equip.horarios_afericao[idx] : (periodo === 'MANHA' ? 'MANHÃ' : periodo === 'TARDE' ? 'TARDE' : `${periodo}ª AFER.`)} 
-                                                                size="small" 
-                                                                color={periodo === 'MANHA' ? 'primary' : periodo === 'TARDE' ? 'secondary' : 'default'}
-                                                                sx={{ fontSize: '0.6rem', fontWeight: 800, height: 20 }} 
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            <Select
-                                                                size="small"
-                                                                value={log.status || 'LIGADO'}
-                                                                onChange={(e) => handleLogChange(equip.id, periodo, 'status', e.target.value)}
-                                                                sx={{ fontSize: '0.8rem', minWidth: 100 }}
-                                                            >
-                                                                <MenuItem value="LIGADO">Ativo</MenuItem>
-                                                                <MenuItem value="DESLIGADO">Desligado</MenuItem>
-                                                                <MenuItem value="VAZIO">Vazio</MenuItem>
-                                                            </Select>
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
-                                                                {log.hora_afericao?.substring(0, 5) || '--:--'}
-                                                            </Typography>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Autocomplete
-                                                                size="small"
-                                                                disabled={log.status === 'DESLIGADO' || log.status === 'VAZIO'}
-                                                                options={alimentos}
-                                                                getOptionLabel={(option) => option.nome}
-                                                                value={getAlimento(log)}
-                                                                onChange={(_, val) => handleLogChange(equip.id, periodo, 'alimento_obj', val)}
-                                                                renderInput={(params) => (
-                                                                    <TextField {...params} placeholder="Alimento..." variant="outlined" />
-                                                                )}
-                                                                renderOption={(props, option) => (
-                                                                    <Box component="li" {...props} sx={{ fontSize: '0.8rem' }}>
-                                                                        {option.tipo === 'RECEITA' ? <ChefHat size={14} style={{ marginRight: 8 }} /> : <ShoppingBag size={14} style={{ marginRight: 8 }} />}
-                                                                        {option.nome}
-                                                                    </Box>
-                                                                )}
-                                                                sx={{ minWidth: 200 }}
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            <Tooltip title={isOutOfRange(log.temp_equipamento) ? "Fora da faixa ideal!" : ""}>
-                                                                <TextField
-                                                                    size="small"
-                                                                    type="number"
-                                                                    disabled={log.status === 'DESLIGADO'}
-                                                                    value={log.temp_equipamento ?? ''}
-                                                                    onChange={(e) => handleLogChange(equip.id, periodo, 'temp_equipamento', e.target.value)}
-                                                                    error={isOutOfRange(log.temp_equipamento)}
-                                                                    InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
-                                                                    sx={{ width: 85, '& .MuiOutlinedInput-root': isOutOfRange(log.temp_equipamento) ? { bgcolor: alpha(theme.palette.error.main, 0.05) } : {} }}
-                                                                />
-                                                            </Tooltip>
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            <Tooltip title={isOutOfRange(log.temp_alimento) ? "Fora da faixa ideal!" : ""}>
-                                                                <TextField
-                                                                    size="small"
-                                                                    type="number"
-                                                                    disabled={log.status === 'DESLIGADO' || log.status === 'VAZIO'}
-                                                                    value={log.temp_alimento ?? ''}
-                                                                    onChange={(e) => handleLogChange(equip.id, periodo, 'temp_alimento', e.target.value)}
-                                                                    error={isOutOfRange(log.temp_alimento)}
-                                                                    InputProps={{ endAdornment: <Typography variant="caption">°C</Typography> }}
-                                                                    sx={{ width: 85, '& .MuiOutlinedInput-root': isOutOfRange(log.temp_alimento) ? { bgcolor: alpha(theme.palette.error.main, 0.05) } : {} }}
-                                                                />
-                                                            </Tooltip>
-                                                        </TableCell>
-                                                        <TableCell align="center">
-                                                            {log.id ? (
-                                                                <Chip label="Salvo" color="success" size="small" sx={{ height: 20, fontSize: '0.6rem' }} />
-                                                            ) : log.hora_afericao ? (
-                                                                <Chip label="Pend." color="warning" size="small" variant="outlined" sx={{ height: 20, fontSize: '0.6rem' }} />
-                                                            ) : null}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            });
-                                        }).flat()
+        return (
+            <Grid item xs={12} sm={6} md={4} lg={3} key={modelo.id + (isPendente ? '_pend' : '')}>
+                <Card 
+                    elevation={0} 
+                    sx={{ 
+                        border: '1px solid', 
+                        borderColor: isPendente ? 'warning.main' : 'divider',
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                            borderColor: 'primary.main',
+                            boxShadow: 2,
+                            transform: 'translateY(-2px)'
+                        }
+                    }}
+                >
+                    <CardActionArea 
+                        onClick={() => router.push(targetRoute)}
+                        sx={{ flexGrow: 1, p: 1.5 }}
+                    >
+                        <CardContent sx={{ p: 0 }}>
+                            <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                                <Box sx={{ 
+                                    p: 1, 
+                                    bgcolor: isPendente ? 'warning.50' : 'primary.50', 
+                                    borderRadius: 1.5,
+                                    color: isPendente ? 'warning.main' : 'primary.main',
+                                    display: 'flex'
+                                }}>
+                                    <IconComponent size={20} />
+                                </Box>
+                                <Box>
+                                    <Typography variant="subtitle2" fontWeight={700} sx={{ lineHeight: 1.2, mb: 0.5 }}>
+                                        {modelo.titulo}
+                                    </Typography>
+                                    {modelo.item_monitorado_name && (
+                                        <Typography variant="caption" color="primary.main" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
+                                            Item: {modelo.item_monitorado_name}
+                                        </Typography>
                                     )}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </Box>
-                );
-            case 1:
-                return (
-                    <Box sx={{ mt: 8, textAlign: 'center', opacity: 0.5 }}>
-                        <ClipboardCheck size={64} style={{ marginBottom: 16 }} />
-                        <Typography variant="h6">Coleta de Amostras</Typography>
-                        <Typography variant="body2">Em breve: Módulo para registro e controle de amostras de alimentos.</Typography>
-                    </Box>
-                );
-            case 2:
-                return (
-                    <Box sx={{ mt: 8, textAlign: 'center', opacity: 0.5 }}>
-                        <Droplet size={64} style={{ marginBottom: 16 }} />
-                        <Typography variant="h6">Controle de Óleo</Typography>
-                        <Typography variant="body2">Em breve: Registro de trocas e qualidade do óleo de fritura.</Typography>
-                    </Box>
-                );
-            default:
-                return null;
-        }
+                                    {modelo.descricao && (
+                                        <Typography variant="caption" color="text.secondary" sx={{
+                                            display: '-webkit-box',
+                                            WebkitLineClamp: 2,
+                                            WebkitBoxOrient: 'vertical',
+                                            overflow: 'hidden',
+                                            lineHeight: 1.3
+                                        }}>
+                                            {modelo.descricao}
+                                        </Typography>
+                                    )}
+                                    {isPendente && (
+                                        <Box sx={{ mt: 1 }}>
+                                            <Chip 
+                                                size="small" 
+                                                icon={<Clock size={14} />} 
+                                                label={modelo.is_aviso ? `Aviso (${modelo.frequencia_tipo})` : `Pendente (${modelo.frequencia_tipo})`} 
+                                                color={modelo.is_aviso ? "info" : "warning"} 
+                                                sx={{ mb: 0.5 }}
+                                            />
+                                            {modelo.data_proxima && (
+                                                <Typography variant="caption" color={modelo.is_aviso ? "info.main" : "warning.main"} display="block">
+                                                    <Calendar size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} /> 
+                                                    {modelo.is_aviso 
+                                                        ? `Vence em ${modelo.data_proxima} (${modelo.dias_para_vencer} dias)` 
+                                                        : (modelo.dias_para_vencer === 0 ? `Vence Hoje` : `Atrasado desde: ${modelo.data_proxima}`)
+                                                    }
+                                                </Typography>
+                                            )}
+                                        </Box>
+                                    )}
+                                </Box>
+                            </Stack>
+                        </CardContent>
+                    </CardActionArea>
+                    <CardActions sx={{ px: 1.5, pb: 1.5, pt: 0 }}>
+                        <Button 
+                            size="small" 
+                            variant="outlined" 
+                            fullWidth
+                            sx={{ py: 0.5, fontSize: '0.75rem' }}
+                            onClick={() => router.push(targetRoute)}
+                        >
+                            Preencher Agora
+                        </Button>
+                    </CardActions>
+                </Card>
+            </Grid>
+        );
     };
 
     return (
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 8 }}>
-            
-            {/* CABEÇALHO */}
-            <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <IconButton onClick={() => router.back()} sx={{ bgcolor: alpha(theme.palette.action.hover, 0.5) }}>
-                        <ChevronLeft size={20} />
-                    </IconButton>
-                    <Box>
-                        <Typography variant="h5" fontWeight="900" sx={{ letterSpacing: '-0.02em', color: 'primary.main' }}>
-                            Controle Produção
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            QUALIDADE GxP • Monitoramento e registros técnicos
-                        </Typography>
-                    </Box>
+        <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Box>
+                    <Typography variant="h4" fontWeight={900} sx={{ letterSpacing: '-0.02em', color: 'primary.main' }}>
+                        Controle Produção
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        QUALIDADE GxP • Monitoramento e registros técnicos
+                    </Typography>
                 </Box>
+                {activeClientId && (
+                    <Button 
+                        variant="outlined" 
+                        startIcon={<Settings size={18} />}
+                        onClick={() => router.push('/qualidade/planilhas/configuracao')}
+                    >
+                        Configurar Frequência
+                    </Button>
+                )}
             </Box>
+            
+            <Typography variant="body1" color="text.secondary" paragraph sx={{ mt: 2 }}>
+                Selecione uma categoria e uma planilha para registrar e monitorar indicadores de qualidade.
+            </Typography>
 
-            {/* TABS */}
-            <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: '16px', bgcolor: 'background.paper', overflow: 'hidden' }}>
-                <Tabs 
-                    value={tabValue} 
-                    onChange={(_, v) => setTabValue(v)} 
-                    variant="fullWidth"
-                    indicatorColor="primary"
-                    textColor="primary"
-                    sx={{ borderBottom: '1px solid', borderColor: 'divider' }}
-                >
-                    <Tab 
-                        icon={<Thermometer size={20} />} 
-                        label="Temperaturas" 
-                        sx={{ py: 2, fontWeight: 700, fontSize: '0.75rem' }} 
-                    />
-                    <Tab 
-                        icon={<ClipboardCheck size={20} />} 
-                        label="Coleta de Amostras" 
-                        sx={{ py: 2, fontWeight: 700, fontSize: '0.75rem' }} 
-                    />
-                    <Tab 
-                        icon={<Droplet size={20} />} 
-                        label="Controle de Óleo" 
-                        sx={{ py: 2, fontWeight: 700, fontSize: '0.75rem' }} 
-                    />
-                </Tabs>
-                <Box sx={{ p: 4 }}>
-                    {renderTabContent(tabValue)}
+            {error && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                    {error}
+                </Alert>
+            )}
+
+            {!unidadeId && (
+                <Alert severity="info" sx={{ mb: 3 }}>
+                    Selecione uma Unidade no topo para visualizar as planilhas pendentes.
+                </Alert>
+            )}
+
+            {loading ? (
+                <Box display="flex" justifyContent="center" p={4}>
+                    <CircularProgress />
                 </Box>
-            </Paper>
+            ) : (
+                <>
+                    {/* Seção de Pendentes Agrupada */}
+                    {unidadeId && pendentes.length > 0 && (
+                        <Box sx={{ mb: 5 }}>
+                            <Typography variant="h5" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1, fontWeight: 600, color: 'warning.main' }}>
+                                <Clock size={24} /> Pendentes para Preenchimento
+                            </Typography>
+                            
+                            {Object.entries(
+                                pendentes.reduce((acc: any, curr: any) => {
+                                    if (!acc[curr.categoria]) acc[curr.categoria] = [];
+                                    acc[curr.categoria].push(curr);
+                                    return acc;
+                                }, {} as Record<string, any[]>)
+                            ).map(([categoria, listaPendentes]: [string, any]) => (
+                                <Box key={'pend_' + categoria} sx={{ mb: 4, pl: 2, borderLeft: '3px solid', borderColor: 'warning.light' }}>
+                                    <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 700, color: 'text.primary' }}>
+                                        {categoria}
+                                    </Typography>
+                                    <Grid container spacing={3}>
+                                        {listaPendentes.map((p: any) => renderCard(p, true))}
+                                    </Grid>
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
 
-            <Snackbar 
-                open={msg.open} 
-                autoHideDuration={4000} 
-                onClose={() => setMsg(prev => ({ ...prev, open: false }))}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            >
-                <Alert severity={msg.type} sx={{ borderRadius: '12px' }}>{msg.text}</Alert>
-            </Snackbar>
+                    {unidadeId && pendentes.length === 0 && (
+                        <Alert severity="success" icon={<CheckCircle />} sx={{ mb: 5 }}>
+                            Não há planilhas configuradas pendentes para esta unidade no momento.
+                        </Alert>
+                    )}
 
+                    <Divider sx={{ mb: 5 }} />
+
+                    {/* Todas as Planilhas */}
+                    <Box mb={4}>
+                        <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
+                            Todas as Planilhas
+                        </Typography>
+                        {categoriasDisponiveis.length > 0 && (
+                            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                                <Tabs 
+                                    value={categoriaFiltro} 
+                                    onChange={(e, newValue) => setCategoriaFiltro(newValue)} 
+                                    variant="scrollable"
+                                    scrollButtons="auto"
+                                    indicatorColor="primary"
+                                    textColor="primary"
+                                >
+                                    {categoriasDisponiveis.map(cat => (
+                                        <Tab key={cat} label={cat} value={cat} sx={{ fontWeight: 600 }} />
+                                    ))}
+                                </Tabs>
+                            </Box>
+                        )}
+                    </Box>
+
+                    {Object.keys(groupedModelos).length === 0 ? (
+                        <Alert severity="info">Nenhum modelo de planilha configurado globalmente ou para este cliente.</Alert>
+                    ) : (
+                        Object.entries(groupedModelos)
+                            .filter(([categoria]) => categoria === categoriaFiltro)
+                            .map(([categoria, listaModelos]) => (
+                                <Box key={categoria} sx={{ mb: 4 }}>
+                                    <Grid container spacing={2}>
+                                        {(listaModelos as any[]).map((modelo: any) => renderCard(modelo, false))}
+                                    </Grid>
+                                </Box>
+                        ))
+                    )}
+                </>
+            )}
         </Container>
     );
 }
-
