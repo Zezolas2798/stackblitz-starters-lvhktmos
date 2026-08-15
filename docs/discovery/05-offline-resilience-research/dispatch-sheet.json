@@ -1,0 +1,178 @@
+{
+  "dispatch_id": "2026-08-14-nutridev-offline-resilience-architecture",
+  "schema_version": "0.8.0",
+  "dispatch_type": "research",
+  "goal": "Determinar os requisitos e a arquitetura incremental de continuidade operacional do Nutridev V2 sob falhas de conectividade, backend, dispositivo e energia, sem presumir previamente PWA, cliente hibrido/nativo, edge local, Next.js ou Supabase como solucao final. O resultado deve indicar o que fixar agora, o que pode ser deferido e quais escolhas dependem de validacao do titular ou de experimento.",
+  "context": "A operacao fisica de auditorias, temperaturas, etiquetas, requisicoes, estoque, producao, tarefas, comunicacao e documentos pode continuar quando falham WAN, LAN, backend, navegador/aplicativo, dispositivo ou energia, mas cada processo tem exigencias distintas de continuidade, integridade, autoridade e recuperacao. O inventario local nao contem findings dedicados a offline: as sementes admitidas sao as decisoes de que o legado e apenas evidencia, de que reutilizacao exige decisao explicita e de que perfis comerciais, institucionais, catering/eventos, industriais e hibridos devem permanecer distintos; toda claim estrutural deve voltar a fontes internas verificadas ou fontes externas primarias/oficiais abertas e datadas. A pesquisa deve separar capacidade comprovada, inferencia arquitetural, recomendacao, proposta de RTO/RPO sujeita a validacao do titular e lacuna, usando o contrato de fechamento de evidencia cited-synthesis antes do writer. Falta total de energia deve incluir continuidade manual e reconciliacao posterior, e nao ser tratada como mero caso de offline digital.",
+  "max_loops": 2,
+  "final_approver": "parent",
+  "anti_bias_global": "tema coordenador: methodology + source-corpus exploram a amplitude de continuidade operacional e suas evidencias, enquanto attack-vector testa essas alternativas contra integridade, seguranca, autoridade, viabilidade, custo e limites de plataforma",
+  "working_folder": "docs/discovery/05-offline-resilience-research/",
+  "groups": [
+    {
+      "group_id": "evidence_explorers",
+      "n": 3,
+      "anti_bias": "composite: methodology + source-corpus",
+      "predicted_disagreements": [
+        {
+          "pair": [0, 1],
+          "statement": "O agente 0 executa levantamento empirico de comportamento documentado por fornecedores, enquanto o agente 1 deriva garantias e limites formais de plataformas no eixo composto methodology + source-corpus; o segundo expoe promessas operacionais sem garantia tecnica e o primeiro expoe mecanismos teoricos sem evidencia de uso real."
+        },
+        {
+          "pair": [0, 2],
+          "statement": "O agente 0 procura precedentes operacionais externos, enquanto o agente 2 modela processos e falhas concretas do Nutridev no eixo composto methodology + source-corpus; o terceiro expoe transplantes que nao cabem no dominio alimentar e o primeiro expoe pressupostos locais tratados como universais."
+        },
+        {
+          "pair": [1, 2],
+          "statement": "O agente 1 avalia invariantes tecnicos, consistencia e limites de plataforma, enquanto o agente 2 executa modelagem adversarial dos processos e perfis operacionais do Nutridev no eixo composto methodology + source-corpus; o terceiro expoe formalismo impraticavel e o primeiro expoe atalhos operacionais que violam integridade ou autoridade."
+        }
+      ],
+      "agents": [
+        {
+          "agent_name": null,
+          "role": "explorer",
+          "model": "gpt-5.6-terra",
+          "token_budget": 2800,
+          "angle": "metodologia empirica em corpus externo oficial de SaaS, POS, mobile de campo e sistemas empresariais com operacao degradada",
+          "initial_prompt": "Voce e o explorer de precedentes operacionais externos. Pesquise como fornecedores relevantes de SaaS, POS, mobile de campo e sistemas empresariais implementam ou limitam operacao offline e continuidade. Use somente documentacao oficial, especificacoes ou estudos primarios; abra as fontes, registre URL, versao quando houver e data consultada, e nao trate snippets como leitura. Cubra mecanismos, limites, duracao admitida, armazenamento, autenticacao, reconciliacao, conflitos, responsabilidades transferidas ao cliente e comportamento sob WAN indisponivel, backend indisponivel e perda do dispositivo. Para cada claim, retorne ID, fonte imutavel ou versionada, seletor local, evidencia, escopo, proof_status observado/unverified, implicacao para Nutridev e collapse-test. Nao recomende arquitetura final e nao infira garantias que a fonte nao declara."
+        },
+        {
+          "agent_name": null,
+          "role": "explorer",
+          "model": "gpt-5.6-sol",
+          "token_budget": 3000,
+          "angle": "metodologia formal e computacional em especificacoes web, documentacao de plataforma, confiabilidade e literatura primaria de sistemas distribuidos",
+          "initial_prompt": "Voce e o explorer de garantias e limites tecnicos. Recupere evidencia primaria sobre PWA, Service Worker, IndexedDB/OPFS, quotas e eviccao, Background Sync, apps hibridos/nativos, armazenamento seguro, autenticacao e revogacao offline, local-first, edge local, idempotencia, ordenacao, relogios, conflitos e split-brain. Modele separadamente queda de WAN, queda de LAN, falha do backend, encerramento do aplicativo, perda do dispositivo, energia da unidade com tablet ainda alimentado e falta total de energia. Use especificacoes, documentacao oficial e papers primarios abertos; registre URL, versao e data consultada. Para cada claim, retorne ID, fonte, seletor, nivel exato de garantia, escopo, proof_status observado/unverified, implicacao para Nutridev e collapse-test. Nao use memoria como prova, nao escolha a arquitetura final e nao transforme possibilidade de API em garantia operacional."
+        },
+        {
+          "agent_name": null,
+          "role": "explorer",
+          "model": "gpt-5.6-sol",
+          "token_budget": 3200,
+          "angle": "metodologia adversarial e historica no corpus interno de decisoes, discovery, perfis operacionais e amostras representativas do legado Nutridev",
+          "initial_prompt": "Voce e o explorer de continuidade do dominio Nutridev. Trate os documentos aprovados e decisoes atuais como autoridade semantica e o legado/codigo como evidencia observada, nunca como requisito automatico. Audite em modo somente leitura amostras representativas de auditoria/CAPA, temperatura, etiquetas, requisicoes, estoque/transferencias, producao, tarefas, comunicacao e documentos nos perfis comercial, cozinha institucional, catering/eventos, industria e hibridos. Construa cenarios concretos para WAN, LAN, backend, dispositivo, concorrencia, sincronizacao tardia, energia parcial e energia total. Classifique cada operacao como leitura cacheavel, rascunho local, observacao/fato provisoria, comando reconciliavel, comando dependente de reserva previa, autoridade exclusivamente online ou procedimento manual com captura posterior. Cite caminhos e seletores internos; para cada claim use ID, evidencia, escopo, proof_status observado/unverified, implicacao e collapse-test. Exponha riscos de perda, duplicidade, rastreabilidade, permissao revogada e autoridade, mas nao recomende tecnologia final nem tente cobrir exaustivamente todo o legado."
+        }
+      ]
+    },
+    {
+      "group_id": "synthesis",
+      "n": 1,
+      "agents": [
+        {
+          "agent_name": null,
+          "role": "synthesizer",
+          "model": "gpt-5.6-sol",
+          "token_budget": 4400,
+          "initial_prompt": "Reconcilie os tres retornos sem apagar divergencias. Produza um pacote cited-synthesis com: taxonomia dos modos de falha; matriz processo/perfil x continuidade x autoridade x integridade; classificacao das operacoes offline; alternativas online-only, PWA offline seletiva, cliente hibrido/nativo e edge local; ameacas de seguranca e operabilidade; custos e dependencia operacional; e decisao incremental que minimize lock-in e reescrita. Toda claim load-bearing deve ter ID, fonte de origem, seletor, explorer_return, evidence_scope, proof_status e collapse-test. Proponha classes de RTO/RPO e criterios de aceitacao como operator-reading sujeita a validacao do titular, nunca como fato encontrado. Marque cada linha como bound, deferred, killed ou unresolved; se faltar fonte, indique exatamente o explorer e a evidencia necessaria para o feedback declarado. Nao escreva arquivos."
+        }
+      ]
+    },
+    {
+      "group_id": "adversarial_review",
+      "n": 3,
+      "robot_talks": true,
+      "anti_bias": "attack-vector",
+      "predicted_disagreements": [
+        {
+          "pair": [0, 1],
+          "statement": "O agente 0 ataca pelo gate precedent, verificando se mecanismos e recomendacoes ja possuem donos e limites documentados, enquanto o agente 1 ataca pelo gate non-vacuity com cenarios executaveis no eixo attack-vector; o segundo expoe precedentes que nao funcionam no caso concreto e o primeiro expoe solucoes locais que ignoram conhecimento ja estabelecido."
+        },
+        {
+          "pair": [0, 2],
+          "statement": "O agente 0 ataca pelo gate precedent, enquanto o agente 2 ataca pelo gate definitional-soundness no eixo attack-vector; o terceiro expoe rotulos como offline e local-first usados de modo impreciso e o primeiro expoe redefinicoes que ignoram capacidades e limites ja documentados."
+        },
+        {
+          "pair": [1, 2],
+          "statement": "O agente 1 ataca pelo gate non-vacuity com falhas concretas, enquanto o agente 2 ataca pelo gate definitional-soundness no eixo attack-vector; o terceiro expoe testes que misturam categorias diferentes e o segundo expoe definicoes elegantes que nao sobrevivem a operacao real."
+        }
+      ],
+      "agents": [
+        {
+          "agent_name": null,
+          "role": "skeptic",
+          "model": "gpt-5.6-sol",
+          "token_budget": 2200,
+          "angle": "precedent: verificar donos, mecanismos estabelecidos, limites documentados e alegacoes indevidas de novidade",
+          "initial_prompt": "Ataque a sintese exclusivamente pelo gate precedent. Para cada mecanismo ou recomendacao relevante, verifique a fonte primaria ou oficial e determine se ha um padrao, capacidade ou owner existente que deva ser citado como build-from-owned ou already-deployed. Um precedente encontrado nao e KILL; ele corrige a atribuicao e restringe a claim. Uma busca vazia so vale se voce registrar superficies, consultas e limites. Identifique promessas comerciais tratadas como garantias e claims de novidade sem busca suficiente. Retorne apontamentos por claim-ID, contraevidencia, reparo minimo e confianca. Preserve sua posicao inicial para o Robot-Talks e nao escreva arquivos."
+        },
+        {
+          "agent_name": null,
+          "role": "skeptic",
+          "model": "gpt-5.6-sol",
+          "token_budget": 2400,
+          "angle": "non-vacuity: exigir testemunhos concretos para integridade, seguranca, energia, recuperacao e operacao multi-dispositivo",
+          "initial_prompt": "Ataque a sintese exclusivamente pelo gate non-vacuity. Force testemunhos concretos: dois tablets desconectados alteram o mesmo objeto; permissao e vinculo revogados; relogio incorreto; quota local expirada; foto grande; aplicativo encerrado; dispositivo perdido; LAN sem WAN; backend indisponivel; energia da unidade sem roteador; e falta total de energia. Para cada alternativa arquitetural, mostre o menor fluxo ponta a ponta que prova ou derruba continuidade, integridade e recuperacao. Sem testemunho coerente, emita KILL com o fato exato que zerou a claim; custo alto sozinho nao e KILL, mas deve limitar a recomendacao. Retorne apontamentos por claim-ID, reparo minimo e confianca. Preserve sua posicao inicial para o Robot-Talks e nao escreva arquivos."
+        },
+        {
+          "agent_name": null,
+          "role": "skeptic",
+          "model": "gpt-5.6-sol",
+          "token_budget": 2200,
+          "angle": "definitional-soundness: testar se offline, cache, rascunho, fato provisorio, local-first, edge, autoridade e continuidade permanecem distintos",
+          "initial_prompt": "Ataque a sintese exclusivamente pelo gate definitional-soundness. Verifique se leitura cacheada, rascunho local, fato provisorio, comando aceito, sincronizacao eventual, local-first, edge local, alta disponibilidade e continuidade operacional foram distinguidos sem circularidade. Procure recomendacoes que mudam de sentido entre modulos, confundem disponibilidade com autoridade, tratam energia total como falha de rede ou chamam uma fila local de arquitetura offline completa. Uma definicao tautologica ou apenas renomeada recebe KILL com o colapso exato. Retorne apontamentos por claim-ID, reparo minimo e confianca. Preserve sua posicao inicial para o Robot-Talks e nao escreva arquivos."
+        }
+      ]
+    },
+    {
+      "group_id": "findings_writer",
+      "n": 1,
+      "agents": [
+        {
+          "agent_name": null,
+          "role": "writer",
+          "model": "gpt-5.6-sol",
+          "token_budget": 4800,
+          "initial_prompt": "Escreva somente findings.md usando o pacote que passou pelo gate cited-synthesis e a revisao adversarial reconciliada; research.md e responsabilidade mecanica do parent e nao deve ser reescrito. Entregue: resposta de uma linha ao goal; matriz de modos de falha; matriz por processo e perfil; taxonomia de autoridade/offline; comparacao arquitetural; recomendacao incremental em camadas; RTO/RPO propostos para validacao; decisoes a fixar agora; decisoes deferidas; experimentos; perguntas do titular; custos e riscos operacionais; e matriz de vereditos por candidate. Toda claim load-bearing deve resolver para evidencia de explorer e manter separado source claim, local inference, operator reading, recomendacao e open residue. Linhas unresolved nao podem ser descritas como executaveis ou prontas para aprovacao."
+        }
+      ]
+    },
+    {
+      "group_id": "audit",
+      "n": 1,
+      "agents": [
+        {
+          "agent_name": null,
+          "role": "auditor",
+          "model": "gpt-5.6-sol",
+          "token_budget": 2600,
+          "initial_prompt": "Audite findings.md contra o goal, research.md, o pacote de evidencia fechado e as objecoes preservadas do Robot-Talks. Verifique resolucao de cada citacao, fidelidade ao nivel de garantia, matriz de vereditos, separacao entre evidencia/inferencia/recomendacao, tratamento distinto dos modos de falha, seguranca multi-tenant, autoridade, continuidade manual, custos, limites de plataforma e perguntas que exigem o titular. Retorne PASS ou NEEDS_REVISION com defeitos tipados, claim-IDs, reparo minimo e indicacao de quais correcoes cabem ao writer; falta de evidencia de explorer nao pode ser mascarada como reparo editorial. O parent permanece final_approver. Nao escreva arquivos."
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "evidence_explorers",
+      "to": "synthesis",
+      "type": "sequential"
+    },
+    {
+      "from": "synthesis",
+      "to": "adversarial_review",
+      "type": "zig-zag",
+      "loop_cap": 1
+    },
+    {
+      "from": "synthesis",
+      "to": "evidence_explorers",
+      "type": "feedback",
+      "loop_cap": 1
+    },
+    {
+      "from": "adversarial_review",
+      "to": "findings_writer",
+      "type": "sequential"
+    },
+    {
+      "from": "findings_writer",
+      "to": "audit",
+      "type": "sequential"
+    },
+    {
+      "from": "audit",
+      "to": "findings_writer",
+      "type": "feedback",
+      "loop_cap": 1
+    }
+  ]
+}

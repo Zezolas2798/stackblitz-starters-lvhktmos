@@ -1,0 +1,179 @@
+{
+  "dispatch_id": "2026-08-11-incamp-v0-framing",
+  "schema_version": "0.8.0",
+  "dispatch_type": "research",
+  "goal": "Construir a base crítica e evidencial de uma V0 da candidatura do Nutridev à INCAMP, maximizando aderência ao EDITAL-INCAMP-2025 sem inflar a maturidade do produto nem diluir sua visão futura de plataforma.",
+  "context": "A candidatura deve responder aos critérios e limites do edital, usar o legado como evidência com ressalvas e tratar o documento Entre Sistemas e Categorias como frame de raciocínio, não como vocabulário ornamental. O recorte atual começa por Audit/CAPA e consultorias de alimentos, enquanto o horizonte integra cardápio, demanda, compras, estoque, produção, qualidade, desperdício e otimização. Toda afirmação deve ser classificada como evidência, inferência, hipótese ou lacuna; resultados não comprovados não podem aparecer como fatos.",
+  "max_loops": 2,
+  "final_approver": "parent",
+  "anti_bias_global": "composite: methodology + source-corpus + attack-vector applied to evidential credibility",
+  "working_folder": "docs/incamp-2025-v0/research",
+  "groups": [
+    {
+      "group_id": "explorers",
+      "n": 3,
+      "robot_talks": true,
+      "anti_bias": "composite: methodology + source-corpus",
+      "predicted_disagreements": [
+        {
+          "pair": [0, 1],
+          "statement": "Agent 0 runs an empirical rubric audit from the edital corpus, while agent 1 runs historical artifact archaeology from the product corpus on the composite methodology + source-corpus axis; a scoring-maximization bias in agent 0 would be exposed by agent 1's maturity and traceability constraints."
+        },
+        {
+          "pair": [0, 2],
+          "statement": "Agent 0 runs an empirical rubric audit from the edital corpus, while agent 2 runs formal composition analysis from the systems-and-categories corpus on the composite methodology + source-corpus axis; a form-filling bias in agent 0 would be exposed by agent 2's demand for a coherent local-to-global narrative."
+        },
+        {
+          "pair": [1, 2],
+          "statement": "Agent 1 runs historical artifact archaeology from the product corpus, while agent 2 runs formal composition analysis from the systems-and-categories corpus on the composite methodology + source-corpus axis; an implementation-detail bias in agent 1 would be exposed by agent 2's distinction between isolated modules and an end-to-end witness."
+        }
+      ],
+      "agents": [
+        {
+          "role": "explorer",
+          "model": "gpt-5.6-sol",
+          "token_budget": 2800,
+          "agent_name": null,
+          "angle": "Empirical rubric audit: reconstruct the evaluator's decision model from the edital and Annex I, including eliminatory gates, weights, character limits, and what evidence would earn or lose points.",
+          "initial_prompt": "You are the INCAMP evaluator-lens explorer. Read C:/Users/julia/Downloads/EDITAL-INCAMP-2025.pdf and the extracted official Annex I material available in the workspace or Downloads. Inspect only product documents needed to test fit. Produce a structured return in Portuguese: (1) exact evaluation map and eliminatory gates, (2) rubric-by-rubric narrative requirements, (3) claims needing proof, (4) likely scoring failure modes, (5) recommended content allocation under each character limit, (6) uncertainties. Separate direct evidence from inference. Do not invent team, traction, customers, revenue, market size, partnerships, certifications, or measured impact. Do not write or edit repository files. End with Robot-Talks lines: Claim, Challenge, Concession, Residual, Probe, Confidence."
+        },
+        {
+          "role": "explorer",
+          "model": "gpt-5.6-sol",
+          "token_budget": 3200,
+          "agent_name": null,
+          "angle": "Historical artifact archaeology: classify current docs and _legacy artifacts by implemented evidence, prototype evidence, architectural intent, researched hypothesis, contradiction, and unsupported promise.",
+          "initial_prompt": "You are the Nutridev evidence-and-maturity explorer. Inspect docs/, _legacy/docs/, relevant code and migrations only as needed to verify what exists. Build an evidence ledger for the INCAMP application: product mechanism, business rules, architecture, technical differentiators, domain depth, prototypes and gaps. Explicitly distinguish implemented, partially implemented, documented design, research hypothesis, roadmap and unknown. Flag security, test, validation and overclaim risks. Preserve the future vision in _legacy, but do not turn it into present-tense capability. Do not write or edit repository files. End with Robot-Talks lines: Claim, Challenge, Concession, Residual, Probe, Confidence."
+        },
+        {
+          "role": "explorer",
+          "model": "gpt-5.6-sol",
+          "token_budget": 3000,
+          "agent_name": null,
+          "angle": "Formal composition analysis: translate the useful frame of Entre Sistemas e Categorias into a juror-friendly problem architecture, claim-evidence-gap-probe logic and one defensible local-to-global witness.",
+          "initial_prompt": "You are the framing-and-composition explorer. Read C:/Users/julia/Downloads/entre_sistemas_e_categorias.pdf plus the edital and the core product/legacy vision documents. Extract only the reasoning frame that helps the application: systems, boundaries, composition, local-versus-global validity, witness, residual, probes, authority and invariants. Do not import category-theory jargon merely for sophistication. Propose a coherent high-level narrative, one current wedge flow and one future platform flow, with explicit transitions between problem, mechanism, evidence and impact. Identify where the framing would become ornamental or misleading. Do not write or edit repository files. End with Robot-Talks lines: Claim, Challenge, Concession, Residual, Probe, Confidence."
+        }
+      ]
+    },
+    {
+      "group_id": "synthesizer",
+      "n": 1,
+      "agents": [
+        {
+          "role": "synthesizer",
+          "model": "gpt-5.6-sol",
+          "token_budget": 4200,
+          "agent_name": null,
+          "initial_prompt": "Reconcile the three explorer returns into a single candidature thesis in Portuguese. Preserve disagreements and evidence grades. Produce: positioning sentence; problem-system map; commercial wedge versus platform horizon; end-to-end witness; criterion-to-claim-to-evidence-to-gap matrix; safe claims; forbidden/unsupported claims; information still required from the founders; a preliminary capability map separating core, enabling, adjacent and distracting functions; and the recommended structure for the V0 Annex I responses. Use Entre Sistemas e Categorias as an internal discipline, not public jargon. Do not write repository files. End with Robot-Talks lines: Claim, Challenge, Concession, Residual, Probe, Confidence."
+        }
+      ]
+    },
+    {
+      "group_id": "skeptics",
+      "n": 3,
+      "robot_talks": true,
+      "anti_bias": "attack-vector",
+      "predicted_disagreements": [
+        {
+          "pair": [0, 1],
+          "statement": "Agent 0 runs a vacuity attack, while agent 1 runs a definitional attack on the attack-vector axis; a bias toward any demonstrable workflow in agent 0 would be exposed by agent 1 if that workflow remains indistinguishable from generic compliance software."
+        },
+        {
+          "pair": [0, 2],
+          "statement": "Agent 0 runs a vacuity attack, while agent 2 runs a scope-and-portfolio attack on the attack-vector axis; a bias toward one demonstrable feature in agent 0 would be exposed by agent 2 if that feature has weak causal relevance to the core problem or creates portfolio distraction."
+        },
+        {
+          "pair": [1, 2],
+          "statement": "Agent 1 runs a definitional attack, while agent 2 runs a scope-and-portfolio attack on the attack-vector axis; a bias toward sharp differentiation in agent 1 would be exposed by agent 2 if the proposed capability set overreaches beyond causal relevance and evidenced delivery capacity."
+        }
+      ],
+      "agents": [
+        {
+          "role": "skeptic",
+          "model": "gpt-5.6-sol",
+          "token_budget": 2200,
+          "agent_name": null,
+          "angle": "Vacuity attack: reject abstractions that cannot be demonstrated through a concrete end-to-end witness, observable outcome and falsifiable next probe.",
+          "initial_prompt": "Attack the synthesis for vacuity. For every central claim ask what concrete workflow, artifact, datum, user action or experiment witnesses it. Reject phrases such as intelligent platform, traceability, optimization, impact or AI when they lack a verifiable mechanism. Return fatal issues, repairable issues, minimum witness, and exact claims that must be downgraded. Do not edit files. End with Robot-Talks lines: Claim, Challenge, Concession, Residual, Probe, Confidence."
+        },
+        {
+          "role": "skeptic",
+          "model": "gpt-5.6-sol",
+          "token_budget": 2200,
+          "agent_name": null,
+          "angle": "Definitional attack: test whether the proposed category and innovation are distinct from generic ERP, checklist, consulting digitization, BI dashboard or compliance software.",
+          "initial_prompt": "Attack the synthesis for definitional weakness. Test the necessary and distinguishing properties of Nutridev against generic ERP, quality checklist, document manager, consulting portal, BI dashboard and optimization point solution. Identify which differentiation is real, which is merely naming, and the smallest precise category claim the evidence supports. Do not edit files. End with Robot-Talks lines: Claim, Challenge, Concession, Residual, Probe, Confidence."
+        },
+        {
+          "role": "skeptic",
+          "model": "gpt-5.6-sol",
+          "token_budget": 2200,
+          "agent_name": null,
+          "angle": "Scope-and-portfolio attack: classify candidate capabilities by causal relevance and reject adjacent administrative breadth that does not strengthen the wedge, platform composition or edital score.",
+          "initial_prompt": "Act as the capability-portfolio falsifier. Attack the synthesis for scope mismatch and inspect candidate functions such as ASO control, employee records and other HR-adjacent controls. For every capability classify it as: core, enabling, adjacent, or distracting/out of scope. Score it qualitatively against six tests: direct causal link to the customer's central problem; food-service-specific business rules; contribution to an end-to-end composition; evidence of current maturity; contribution to an INCAMP criterion; and delivery/positioning complexity introduced. Distinguish a valuable integration point from a reason to turn Nutridev into a generic HR or ERP suite. Also stress-test wedge, roadmap, technical ambition, consultant-led go-to-market and implementation capacity. Recommend keep/defer/integrate/exclude decisions, explicit boundaries, sequencing and milestone gates. Do not edit files. End with Robot-Talks lines: Claim, Challenge, Concession, Residual, Probe, Confidence."
+        }
+      ]
+    },
+    {
+      "group_id": "writer",
+      "n": 1,
+      "agents": [
+        {
+          "role": "writer",
+          "model": "gpt-5.6-sol",
+          "token_budget": 5200,
+          "agent_name": null,
+          "initial_prompt": "Using the admitted synthesis and skeptic returns, draft the complete content package for a V0 INCAMP application in Portuguese. Include an executive narrative, Annex I section drafts within the known character budgets, a criterion/evidence matrix, a claims-and-gaps ledger, founder questions, demo witness, milestones, a core/enabling/adjacent/out-of-scope capability map and a short pitch spine. Mark every placeholder explicitly and never fabricate missing facts. Do not edit repository files; return the draft to the parent for evidence-preserving persistence."
+        }
+      ]
+    },
+    {
+      "group_id": "auditor",
+      "n": 1,
+      "agents": [
+        {
+          "role": "auditor",
+          "model": "gpt-5.6-sol",
+          "token_budget": 2400,
+          "agent_name": null,
+          "initial_prompt": "Audit the V0 draft against the official edital and the research record. Check eliminatory criteria, weighted criteria, character limits, internal coherence, unsupported claims, contradictions between current wedge and future platform, and whether every important assertion has evidence or is visibly marked as hypothesis/gap. Return pass/fail per criterion, blocking fixes and optional improvements. Do not edit files."
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "explorers",
+      "to": "synthesizer",
+      "type": "sequential"
+    },
+    {
+      "from": "synthesizer",
+      "to": "explorers",
+      "type": "feedback",
+      "loop_cap": 1
+    },
+    {
+      "from": "synthesizer",
+      "to": "skeptics",
+      "type": "zig-zag",
+      "loop_cap": 1
+    },
+    {
+      "from": "skeptics",
+      "to": "writer",
+      "type": "sequential"
+    },
+    {
+      "from": "writer",
+      "to": "auditor",
+      "type": "sequential"
+    },
+    {
+      "from": "auditor",
+      "to": "writer",
+      "type": "feedback",
+      "loop_cap": 1
+    }
+  ]
+}
