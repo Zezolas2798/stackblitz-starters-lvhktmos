@@ -2,8 +2,8 @@
 tags: [nutridev-legacy, zelus-food-solution, provenance, repository-governance]
 artifact_kind: governance
 layer: project
-status: proposed
-version: 0.1.0
+status: active
+version: 0.2.0
 created_at: 2026-08-15
 updated_at: 2026-08-15
 ---
@@ -23,8 +23,8 @@ Este documento operacionaliza as decisões PD-001, PD-024, PD-025, PD-030, PD-03
 | Repositório legado | `Zezolas2798/stackblitz-starters-lvhktmos` |
 | Branch de trabalho observada | `v2-arquitetura-limpa` |
 | HEAD anterior ao congelamento | `d7d680748f061b29f7a6d724a3e09ce50836ae98` |
-| Commit definitivo da baseline | pendente |
-| Tag definitiva da baseline | pendente; sugestão: `nutridev-legacy-baseline-2026-08-15` |
+| Commit documental inicial | `f109d7b58ae12aa42e9d8d344d49e388b813697e` |
+| Tag definitiva da baseline | `nutridev-legacy-baseline-2026-08-15` |
 | Repositório sucessor | `Zezolas2798/zelus-food-solution` |
 
 O HEAD acima não representa sozinho a baseline definitiva: há documentos de discovery e decisão ainda não versionados e uma reorganização local ampla que não deve ser registrada indiscriminadamente.
@@ -124,10 +124,10 @@ Não se deve usar `git add .`, `git add -A` nem registrar as remoções e movime
 
 ## Gates para declarar a baseline congelada
 
-- [ ] Revisar a lista exata de arquivos do commit.
-- [ ] Verificar secrets, dados pessoais e materiais de terceiros.
-- [ ] Inspecionar o diff staged e confirmar que não há código, schema, ferramentas ou remoções.
-- [ ] Criar commit documental com caminhos explícitos.
-- [ ] Criar uma tag anotada apontando para esse commit.
+- [x] Revisar a lista exata de arquivos do commit.
+- [x] Verificar secrets, dados pessoais e materiais de terceiros.
+- [x] Inspecionar o diff staged e confirmar que não há código, schema, ferramentas ou remoções.
+- [x] Criar commit documental com caminhos explícitos.
+- [x] Criar uma tag anotada apontando para o fechamento da baseline.
 - [ ] Enviar commit e tag ao repositório remoto.
 - [ ] Registrar o commit/tag definitivo neste documento e no catálogo de fontes do Zelus.
