@@ -129,5 +129,5 @@ Não se deve usar `git add .`, `git add -A` nem registrar as remoções e movime
 - [x] Inspecionar o diff staged e confirmar que não há código, schema, ferramentas ou remoções.
 - [x] Criar commit documental com caminhos explícitos.
 - [x] Criar uma tag anotada apontando para o fechamento da baseline.
-- [ ] Enviar commit e tag ao repositório remoto.
+- [x] Enviar commit e tag ao repositório remoto.
 - [ ] Registrar o commit/tag definitivo neste documento e no catálogo de fontes do Zelus.
